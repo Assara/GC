@@ -42,5 +42,12 @@ namespace combutils {
 
         return (bigInt(1) << (n_adjacent - 1)) - n_adjacent - 1;
     }
+
+
+    template<size_t N>
+    signedInt compareHalfEdges(const std::array<Int, N>& a, const std::array<Int, N>& b) {
+        return std::memcmp(a.data(), b.data(), N * sizeof(Int));
+
+    }
     
 }

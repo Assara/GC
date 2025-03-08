@@ -1,7 +1,9 @@
 
 
-#pragma once
+
 #include <array>
+#include <algorithm>
+#include <cstring>
 #include<vector>
 #include <iostream>
 #include <memory>
@@ -10,7 +12,10 @@
 #include "permutation.hpp"
 #include "Types.hpp"
 
+
 using namespace std;
+
+
 
 template <
     Int N_VERTICES,
@@ -51,6 +56,9 @@ public:
         : half_edges(arr)
     {}
 
+    pair<Int,Int> getEdge(Int i) {
+        return {half_edges[ N_HAIR + 2*i],  N_HAIR + 2*i + 1 };
+    }
     
     vector<Int> adjacent(Int v) const
     {
@@ -155,24 +163,12 @@ public:
 
 
     signedInt compareEdge(Int e1, Int e2) const {
-        // Calculate the starting indices for the two edges.
         Int base1 = N_EDGES + 2 * e1;
         Int base2 = N_EDGES + 2 * e2;
-        
-        // Compare the "from" vertices first.
-        if (half_edges[base1] < half_edges[base2])
-            return -1;
-        if (half_edges[base1] > half_edges[base2])
-            return 1;
-        
-        // "From" vertices are equal, so compare the "to" vertices.
-        if (half_edges[base1 + 1] < half_edges[base2 + 1])
-            return -1;
-        if (half_edges[base1 + 1] > half_edges[base2 + 1])
-            return 1;
-        
-        return 0;
+        return std::memcmp(&half_edges[base1], &half_edges[base2], 2 * sizeof(Int));
     }
+
+
 
     signedInt sortEdgesInsertion() {
         signedInt overallSign = 1;
@@ -189,6 +185,12 @@ public:
     }
 
 
+    signedInt directAndSortEdges() {
+        return directEdges() * sortEdgesInsertion();
+
+    }
+
+
     signedInt permuteVertices(Permutation<N_VERTICES> perm) {
         for (auto it = half_edges.begin(); it < half_edges.end(); ++it) {
             (*it) = perm[(*it)];
@@ -199,4 +201,20 @@ public:
         }
         return 1;
     }
+
+    // maybe return a unique_ptr instead. 
+    signedInt swapVertices(Int v, Int w) const {
+    // Iterate over all half_edges and swap every occurrence of i and j.
+    for (Int k = 0; k < SIZE; ++k) {
+        if (half_edges[k] == v) {
+            half_edges[k] = w;
+        } else if (half_edges[k] == w) {
+            half_edges[k] = v;
+        }
+    }
+        return SWAP_VERTICES_SIGN;
+    }
+
+
+
 };
