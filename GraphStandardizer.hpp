@@ -14,96 +14,129 @@ template <
 
 
 class GraphStandadizer {
-    using Graph = Graph<N_VERTICES,N_EDGES,N_OUT_HAIR,c,d>;
-
-    pair<Graph, fieldType> standardize(Graph graph, fieldType k) {
-
-
-        CanonBuilder G = assignHair(graph);
-
-        
-
-
-    }
-
-    
-    return signedInt compare(CanonBuilder graph1, CanonBuilder graph2) {
-        //return combutils::compareHalfEdges(graph1.vertex_values.half_edges, graph2.vertex_values.half_edges )
-    }
-
-
-
-
-
-
-    
-    CanonBuilder assignHair(Graph G) {
-        Int n_assigned = 0;
-        signedInt sign = 1;
-        for (Int i = 0; i < G.N_HAIR ; ++i) {
-            if (G.half_edges[i] > n) {
-                sign *= G.swapVertices(G.half_edges[i], n_assigned);
-                n_assigned ++;
-            } 
-            else if (G.half_edges[i] == n) {
-                n_assigned ++;
-            }
-        }
-        return CanonBuilder(G, n_assigned, sign);
-    }
-
-
-
-
-
+    public:
+    using GraphType = Graph<N_VERTICES,N_EDGES,N_OUT_HAIR, N_IN_HAIR,c,d>;
 
     class CanonBuilder {
-        Graph G;
+        public:
+        GraphType G;
         Int n_assignedVertices;
-
         signedInt sign;
 
-       
-         CanonBuilder(const Graph& initialGraph, Int n, signedInt s)
+        CanonBuilder(const GraphType& initialGraph, Int n, signedInt s)
             : G(initialGraph), n_assignedVertices(n) {
             n_assignedVertices = n;
+            sign = s;
+
             sign = s*G.directAndSortEdges();
         }
 
+        signedInt sort_edges() {
+            sign *= G.directAndSortEdges();
+            return sign;
+        }
 
-        
         Int vertex_value(Int v) {
-            if(v < assignedVertices) {
+            if(v < n_assignedVertices) {
                 return v;
             }
             return N_VERTICES;
         }
 
-        Array<Int, N_VERTICES> value() {
-            Array<Int, G.SIZE> values;
-            for (Int i = 0; i< G.SIZE ; ++i) {
-                values[i] = vertex_value(G.half_edges[i]);
+        array<array<Int, N_VERTICES+1>,N_VERTICES> score_vertices() {
+            array<array<Int, N_VERTICES+1>,N_VERTICES> result{};
+            for (Int i = G.N_HAIR; i < G.SIZE; i+=2) {
+                Int a = G.half_edges[i];
+                Int b = G.half_edges[i+1];
+                ++ result[a][vertex_value(b)];
+                ++result[b][vertex_value(a)];
             }
-            return values;
+
+            return result;
         }
+
+        GraphType vertex_values_graph() {
+            GraphType fakeGraph = G;
+
+            for (Int i = 0; i < GraphType::SIZE; ++i) {
+                fakeGraph.half_edges[i] = vertex_value(G.half_edges[i]);
+            }
+
+            return fakeGraph;
+        }
+
+        int compare(CanonBuilder other) {
+            return combutils::compareHalfEdges(vertex_values_graph().half_edges, other.vertex_values_graph().half_edges);
+        } 
 
         //we are assigning j <- n_assignedVertices
         CanonBuilder with_assigned_next(Int j) {
-            Graph copy = *G;
-            signedInt s = copy.vertex_swap(j, n_assignedVertices);
-            return CanonBuilder(copy, n_assignedVertices +1, sign*s);
+            GraphType copied_graph = G;
+            signedInt s = copied_graph.swapVertices(j, n_assignedVertices);
+            return CanonBuilder(copied_graph, n_assignedVertices +1, sign*s);
         }
-
 
     };
 
 
-    pair<Graph, fieldType> standardize(CanonBuilder graph_info) {
+    pair<GraphType, fieldType> standardize(GraphType graph, fieldType k) {
+        CanonBuilder G = assignHair(graph);
 
-        pair<Int,Int> edge = graph_info.G.getEdge()
+        vector<CanonBuilder> attempts[2];
+
+        vector<CanonBuilder> attempts_even;
+        vector<CanonBuilder> attempts_odd;
+        // TODO reserve appropriate space for attempts
+
+        attempts[G.n_assignedVertices%2].push_back(G);
+
+        for (Int n = G.n_assignedVertices; n < N_VERTICES; n++) {                    
+            
+            attempts[(n+1)%2].clear();
+            for (CanonBuilder attempt : attempts[n%2]) {
+                for (Int l = attempt.n_assignedVertices; l < N_VERTICES; ++l) {
+                    CanonBuilder next = attempt.with_assigned_next(l);
+                    if (attempts[(n+1)%2].empty()) {
+                        attempts[(n+1)%2].push_back(next);
+                        continue;
+                    }
+                    int comparison = next.compare(attempts[(n+1)%2].back());
+                    if (comparison  > 0 ) {
+                        continue;
+                    }
+                    if (comparison  < 0 ) {
+                        attempts[(n+1)%2].clear();
+                    }
+                    attempts[(n+1)%2].push_back(next);
+                }
+
+            }
+        }
+      
+
+        cout << "Aut size = " << attempts[N_VERTICES%2].size() << endl;         
+
+        signedInt aut_val = 0;
+
+        for (bigInt i = 0; i< attempts[N_VERTICES%2].size(); i++) {
+            aut_val += attempts[N_VERTICES%2][i].sign;
+
+        }
+        return {attempts[N_VERTICES%2][0].G, aut_val * k};
 
     }
+    
+    CanonBuilder assignHair(GraphType G) {
+        Int n_assigned = 0;
+        signedInt sign = 1;
+        for (Int i = 0; i < G.N_HAIR ; ++i) {
+            if (G.half_edges[i] > n_assigned) {
+                sign *= G.swapVertices(G.half_edges[i], n_assigned);
+                n_assigned ++;
+            } 
+        }
+        return CanonBuilder(G, n_assigned, sign);
+    }
 
-
-
+  
 };

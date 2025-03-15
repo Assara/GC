@@ -39,7 +39,7 @@ public:
 
     static constexpr Int SIZE = N_IN_HAIR + N_OUT_HAIR + 2 * N_EDGES;
     static constexpr Int N_HAIR = N_IN_HAIR + N_OUT_HAIR;
-
+    static constexpr Int EDGES = N_EDGES;
     static constexpr signedInt FLIP_EDGE_SIGN = ((c % 2) != 0 && (d % 2) != 0) ? -1 : 1;
     static constexpr signedInt SWAP_EDGE_SIGN = (((c + d) % 2) != 0) ? -1 : 1;
     static constexpr signedInt SWAP_VERTICES_SIGN = -1*SWAP_EDGE_SIGN;
@@ -57,7 +57,12 @@ public:
     {}
 
     pair<Int,Int> getEdge(Int i) {
-        return {half_edges[ N_HAIR + 2*i],  N_HAIR + 2*i + 1 };
+        return {half_edges[ N_HAIR + 2*i],  half_edges[N_HAIR + 2*i + 1]};
+    }
+
+    void setEdge(Int i, Int v, Int w) {
+        half_edges[ N_HAIR + 2*i] = v;
+        half_edges[ N_HAIR + 2*i +1] = w;
     }
     
     vector<Int> adjacent(Int v) const
@@ -72,6 +77,17 @@ public:
         }
         return result;
     }
+
+    array<Int, N_VERTICES> valence_array() const
+    {
+        array<Int, N_VERTICES> valence{};
+        for(Int v : half_edges) {
+            ++valence[v];
+        }
+        return valence;
+
+    }
+
 
 
     vector<unique_ptr<SplitGraph>> split_vertex_differential() const
@@ -146,16 +162,18 @@ public:
         const Int base_j = N_HAIR + 2 * j;
         std::swap(half_edges[base_i], half_edges[base_j]);
         std::swap(half_edges[base_i + 1], half_edges[base_j + 1]);
-        return FLIP_EDGE_SIGN;
+        return SWAP_EDGE_SIGN;
     }
-
     signedInt directEdges() {
         signedInt sign = 1;
-        for (Int i = 0; i < 2 * N_EDGES; i += 2) {
-            // If the "from" vertex is greater than the "to" vertex,
-            // swap them so that the lower value is in the "from" slot.
-            if (half_edges[N_EDGES + i] > half_edges[N_EDGES + i +1]) {
-                sign *= flipEdge(i);
+        // Iterate over edge indices.
+        for (Int edgeIndex = 0; edgeIndex < N_EDGES; ++edgeIndex) {
+            // Calculate the starting index for this edge in half_edges.
+            Int base = N_HAIR + 2 * edgeIndex;
+            // If the "from" vertex is greater than the "to" vertex, flip the edge.
+            if (half_edges[base] > half_edges[base + 1]) {
+                sign *= flipEdge(edgeIndex);
+ 
             }
         }
         return sign;
@@ -163,8 +181,8 @@ public:
 
 
     signedInt compareEdge(Int e1, Int e2) const {
-        Int base1 = N_EDGES + 2 * e1;
-        Int base2 = N_EDGES + 2 * e2;
+        Int base1 = N_HAIR   + 2 * e1;
+        Int base2 = N_HAIR  + 2 * e2;
         return std::memcmp(&half_edges[base1], &half_edges[base2], 2 * sizeof(Int));
     }
 
@@ -203,16 +221,54 @@ public:
     }
 
     // maybe return a unique_ptr instead. 
-    signedInt swapVertices(Int v, Int w) const {
+    signedInt swapVertices(Int v, Int w) {
     // Iterate over all half_edges and swap every occurrence of i and j.
-    for (Int k = 0; k < SIZE; ++k) {
-        if (half_edges[k] == v) {
-            half_edges[k] = w;
-        } else if (half_edges[k] == w) {
-            half_edges[k] = v;
+        if(v == w) {
+            return 1;
         }
-    }
+
+        for (Int k = 0; k < SIZE; ++k) {
+            if (half_edges[k] == v) {
+                half_edges[k] = w;
+            } else if (half_edges[k] == w) {
+                half_edges[k] = v;
+            }
+        }
         return SWAP_VERTICES_SIGN;
+    }
+
+    void print() const {
+        // Print out_hair only if N_OUT_HAIR > 0
+        if (N_OUT_HAIR > 0) {
+            cout << "out_hair: ";
+            for (Int i = 0; i < N_OUT_HAIR; ++i) {
+                cout << half_edges[i];
+                if (i < N_OUT_HAIR - 1)
+                    cout << ", ";
+            }
+            cout << "\n";
+        }
+    
+        // Print in_hair only if N_IN_HAIR > 0
+        if (N_IN_HAIR > 0) {
+            cout << "in_hair: ";
+            for (Int i = 0; i < N_IN_HAIR; ++i) {
+                cout << half_edges[N_OUT_HAIR + i];
+                if (i < N_IN_HAIR - 1)
+                    cout << ", ";
+            }
+            cout << "\n";
+        }
+    
+        // Always print edges.
+        cout << "edges: ";
+        for (Int e = 0; e < N_EDGES; ++e) {
+            Int base = N_HAIR + 2 * e;
+            cout << "(" << half_edges[base] << "," << half_edges[base + 1] << ")";
+            if (e < N_EDGES - 1)
+                cout << ", ";
+        }
+        cout << endl;
     }
 
 

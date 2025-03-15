@@ -1,18 +1,18 @@
 #include <iostream>
-#include "graph.hpp"
+//#include "graph.hpp"
+#include "examplegraphs.hpp"
 
 using namespace std;
-
 
 int main() {
     cout << "hello " <<endl;
 
-    array<Int, 9> nums = {0,0,0,0,1,1,1,1,1};
+    OddGraphdegZero<99> W = wheel_graph<98>();
+    OddGraphdegZeroStandadizer<99> G;
+    auto res = G.standardize(W, 1.0);
 
-    Graph<2,0,9,0,0,0> g(nums);
+    res.first.print();
 
-    auto splits = g.split_vertex_differential();
+    cout << res.second << endl;
 
-    
-    cout << "got " << splits.size() << " splits" <<endl;
 }
