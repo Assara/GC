@@ -8,7 +8,7 @@
 #include <iostream>
 #include <memory>
 #include <utility>
-#include "CombinatorialUtils.cpp"
+#include "CombinatorialUtils.hpp"
 #include "permutation.hpp"
 #include "Types.hpp"
 

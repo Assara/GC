@@ -1,8 +1,9 @@
-#pragma once
+
 #include <array>
 #include <vector>
 #include <iostream>
 #include <numeric>
+#include <cstring>
 #include "Types.hpp"
 
 using namespace std;
