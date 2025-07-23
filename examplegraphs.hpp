@@ -1,4 +1,6 @@
-#include "GraphStandardizer.hpp"
+#include "graph.cpp"
+
+using namespace std;
 
 namespace graphaliases {
 

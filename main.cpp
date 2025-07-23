@@ -3,24 +3,34 @@
 #include "examplegraphs.hpp"
 
 
-#include "VectorSpace.hpp"
+#include "VectorSpace/LinComb.hpp"            // your differential graded vector space
+#include "VectorSpace/BasisElement.hpp"         // BasisElement
+#include "VectorSpace/ValidForDifferential.hpp" // concept enforcement
+
+
 using namespace std;
 
 int main() {
     cout << "hello " <<endl;
 
-    OddGraphdegZero<17> W = wheel_graph<16>();
-    OddGraphdegZeroStandadizer<17> G;
+    OddGraphdegZero<6> W = wheel_graph<5>();
+    
+    BasisElement<OddGraphdegZero<6>> res = BasisElement(W);
 
-    auto res = G.standardize(W, 1.0);
 
+    res.getValue().print();
+    cout << res.getCoefficient() << endl;
 
-    res.first.print();
+    VectorSpace::LinComb<OddGraphdegZero<6>> dglin = VectorSpace::LinComb<OddGraphdegZero<6>>(res);
 
-    cout << res.second << endl;
-    cout << "bajs" << endl;
+    dglin.standardize_all();
+
+    cout << "dgLinComb<Graph> built and element added!" << endl;
+
+    return 0;
 
 }
+
 
 
 

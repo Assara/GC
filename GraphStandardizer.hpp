@@ -1,6 +1,6 @@
 #include "graph.hpp"
 #include <utility>
-
+#include "VectorSpace/BasisElement.hpp"
 
 
 template <
@@ -75,17 +75,17 @@ class GraphStandadizer {
             signedInt s = copied_graph.swapVertices(j, n_assignedVertices);
             return CanonBuilder(copied_graph, n_assignedVertices +1, sign*s);
         }
-
     };
 
+    BasisElement<GraphType> standardize(BasisElement<GraphType>& input) {
+        return standardize(input.getValue(), input.getCoefficient());
+    }    
 
-    pair<GraphType, fieldType> standardize(GraphType graph, fieldType k) {
+
+    BasisElement<GraphType> standardize(GraphType graph, fieldType k) {
         CanonBuilder G = assignHair(graph);
-
         vector<CanonBuilder> attempts[2];
 
-        vector<CanonBuilder> attempts_even;
-        vector<CanonBuilder> attempts_odd;
         // TODO reserve appropriate space for attempts
 
         attempts[G.n_assignedVertices%2].push_back(G);
@@ -122,7 +122,7 @@ class GraphStandadizer {
             aut_val += attempts[N_VERTICES%2][i].sign;
 
         }
-        return {attempts[N_VERTICES%2][0].G, aut_val * k};
+        return BasisElement<GraphType>(attempts[N_VERTICES%2][0].G, k * aut_val);
 
     }
     
@@ -137,6 +137,4 @@ class GraphStandadizer {
         }
         return CanonBuilder(G, n_assigned, sign);
     }
-
-  
 };
