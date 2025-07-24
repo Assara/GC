@@ -15,8 +15,7 @@ int main() {
 
     OddGraphdegZero<6> W = wheel_graph<5>();
    
-    
-    /*
+
     BasisElement<OddGraphdegZero<6>> res = BasisElement(W);
 
 
@@ -31,22 +30,16 @@ int main() {
      GC wheel = GC(W);
 
     GC dWheel = wheel.delta();
-*/
 
-    cout << "W5: ";
-    W.print(); 
+    dWheel.print();
 
-    cout << endl << "d (W5) : ";
-    auto Gamma = W.split_vertex_differential();
 
-    for (auto& G : Gamma) {
-        auto graph = std::move(G);
-        graph->print();
-        // now graph holds the unique_ptr
-    }
 
-    //dWheel.print();
+    GC ddWheel = dWheel.delta();
 
+
+    cout << "delta squared : "<< endl;
+    ddWheel.print();
     return 0;
 
 }

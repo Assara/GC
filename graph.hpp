@@ -107,31 +107,28 @@ public:
         Int max_index = adjacent.size() - 1;
         for (Int i = 2; i < max_index; i++) {
             vector<Int> S = combutils::firstSubset(1, i);
+
             do {
-                result.push_back(splitGraph(split_vertex, adjacent[0], S));
+                result.push_back(splitGraph(split_vertex, adjacent, S));
             } while (combutils::nextSubset(S, max_index));
         }
     }
 
-    auto splitGraph(Int split_vertex, Int firstIndex, vector<Int>& S) const {
-        if constexpr (std::is_same_v<SplitGraph, void>) {
-            static_assert(!std::is_same_v<SplitGraph, void>,
-                "splitGraph() called on a Graph without valid SplitGraph");
-        } else {
+    auto splitGraph(Int split_vertex, vector<Int>& adjacent, vector<Int>& S) const {
             auto sg = make_unique<SplitGraph>();
-            for (Int i = firstIndex; i < SIZE; ++i) {
+            for (Int i = 0; i < SIZE; ++i) {
                 sg->half_edges[i] = half_edges[i];
             }
 
             for (auto s : S) {
-                sg->half_edges[s] = N_VERTICES;
+                sg->half_edges[adjacent[s]] = N_VERTICES;
             }
 
             sg->half_edges[SplitGraph::SIZE - 2] = split_vertex;
             sg->half_edges[SplitGraph::SIZE - 1] = N_VERTICES;
 
             return sg;
-        }
+        
     }
 
     signedInt flipEdge(Int i) {
