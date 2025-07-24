@@ -80,28 +80,24 @@ public:
     }
 
     vector<unique_ptr<SplitGraph>> split_vertex_differential() const {
-        if constexpr (std::is_same_v<SplitGraph, void>) {
-            static_assert(!std::is_same_v<SplitGraph, void>,
-                "split_vertex_differential() called on a Graph without valid SplitGraph");
-        } else {
             vector<vector<Int>> adjRepresentation;
             adjRepresentation.reserve(N_VERTICES);
 
             bigInt resultSize = 0;
             for (Int v = 0; v < N_VERTICES; v++) {
-                adjRepresentation.push_back(adjacent(v));
-                resultSize += combutils::n_splits(adjRepresentation.back().size());
+                    adjRepresentation.push_back(adjacent(v));
+                    resultSize += combutils::n_splits(adjRepresentation.back().size());
             }
 
             vector<unique_ptr<SplitGraph>> result;
             result.reserve(resultSize);
 
             for (Int v = 0; v < N_VERTICES; v++) {
-                split_vertex(v, adjRepresentation[v], result);
+                    split_vertex(v, adjRepresentation[v], result);
             }
 
             return result;
-        }
+        
     }
 
     void split_vertex(Int split_vertex, vector<Int>& adjacent, vector<unique_ptr<SplitGraph>>& result) const {
