@@ -13,7 +13,7 @@ class GC {
     using ThisGC = GC<N_VERTICES, N_EDGES, N_OUT_HAIR, N_IN_HAIR, c, d>;
     using GraphType = Graph<N_VERTICES, N_EDGES, N_OUT_HAIR, N_IN_HAIR, c, d>;
     using SplitGC = GC<N_VERTICES + 1, N_EDGES + 1, N_OUT_HAIR, N_IN_HAIR, c, d>;
-
+    using ContGC = GC<N_VERTICES - 1, N_EDGES - 1, N_OUT_HAIR, N_IN_HAIR, c, d>;
 public:
     // Default constructor
     GC() = default;
@@ -29,12 +29,15 @@ public:
 
     // Construct from a vector of unique_ptrs to GraphType and a coefficient
     explicit GC(std::vector<std::unique_ptr<GraphType>>&& graphs, fieldType coeff) {
-        for (auto& ptr : graphs) {
-            BasisElement<GraphType> be(*ptr, coeff);  // dereference to get GraphType
-            vec.add(VectorSpace::LinComb<GraphType>(std::move(be)));
-        }
-        vec.standardize_and_sort();
+            for (auto& ptr : graphs) {
+                    BasisElement<GraphType> be(*ptr, coeff);  // dereference to get GraphType
+                    vec.add(VectorSpace::LinComb<GraphType>(std::move(be)));
+            }
+            vec.standardize_and_sort();
     }
+
+    explicit GC(std::vector<BasisElement<GraphType>>&& elems)
+            : vec(std::move(elems)) {} 
 
     // Access the underlying vector
     const VectorSpace::LinComb<GraphType>& data() const {
@@ -60,6 +63,32 @@ public:
     // Static method to compute delta of a single basis element
     static SplitGC delta(const BasisElement<GraphType>& G) {
         return SplitGC(G.getValue().split_vertex_differential(), G.getCoefficient());
+    }
+
+    vector<BasisElement<typename GraphType::ContGraph>> d_contraction_without_sort() const {
+            using ContGraph = typename GraphType::ContGraph;
+            vector<BasisElement<typename GraphType::ContGraph>> result;
+            result.reserve(vec.raw_elements().size() * GraphType::N_EDGES_);
+
+            for (const auto& elem : vec.raw_elements()) {
+                    const auto& be = elem;
+                    for (Int i = 0; i < GraphType::N_EDGES_; ++i) {
+                            // Contract the i-th edge
+                            BasisElement<ContGraph> contracted = GraphType::contract_edge(be, i);
+                            
+                            if (contracted.getCoefficient() != 0) {
+                                result.push_back(std::move(contracted));;
+                            }
+                    }
+            }
+
+            return result;
+    }
+
+    ContGC d_contraction() {
+            std::vector<BasisElement<typename GraphType::ContGraph>> elems = d_contraction_without_sort();
+            ContGC dThis(std::move(elems));
+            return dThis;
     }
 
     void add(BasisElement<GraphType>&& elem) {
@@ -93,4 +122,7 @@ private:
         left += right;
         return left;
     }
+
+
+
 };

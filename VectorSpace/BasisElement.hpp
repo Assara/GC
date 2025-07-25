@@ -33,11 +33,20 @@ public:
         return *this;
     }
 
+    void multiplyCoefficient(fieldType factor) {
+         coefficient *= factor;
+    }
+    
+    const std::unique_ptr<T>& getInternalPtr() const {
+    return value;
+}
+
     // ✅ Move constructor
     BasisElement(BasisElement&&) noexcept = default;
     BasisElement& operator=(BasisElement&&) noexcept = default;
 
     const T& getValue() const { return *value; }
+    T& getValueRef() { return *value; }
     fieldType getCoefficient() const { return coefficient; }
     fieldType& getCoefficientRef() { return coefficient; }
 

@@ -27,12 +27,11 @@ int main() {
     dglin.standardize_all();
 
 
-     GC wheel = GC(W);
+    GC wheel = GC(W);
 
     GC dWheel = wheel.delta();
 
     dWheel.print();
-
 
 
     GC ddWheel = dWheel.delta();
@@ -40,6 +39,13 @@ int main() {
 
     cout << "delta squared : "<< endl;
     ddWheel.print();
+
+
+    GC contractedAgain = dWheel.d_contraction();
+
+    cout << "contractedAgain : "<< endl;
+    contractedAgain.print();
+
     return 0;
 
 }

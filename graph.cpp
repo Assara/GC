@@ -7,3 +7,7 @@ std(BasisElement<ThisGraph>& b) {
     GraphStandadizer<N_VERTICES, N_EDGES, N_OUT_HAIR, N_IN_HAIR, c, d> s;
     b = s.standardize(b);
 }
+
+
+
+

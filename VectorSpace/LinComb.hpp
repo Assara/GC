@@ -23,6 +23,11 @@ public:
         elements.push_back(elem);
     }
 
+    explicit LinComb(std::vector<Element>&& elems)
+            : elements(std::move(elems)) {
+            standardize_and_sort();
+    }
+
     LinComb& operator+=(const LinComb& other) {
         std::vector<Element> result;
         result.reserve(this->elements.size() + other.elements.size());

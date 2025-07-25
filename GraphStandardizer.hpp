@@ -112,18 +112,32 @@ class GraphStandadizer {
 
             }
         }
-      
 
-        cout << "Aut size = " << attempts[N_VERTICES%2].size() << endl;         
-
-        signedInt aut_val = 0;
-
-        for (bigInt i = 0; i< attempts[N_VERTICES%2].size(); i++) {
-            aut_val += attempts[N_VERTICES%2][i].sign;
-
+        //cout << "Aut size = " << attempts[N_VERTICES%2].size() << endl;
+        
+        if(GraphType::SWAP_EDGE_SIGN == -1 && attempts[N_VERTICES%2][0].G.has_double_edge()) {
+                return BasisElement<GraphType>(attempts[N_VERTICES%2][0].G, 0); 
         }
-        return BasisElement<GraphType>(attempts[N_VERTICES%2][0].G, k * aut_val);
 
+
+        bool containsPlus = false;
+        bool containsMinus = false;
+
+        for (bigInt i = 0; i < attempts[N_VERTICES%2].size(); i++) {
+                if (attempts[N_VERTICES%2][i].sign > 0) {
+                        containsPlus = true;
+                } else {
+                        containsMinus = true;
+                };
+
+                if (containsPlus && containsMinus) {
+                        return BasisElement<GraphType>(attempts[N_VERTICES%2][0].G, 0);
+                }
+        }
+        if (containsPlus) {
+            return BasisElement<GraphType>(attempts[N_VERTICES%2][0].G, k);
+        }
+        return BasisElement<GraphType>(attempts[N_VERTICES%2][0].G, -k);
     }
     
     CanonBuilder assignHair(GraphType G) {

@@ -28,16 +28,14 @@ class Graph {
 public:
     static constexpr Int SIZE = N_IN_HAIR + N_OUT_HAIR + 2 * N_EDGES;
     static constexpr Int N_HAIR = N_IN_HAIR + N_OUT_HAIR;
-    static constexpr Int EDGES = N_EDGES;
+    static constexpr Int N_EDGES_ = N_EDGES;
     static constexpr signedInt FLIP_EDGE_SIGN = ((c % 2) != 0 && (d % 2) != 0) ? -1 : 1;
     static constexpr signedInt SWAP_EDGE_SIGN = (((c + d) % 2) != 0) ? -1 : 1;
     static constexpr signedInt SWAP_VERTICES_SIGN = -1 * SWAP_EDGE_SIGN;
 
-    using SplitGraph = std::conditional_t<
-        N_VERTICES + 1 < SIZE,
-        Graph<N_VERTICES + 1, N_EDGES + 1, N_OUT_HAIR, N_IN_HAIR, c, d>,
-        void
-    >;
+    using SplitGraph = Graph<N_VERTICES + 1, N_EDGES + 1, N_OUT_HAIR, N_IN_HAIR, c, d>;
+   
+    using ContGraph = Graph<N_VERTICES - 1, N_EDGES - 1, N_OUT_HAIR, N_IN_HAIR, c, d>;
 
     using ThisGraph = Graph<N_VERTICES, N_EDGES, N_OUT_HAIR, N_IN_HAIR, c, d>;
 
@@ -128,7 +126,72 @@ public:
             sg->half_edges[SplitGraph::SIZE - 1] = N_VERTICES;
 
             return sg;
-        
+    }
+
+
+    //only suitable after calling std
+    bool has_double_edge() {
+        for (Int i = 0; i < ThisGraph::N_EDGES_ - 2; i++) {
+            if (getEdge(i) == getEdge(i+1)) {
+                return true;
+            }
+        }
+        return false;
+
+    }
+
+    static BasisElement<ContGraph> contract_edge(const BasisElement<ThisGraph>& be, Int i) {
+            const auto& half_edges = be.getValue().half_edges;
+
+            const Int edge_index = N_HAIR + 2 * i;
+            const Int contraction_vertex =  half_edges[edge_index];
+            const Int deletion_vertex =  half_edges[edge_index + 1];
+
+            // skip for tadpoles
+            if (contraction_vertex == deletion_vertex) {
+                    return BasisElement<ContGraph>(std::unique_ptr<ContGraph>{}, static_cast<fieldType>(0));
+            }
+
+            auto graph_ptr = std::make_unique<ContGraph>();
+            BasisElement<ContGraph> contracted(std::move(graph_ptr), be.getCoefficient());
+ 
+            for (Int j = 0; j < edge_index; ++j) {
+                    Int v = half_edges[j];
+
+                    contracted.getValueRef().half_edges[j] =  // shift down by 2 to account for removed edge
+                            contraction_value(v, contraction_vertex, deletion_vertex);
+            } 
+
+            for (Int j = edge_index + 2 ; j < ThisGraph::SIZE; ++j) {
+                    Int v = half_edges[j];
+                    contracted.getValueRef().half_edges[j - 2] =  // shift down by 2 to account for removed edge
+                            contraction_value(v, contraction_vertex, deletion_vertex);
+            }
+            
+            if (i != N_EDGES -1) {
+                    contracted.multiplyCoefficient(SWAP_EDGE_SIGN);
+            } 
+
+            if (deletion_vertex != N_VERTICES - 1) {
+                    contracted.multiplyCoefficient(SWAP_EDGE_SIGN);
+            } 
+
+            /*
+            cout << "contracted edge: " << i << endl; 
+            contracted.getValue().print();
+            */
+            return contracted;
+    }
+
+    static Int contraction_value(Int v, Int contraction_vertex, Int deletion_vertex) {
+        if (v == deletion_vertex) {
+            return contraction_vertex;
+        }
+        if (v == N_VERTICES - 1) {
+            return deletion_vertex;
+        }
+        return v;
+
     }
 
     signedInt flipEdge(Int i) {
