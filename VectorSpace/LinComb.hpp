@@ -36,16 +36,16 @@ public:
         const auto& A = this->elements;
         const auto& B = other.elements;
 
-        // Merge-scan loop:
+        // Merge-scan loop (reversed priority)
         while (i < A.size() && j < B.size()) {
             const T& valA = A[i].getValue();
             const T& valB = B[j].getValue();
             signedInt cmp = valA.compare(valB);
 
-            if (cmp < 0) {
+            if (cmp > 0) { 
                 result.push_back(A[i]);
                 ++i;
-            } else if (cmp > 0) {
+            } else if (cmp < 0) {
                 result.push_back(B[j]);
                 ++j;
             } else {
