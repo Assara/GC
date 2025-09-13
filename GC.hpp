@@ -14,33 +14,36 @@ class GC {
     using GraphType = Graph<N_VERTICES, N_EDGES, N_OUT_HAIR, N_IN_HAIR, c, d>;
     using SplitGC = GC<N_VERTICES + 1, N_EDGES + 1, N_OUT_HAIR, N_IN_HAIR, c, d>;
     using ContGC = GC<N_VERTICES - 1, N_EDGES - 1, N_OUT_HAIR, N_IN_HAIR, c, d>;
+private:
+        VectorSpace::LinComb<GraphType, fieldType> vec;
+
 public:
     // Default constructor
     GC() = default;
 
     // Construct from a single BasisElement
-    explicit GC(const BasisElement<GraphType>& b) : vec(b) {}
+    explicit GC(const BasisElement<GraphType, fieldType>& b) : vec(b) {}
 
     // Construct from a GraphType (copying it into a BasisElement)
-    explicit GC(const GraphType& G) : vec(BasisElement(G)) {}
+    explicit GC(const GraphType& G) : vec(G) {}
+
+
+    // Construct from a ptr to GraphType (moving it into a BasisElement)
+    explicit GC(std::unique_ptr<GraphType>&& g, fieldType coeff = 1.0f)
+    : vec(BasisElement<GraphType, fieldType>(std::move(g), coeff)) {}
 
     // Construct from a full LinComb
-    explicit GC(const VectorSpace::LinComb<GraphType>& v) : vec(v) {}
+    explicit GC(const VectorSpace::LinComb<GraphType, fieldType>& v) : vec(v) {}
 
     // Construct from a vector of unique_ptrs to GraphType and a coefficient
-    explicit GC(std::vector<std::unique_ptr<GraphType>>&& graphs, fieldType coeff) {
-            for (auto& ptr : graphs) {
-                    BasisElement<GraphType> be(*ptr, coeff);  // dereference to get GraphType
-                    vec.add(VectorSpace::LinComb<GraphType>(std::move(be)));
-            }
-            vec.standardize_and_sort();
-    }
+    explicit GC(std::vector<std::unique_ptr<GraphType>>&& graphs, fieldType coeff)
+                : vec(std::move(graphs), coeff) {} 
 
-    explicit GC(std::vector<BasisElement<GraphType>>&& elems)
-            : vec(std::move(elems)) {} 
+    explicit GC(std::vector<BasisElement<GraphType, fieldType>>&& elems)
+                : vec(std::move(elems)) {} 
 
     // Access the underlying vector
-    const VectorSpace::LinComb<GraphType>& data() const {
+    const VectorSpace::LinComb<GraphType, fieldType>& data() const {
         return vec;
     }
 
@@ -55,56 +58,95 @@ public:
     void sort_elements()   { vec.sort_elements(); }
     void standardize_and_sort() { vec.standardize_and_sort(); }
 
+    BasisElement<GraphType, fieldType>& back() {
+            return vec.back();
+    }
+
     // Compute delta for the whole GC
     SplitGC delta() const {
-        return delta_recursive(0, vec.raw_elements().size());
+            return delta_recursive(0, vec.raw_elements().size());
     }
 
     // Static method to compute delta of a single basis element
-    static SplitGC delta(const BasisElement<GraphType>& G) {
-        return SplitGC(G.getValue().split_vertex_differential(), G.getCoefficient());
+    static SplitGC delta(const BasisElement<GraphType, fieldType>& G) {
+            return SplitGC(G.getValue().split_vertex_differential(), G.getCoefficient());
     }
 
-    vector<BasisElement<typename GraphType::ContGraph>> d_contraction_without_sort() const {
+    vector<BasisElement<typename GraphType::ContGraph, fieldType>> d_contraction_without_sort() const {
             using ContGraph = typename GraphType::ContGraph;
-            vector<BasisElement<typename GraphType::ContGraph>> result;
+            vector<BasisElement<typename GraphType::ContGraph, fieldType>> result;
             result.reserve(vec.raw_elements().size() * GraphType::N_EDGES_);
 
             for (const auto& elem : vec.raw_elements()) {
                     const auto& be = elem;
                     for (Int i = 0; i < GraphType::N_EDGES_; ++i) {
                             // Contract the i-th edge
-                            BasisElement<ContGraph> contracted = GraphType::contract_edge(be, i);
+                            BasisElement<ContGraph, fieldType> contracted = GraphType::contract_edge(be, i);
                             
                             if (contracted.getCoefficient() != 0) {
                                 result.push_back(std::move(contracted));;
                             }
                     }
             }
-
             return result;
     }
 
     ContGC d_contraction() {
-            std::vector<BasisElement<typename GraphType::ContGraph>> elems = d_contraction_without_sort();
+            std::vector<BasisElement<typename GraphType::ContGraph, fieldType>> elems = d_contraction_without_sort();
             ContGC dThis(std::move(elems));
             return dThis;
     }
 
-    void add(BasisElement<GraphType>&& elem) {
-        vec.add(VectorSpace::LinComb<GraphType>(std::move(elem)));
+    void add(BasisElement<GraphType, fieldType>&& elem) {
+            vec.add(VectorSpace::LinComb<GraphType, fieldType>(std::move(elem)));
     }
     
     void print() const {
-        const auto& elems = vec.raw_elements();
-        for (const auto& elem : elems) {
-            elem.getValue().print();
-            std::cout << "Coefficient: " << elem.getCoefficient() << "\n\n";
-        }
+            const auto& elems = vec.raw_elements();
+            for (const auto& elem : elems) {
+                    elem.getValue().print();
+                    std::cout << "Coefficient: " << elem.getCoefficient() << "\n\n";
+            }
     }
 
+
+    //This should not be here
+    void candidates() {
+            if (vec.raw_elements().empty()) return;
+
+            const GraphType& G = vec.back().getValue();
+
+            std::vector<std::unique_ptr<typename GraphType::SplitGraph>> splits;
+            G.split_vertex(0, G.adjacent(0), splits);
+
+            vector<ThisGC> boundaries;
+            for (auto& split : splits) {
+                    boundaries.push_back(ThisGC::SplitGC(std::move(split)).d_contraction());
+            }
+
+
+            // scale boundaries 
+
+        /*    for (ThisGC bouundary : boundaries) {
+                    if (boundary.back().getValueRef().compare(G) == 0) {
+
+                        
+                    }
+
+            }
+        */
+
+          //  cout << "aaa = " << boundaries.size() << endl;
+
+    }
+
+    GC& scalar_multiply(fieldType scalar) {
+            vec.scalar_multiply(scalar);
+            return *this;
+    }
+
+
 private:
-    VectorSpace::LinComb<GraphType> vec;
 
     // Recursive delta helper
     SplitGC delta_recursive(size_t start, size_t end) const {
@@ -122,7 +164,5 @@ private:
         left += right;
         return left;
     }
-
-
 
 };

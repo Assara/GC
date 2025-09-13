@@ -7,10 +7,12 @@
 
 namespace VectorSpace {
 
-template<typename T>
+template<typename T, typename k>
 concept ValidBasisElement =
     HasCompare<T> &&
-    requires(BasisElement<T>& b) {
+    requires(BasisElement<T, k>& b) {
         { T::std(b) } -> std::same_as<void>;
     };
+
+    
 } // namespace VectorSpace

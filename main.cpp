@@ -16,13 +16,13 @@ int main() {
     OddGraphdegZero<6> W = wheel_graph<5>();
    
 
-    BasisElement<OddGraphdegZero<6>> res = BasisElement(W);
+    BasisElement<OddGraphdegZero<6>, fieldType> res = BasisElement<OddGraphdegZero<6>, fieldType>(W);
 
 
     res.getValue().print();
     cout << res.getCoefficient() << endl;
 
-    VectorSpace::LinComb<OddGraphdegZero<6>> dglin = VectorSpace::LinComb<OddGraphdegZero<6>>(res);
+    VectorSpace::LinComb<OddGraphdegZero<6>, fieldType> dglin = VectorSpace::LinComb<OddGraphdegZero<6>, fieldType>(res);
 
     dglin.standardize_all();
 
@@ -46,7 +46,14 @@ int main() {
     cout << "contractedAgain : "<< endl;
     contractedAgain.print();
 
+
+    contractedAgain.candidates();
+
+
+
     return 0;
+
+
 
 }
 

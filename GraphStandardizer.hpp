@@ -77,12 +77,12 @@ class GraphStandadizer {
         }
     };
 
-    BasisElement<GraphType> standardize(BasisElement<GraphType>& input) {
+    BasisElement<GraphType, fieldType> standardize(BasisElement<GraphType, fieldType>& input) {
         return standardize(input.getValue(), input.getCoefficient());
     }    
 
 
-    BasisElement<GraphType> standardize(GraphType graph, fieldType k) {
+    BasisElement<GraphType, fieldType> standardize(GraphType graph, fieldType k) {
         CanonBuilder G = assignHair(graph);
         vector<CanonBuilder> attempts[2];
 
@@ -116,7 +116,7 @@ class GraphStandadizer {
         //cout << "Aut size = " << attempts[N_VERTICES%2].size() << endl;
         
         if(GraphType::SWAP_EDGE_SIGN == -1 && attempts[N_VERTICES%2][0].G.has_double_edge()) {
-                return BasisElement<GraphType>(attempts[N_VERTICES%2][0].G, 0); 
+                return BasisElement<GraphType, fieldType>(attempts[N_VERTICES%2][0].G, 0); 
         }
 
 
@@ -131,13 +131,13 @@ class GraphStandadizer {
                 };
 
                 if (containsPlus && containsMinus) {
-                        return BasisElement<GraphType>(attempts[N_VERTICES%2][0].G, 0);
+                        return BasisElement<GraphType, fieldType>(attempts[N_VERTICES%2][0].G, 0);
                 }
         }
         if (containsPlus) {
-            return BasisElement<GraphType>(attempts[N_VERTICES%2][0].G, k);
+            return BasisElement<GraphType, fieldType>(attempts[N_VERTICES%2][0].G, k);
         }
-        return BasisElement<GraphType>(attempts[N_VERTICES%2][0].G, -k);
+        return BasisElement<GraphType, fieldType>(attempts[N_VERTICES%2][0].G, -k);
     }
     
     CanonBuilder assignHair(GraphType G) {

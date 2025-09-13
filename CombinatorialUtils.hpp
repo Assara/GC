@@ -50,5 +50,16 @@ namespace combutils {
         return std::memcmp(a.data(), b.data(), N * sizeof(Int));
 
     }
+
+
+    template <std::size_t N>
+    [[nodiscard]] inline constexpr bool
+    lessThan(const std::array<Int, N>& a, const std::array<Int, N>& b) noexcept {
+        for (std::size_t i = 0; i < N; ++i) {
+            if (a[i] < b[i]) return true;   // first differing element decides
+            if (a[i] > b[i]) return false;
+        }
+        return false; // equal
+    }
     
 }

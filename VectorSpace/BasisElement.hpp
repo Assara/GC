@@ -4,27 +4,24 @@
 #include "HasCompare.hpp"
 #include <memory>
 
-// BasisElement class template storing a pointer to a value of type T and a coefficient
-template<typename T>
+template<typename T, typename k>
 class BasisElement {
 private:
     std::unique_ptr<T> value;
-    fieldType coefficient;
+    k coefficient;
 
 public:
-    // Constructor from value
-    BasisElement(const T& val, fieldType coeff = 1.0f)
+    // Construct from value / unique_ptr
+    explicit BasisElement(const T& val, k coeff = k{1})
         : value(std::make_unique<T>(val)), coefficient(coeff) {}
 
-    // Constructor from unique_ptr
-    BasisElement(std::unique_ptr<T>&& val, fieldType coeff)
+    BasisElement(std::unique_ptr<T>&& val, k coeff)
         : value(std::move(val)), coefficient(coeff) {}
 
-    // ✅ Deep copy constructor
+    // Deep copy
     BasisElement(const BasisElement& other)
         : value(std::make_unique<T>(*other.value)), coefficient(other.coefficient) {}
 
-    // ✅ Copy assignment operator
     BasisElement& operator=(const BasisElement& other) {
         if (this != &other) {
             value = std::make_unique<T>(*other.value);
@@ -33,25 +30,28 @@ public:
         return *this;
     }
 
-    void multiplyCoefficient(fieldType factor) {
-         coefficient *= factor;
-    }
-    
-    const std::unique_ptr<T>& getInternalPtr() const {
-    return value;
-}
-
-    // ✅ Move constructor
+    // Moves OK
     BasisElement(BasisElement&&) noexcept = default;
     BasisElement& operator=(BasisElement&&) noexcept = default;
 
-    const T& getValue() const { return *value; }
-    T& getValueRef() { return *value; }
-    fieldType getCoefficient() const { return coefficient; }
-    fieldType& getCoefficientRef() { return coefficient; }
+    // Mutators
+    void multiplyCoefficient(k factor) noexcept { coefficient *= factor; }
 
+    // Accessors (const-correct; note order: `const` then `noexcept`)
+    const T* borrowValue() const noexcept { return value.get(); }
+    T*       borrowValue()       noexcept { return value.get(); }
+
+    const T& getValue() const noexcept { return *value; }
+    T&       getValue()       noexcept { return *value; }
+
+    k  getCoefficient() const noexcept { return coefficient; }
+    k& getCoefficientRef()     noexcept { return coefficient; }
+
+    // If you really need this, expose raw ptrs, not the unique_ptr itself:
+    const T* getInternalPtr() const noexcept { return value.get(); }
+
+    // Compare (assumes T::compare is const)
     signedInt compare(const BasisElement& other) const {
         return value->compare(*other.value);
     }
 };
-

@@ -6,11 +6,16 @@
 
 namespace VectorSpace {
 
-template<ValidBasisElement T>
+template<typename T, typename k>
+requires ValidBasisElement<T, k>
 class LinComb {
 public:
-    using Element = BasisElement<T>;
+    using Element = BasisElement<T, k>;
 
+private:
+    std::vector<Element> elements;
+
+public:
     LinComb() = default;
 
     void standardize_all() {
@@ -19,7 +24,7 @@ public:
         }
     }
 
-    explicit LinComb(const BasisElement<T>& elem) {
+    explicit LinComb(const BasisElement<T, k>& elem) {
         elements.push_back(elem);
     }
 
@@ -27,6 +32,22 @@ public:
             : elements(std::move(elems)) {
             standardize_and_sort();
     }
+
+    explicit LinComb(std::vector<std::unique_ptr<T>>&& graphs, const k& coeff) {
+        elements.reserve(graphs.size());
+        for (auto& p : graphs) {
+            if (p && coeff != k{}) elements.emplace_back(std::move(p), coeff);
+        }
+        standardize_and_sort();
+    }
+
+    explicit LinComb(const T& val, k coeff = k{1}) {
+            elements.emplace_back(val, coeff);
+    }
+
+     struct AssumeBasisOrderTag {};
+     explicit LinComb(std::vector<Element>&& elems, AssumeBasisOrderTag) noexcept
+        : elements(std::move(elems)) {}
 
     LinComb& operator+=(const LinComb& other) {
         std::vector<Element> result;
@@ -49,8 +70,8 @@ public:
                 result.push_back(B[j]);
                 ++j;
             } else {
-                fieldType sumCoeff = A[i].getCoefficient() + B[j].getCoefficient();
-                if (sumCoeff != static_cast<fieldType>(0)) {
+                k sumCoeff = A[i].getCoefficient() + B[j].getCoefficient();
+                if (sumCoeff != static_cast<k>(0)) {
                     result.emplace_back(valA, sumCoeff);
                 }
                 ++i;
@@ -71,6 +92,10 @@ public:
         return *this;
     }
 
+    bigInt size() {
+        return elements.size();
+    }
+
     LinComb operator+(const LinComb& other) const {
         LinComb copy = *this;
         copy += other;
@@ -84,13 +109,19 @@ public:
     auto begin() const { return elements.begin(); }
     auto end() const { return elements.end(); }
 
+
+    BasisElement<T, k>& back() {
+            return elements.back();
+    }
+
+
     void sort_elements() {
         if (elements.size() <= 1) return;
 
         std::vector<LinComb> wrapped;
         wrapped.reserve(elements.size());
         for (auto& e : elements) {
-            if (e.getCoefficient() != static_cast<fieldType>(0)) {
+            if (e.getCoefficient() != static_cast<k>(0)) {
                 LinComb single;
                 single.elements.push_back(std::move(e));
                 wrapped.push_back(std::move(single));
@@ -120,12 +151,33 @@ public:
         sort_elements();
     }
 
+    LinComb& scalar_multiply(k scalar) {
+            if (scalar == 0) {
+                    elements.clear();
+                    return *this;
+            }
+
+            for (auto& be : elements) {
+                    be.getCoefficientRef() *= scalar;
+            }
+            return *this;
+    }
+
+    LinComb operator*(k scalar) const {
+        LinComb result = *this;
+        result.scalar_multiply(scalar);
+        return result;
+    }
+
     const std::vector<Element>& raw_elements() const {
         return elements;
     }
 
-private:
-    std::vector<Element> elements;
+    void append_in_basis_order(const T& val, k coeff) {
+        if (coeff == k{}) return;
+        elements.emplace_back(val, coeff);
+    }
+
 };
 
 } // namespace VectorSpace

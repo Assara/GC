@@ -13,7 +13,7 @@
 
 using namespace std;
 
-template<typename T>
+template<typename T, typename k>
 class BasisElement;
 
 template <
@@ -47,7 +47,9 @@ public:
         return combutils::compareHalfEdges(half_edges, other.half_edges);
     }
 
-    static void std(BasisElement<ThisGraph>& b);
+    bool operator<(const Graph& o) const { return compare(o) < 0; }
+
+    static void std(BasisElement<ThisGraph, fieldType>& b);
 
     pair<Int, Int> getEdge(Int i) {
         return { half_edges[N_HAIR + 2 * i], half_edges[N_HAIR + 2 * i + 1] };
@@ -98,7 +100,7 @@ public:
         
     }
 
-    void split_vertex(Int split_vertex, vector<Int>& adjacent, vector<unique_ptr<SplitGraph>>& result) const {
+    void split_vertex(Int split_vertex, const vector<Int>& adjacent, vector<unique_ptr<SplitGraph>>& result) const {
         if constexpr (std::is_same_v<SplitGraph, void>) return;
         if (adjacent.size() < 4) return;
 
@@ -112,7 +114,7 @@ public:
         }
     }
 
-    auto splitGraph(Int split_vertex, vector<Int>& adjacent, vector<Int>& S) const {
+    auto splitGraph(Int split_vertex, const vector<Int>& adjacent, vector<Int>& S) const {
             auto sg = make_unique<SplitGraph>();
             for (Int i = 0; i < SIZE; ++i) {
                 sg->half_edges[i] = half_edges[i];
@@ -140,7 +142,7 @@ public:
 
     }
 
-    static BasisElement<ContGraph> contract_edge(const BasisElement<ThisGraph>& be, Int i) {
+    static BasisElement<ContGraph, fieldType> contract_edge(const BasisElement<ThisGraph, fieldType>& be, Int i) {
             const auto& half_edges = be.getValue().half_edges;
 
             const Int edge_index = N_HAIR + 2 * i;
@@ -149,23 +151,19 @@ public:
 
             // skip for tadpoles
             if (contraction_vertex == deletion_vertex) {
-                    return BasisElement<ContGraph>(std::unique_ptr<ContGraph>{}, static_cast<fieldType>(0));
+                    return BasisElement<ContGraph, fieldType>(std::unique_ptr<ContGraph>{}, static_cast<fieldType>(0));
             }
 
-            auto graph_ptr = std::make_unique<ContGraph>();
-            BasisElement<ContGraph> contracted(std::move(graph_ptr), be.getCoefficient());
+            BasisElement<ContGraph, fieldType> contracted(std::make_unique<ContGraph>(), be.getCoefficient());
  
             for (Int j = 0; j < edge_index; ++j) {
-                    Int v = half_edges[j];
-
-                    contracted.getValueRef().half_edges[j] =  // shift down by 2 to account for removed edge
-                            contraction_value(v, contraction_vertex, deletion_vertex);
+                    contracted.getValue().half_edges[j] =  
+                            contraction_value(half_edges[j], contraction_vertex, deletion_vertex);
             } 
 
             for (Int j = edge_index + 2 ; j < ThisGraph::SIZE; ++j) {
-                    Int v = half_edges[j];
-                    contracted.getValueRef().half_edges[j - 2] =  // shift down by 2 to account for removed edge
-                            contraction_value(v, contraction_vertex, deletion_vertex);
+                    contracted.getValue().half_edges[j - 2] =  // shift down by 2 to account for removed edge
+                            contraction_value(half_edges[j], contraction_vertex, deletion_vertex);
             }
             
             if (i != N_EDGES -1) {
