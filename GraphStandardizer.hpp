@@ -26,8 +26,7 @@ class GraphStandadizer {
         CanonBuilder(const GraphType& initialGraph, Int n, signedInt s)
             : G(initialGraph), n_assignedVertices(n) {
             n_assignedVertices = n;
-            sign = s;
-
+    
             sign = s*G.directAndSortEdges();
         }
 

@@ -5,11 +5,15 @@
 #include <memory>
 #include <utility>
 #include <cstring>
+#include <unordered_set>
 #include <iostream>
+#include <algorithm>
 #include "Types.hpp"
 #include "permutation.hpp"
 #include "CombinatorialUtils.hpp"
 #include "VectorSpace/HasCompare.hpp"
+#include "graph_hash.hpp"
+#include <ranges>
 
 using namespace std;
 
@@ -26,7 +30,7 @@ template <
 >
 class Graph {
 public:
-    static constexpr Int SIZE = N_IN_HAIR + N_OUT_HAIR + 2 * N_EDGES;
+    static constexpr Int SIZE = N_IN_HAIR + N_OUT_HAIR + (Int)2 * N_EDGES;
     static constexpr Int N_HAIR = N_IN_HAIR + N_OUT_HAIR;
     static constexpr Int N_EDGES_ = N_EDGES;
     static constexpr signedInt FLIP_EDGE_SIGN = ((c % 2) != 0 && (d % 2) != 0) ? -1 : 1;
@@ -43,15 +47,34 @@ public:
 
     explicit Graph(const array<Int, SIZE>& arr) : half_edges(arr) {}
 
-    signedInt compare(const ThisGraph& other) const {
-        return combutils::compareHalfEdges(half_edges, other.half_edges);
+    inline signedInt custom_filter() const {
+        return std::ranges::count_if(valence_array(), [](Int v){ return v % 2 != 0; });
     }
+
+    inline signedInt total_order_comp(const ThisGraph& other) const {
+       return combutils::compareHalfEdges(half_edges, other.half_edges);
+    }
+
+    signedInt compare(const ThisGraph& other) const {
+        
+        // for homological filtration
+        signedInt r = other.custom_filter() - custom_filter();
+        if (r != 0) {
+            return r;
+        }
+
+        // For absolute ordering
+        return total_order_comp(other);
+    }
+
+
+
 
     bool operator<(const Graph& o) const { return compare(o) < 0; }
 
     static void std(BasisElement<ThisGraph, fieldType>& b);
 
-    pair<Int, Int> getEdge(Int i) {
+    pair<Int, Int> getEdge(Int i) const {
         return { half_edges[N_HAIR + 2 * i], half_edges[N_HAIR + 2 * i + 1] };
     }
 
@@ -97,8 +120,8 @@ public:
             }
 
             return result;
-        
     }
+
 
     void split_vertex(Int split_vertex, const vector<Int>& adjacent, vector<unique_ptr<SplitGraph>>& result) const {
         if constexpr (std::is_same_v<SplitGraph, void>) return;
@@ -109,17 +132,15 @@ public:
             vector<Int> S = combutils::firstSubset(1, i);
 
             do {
-                result.push_back(splitGraph(split_vertex, adjacent, S));
+                result.emplace_back(splitGraph(split_vertex, adjacent, S));
             } while (combutils::nextSubset(S, max_index));
         }
     }
 
-    auto splitGraph(Int split_vertex, const vector<Int>& adjacent, vector<Int>& S) const {
+    unique_ptr<SplitGraph> splitGraph(Int split_vertex, const vector<Int>& adjacent, vector<Int>& S) const {
             auto sg = make_unique<SplitGraph>();
-            for (Int i = 0; i < SIZE; ++i) {
-                sg->half_edges[i] = half_edges[i];
-            }
-
+            
+            std::copy_n(half_edges.begin(), SIZE, (*sg).half_edges.begin());
             for (auto s : S) {
                 sg->half_edges[adjacent[s]] = N_VERTICES;
             }
@@ -130,6 +151,71 @@ public:
             return sg;
     }
 
+    
+    void split_vertex(Int split_vertex, const vector<Int>& adjacent, unordered_set<SplitGraph>& result) const {
+            if constexpr (std::is_same_v<SplitGraph, void>) return;
+            if (adjacent.size() < 4) return;
+
+            Int max_index = adjacent.size() - 1;
+            for (Int i = 2; i < max_index; i++) {
+                    vector<Int> S = combutils::firstSubset(1, i);
+
+                    do {
+                            BasisElement<SplitGraph, fieldType> b(splitGraph(split_vertex, adjacent, S), 1);
+                            SplitGraph::std(b);
+                            if (0 != b.getCoefficient()) {
+                                result.emplace(std::move(b.getValue()));
+                            }
+                    } while (combutils::nextSubset(S, max_index));
+                }
+    }
+
+    void add_splits_to_set(unordered_set<SplitGraph>& result) {
+            vector<vector<Int>> adjRepresentation;
+            adjRepresentation.reserve(N_VERTICES);
+
+            for (Int v = 0; v < N_VERTICES; v++) {
+                    adjRepresentation.push_back(adjacent(v));
+            }
+            for (Int v = 0; v < N_VERTICES; v++) {
+                    split_vertex(v, adjRepresentation[v], result);
+            }
+    }
+
+        
+    // split without 
+    void split_vertex_even(Int splitVertex, const vector<Int>& adjacent, unordered_set<SplitGraph>& result) const {
+            if (adjacent.size() < 5) return;
+            if (adjacent.size()%2 == 1) {
+                    split_vertex(splitVertex, adjacent, result);
+                    return;
+            }
+
+
+            Int max_index = adjacent.size() - 2;
+            for (Int i = 3; i < max_index; i+=2) {
+                    vector<Int> S = combutils::firstSubset(1, i);
+                    do {
+                            BasisElement<SplitGraph, fieldType> b(splitGraph(splitVertex, adjacent, S), 1);
+                            SplitGraph::std(b);
+                            if (0 != b.getCoefficient()) {
+                                result.emplace(std::move(b.getValue()));
+                            }
+                    } while (combutils::nextSubset(S, max_index));
+                }
+    }
+
+    void add_even_splits_to_set(unordered_set<SplitGraph>& result) const {
+            vector<vector<Int>> adjRepresentation;
+            adjRepresentation.reserve(N_VERTICES);
+
+            for (Int v = 0; v < N_VERTICES; v++) {
+                    adjRepresentation.push_back(adjacent(v));
+            }
+            for (Int v = 0; v < N_VERTICES; v++) {
+                    split_vertex_even(v, adjRepresentation[v], result);
+            }
+    }
 
     //only suitable after calling std
     bool has_double_edge() {
@@ -146,9 +232,9 @@ public:
             const auto& half_edges = be.getValue().half_edges;
 
             const Int edge_index = N_HAIR + 2 * i;
-            const Int contraction_vertex =  half_edges[edge_index];
-            const Int deletion_vertex =  half_edges[edge_index + 1];
-
+            const Int contraction_vertex = min(half_edges[edge_index], half_edges[edge_index + 1]);
+            const Int deletion_vertex = max(half_edges[edge_index], half_edges[edge_index + 1]);
+     
             // skip for tadpoles
             if (contraction_vertex == deletion_vertex) {
                     return BasisElement<ContGraph, fieldType>(std::unique_ptr<ContGraph>{}, static_cast<fieldType>(0));
@@ -166,13 +252,17 @@ public:
                             contraction_value(half_edges[j], contraction_vertex, deletion_vertex);
             }
             
-            if (i != N_EDGES -1) {
+            if ( (N_EDGES - i) % 2 == 0) {
                     contracted.multiplyCoefficient(SWAP_EDGE_SIGN);
             } 
 
             if (deletion_vertex != N_VERTICES - 1) {
-                    contracted.multiplyCoefficient(SWAP_EDGE_SIGN);
+                    contracted.multiplyCoefficient(SWAP_VERTICES_SIGN);
             } 
+
+            if (half_edges[edge_index] > half_edges[edge_index + 1]) {
+                    contracted.multiplyCoefficient(FLIP_EDGE_SIGN);
+            }
 
             /*
             cout << "contracted edge: " << i << endl; 
@@ -259,7 +349,7 @@ public:
         if (N_OUT_HAIR > 0) {
             cout << "out_hair: ";
             for (Int i = 0; i < N_OUT_HAIR; ++i) {
-                cout << half_edges[i];
+                cout << +half_edges[i];
                 if (i < N_OUT_HAIR - 1) cout << ", ";
             }
             cout << "\n";
@@ -268,7 +358,7 @@ public:
         if (N_IN_HAIR > 0) {
             cout << "in_hair: ";
             for (Int i = 0; i < N_IN_HAIR; ++i) {
-                cout << half_edges[N_OUT_HAIR + i];
+                cout << +half_edges[N_OUT_HAIR + i];
                 if (i < N_IN_HAIR - 1) cout << ", ";
             }
             cout << "\n";
@@ -277,7 +367,7 @@ public:
         cout << "edges: ";
         for (Int e = 0; e < N_EDGES; ++e) {
             Int base = N_HAIR + 2 * e;
-            cout << "(" << half_edges[base] << "," << half_edges[base + 1] << ")";
+            cout << "(" << +half_edges[base] << "," << +half_edges[base + 1] << ")";
             if (e < N_EDGES - 1) cout << ", ";
         }
         cout << endl;

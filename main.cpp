@@ -10,53 +10,46 @@
 
 using namespace std;
 
+
+const Int wheelSize = 9;
+
 int main() {
     cout << "hello " <<endl;
 
-    OddGraphdegZero<6> W = wheel_graph<5>();
+    OddGraphdegZero<wheelSize + 1> W = wheel_graph<wheelSize>();
    
-
-    BasisElement<OddGraphdegZero<6>, fieldType> res = BasisElement<OddGraphdegZero<6>, fieldType>(W);
+    BasisElement<OddGraphdegZero<wheelSize + 1>, fieldType> res = BasisElement<OddGraphdegZero<wheelSize + 1>, fieldType>(W);
 
 
     res.getValue().print();
     cout << res.getCoefficient() << endl;
 
-    VectorSpace::LinComb<OddGraphdegZero<6>, fieldType> dglin = VectorSpace::LinComb<OddGraphdegZero<6>, fieldType>(res);
+    VectorSpace::LinComb<OddGraphdegZero<wheelSize + 1>, fieldType> dglin = VectorSpace::LinComb<OddGraphdegZero<wheelSize + 1>, fieldType>(res);
 
     dglin.standardize_all();
 
 
     GC wheel = GC(W);
 
-    GC dWheel = wheel.delta();
+    cout << "wheel = ";
+    wheel.print();
+    int i = 0;
+    while (wheel.frontValence() > 4 && i < 2) {
+        cout << "attempt" <<  i << endl;
+        wheel = wheel.reduce2();
 
-    dWheel.print();
+        i++;
+        wheel.printFront();        
+        cout << "wheel.size() = " << wheel.size() << endl; 
+        cout << "grade front =" << wheel.data().raw_elements().front().getValue().custom_filter() << endl;
+        cout << "grade back =" << wheel.data().raw_elements().back().getValue().custom_filter() << endl;
+    }
 
-
-    GC ddWheel = dWheel.delta();
-
-
-    cout << "delta squared : "<< endl;
-    ddWheel.print();
-
-
-    GC contractedAgain = dWheel.d_contraction();
-
-    cout << "contractedAgain : "<< endl;
-    contractedAgain.print();
-
-
-    contractedAgain.candidates();
-
-
+    cout << "final representation: " << endl;
+    wheel.print();
 
     return 0;
-
-
-
 }
-
 
 
 

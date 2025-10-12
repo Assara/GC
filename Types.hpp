@@ -1,7 +1,7 @@
 #pragma once
 
 // Change this alias to change the integer type project-wide
-using Int = unsigned int;
+using Int = std::uint8_t;
 
 using signedInt = int;
 

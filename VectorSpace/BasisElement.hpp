@@ -47,11 +47,23 @@ public:
     k  getCoefficient() const noexcept { return coefficient; }
     k& getCoefficientRef()     noexcept { return coefficient; }
 
-    // If you really need this, expose raw ptrs, not the unique_ptr itself:
-    const T* getInternalPtr() const noexcept { return value.get(); }
+
+
 
     // Compare (assumes T::compare is const)
     signedInt compare(const BasisElement& other) const {
         return value->compare(*other.value);
     }
+
+    // --- comparisons (value-based) ---
+    bool operator<(const BasisElement& rhs) const noexcept {
+        return compare(rhs) < 0;               // strict-weak ordering via T::compare
+    }
+
+    bool operator==(const BasisElement& rhs) const noexcept {
+        return compare(rhs) == 0;              // equality by value only (coeff ignored)
+    }
+
+    
+    
 };

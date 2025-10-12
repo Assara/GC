@@ -43,11 +43,22 @@ public:
 
     explicit LinComb(const T& val, k coeff = k{1}) {
             elements.emplace_back(val, coeff);
+            standardize_and_sort();
     }
 
      struct AssumeBasisOrderTag {};
      explicit LinComb(std::vector<Element>&& elems, AssumeBasisOrderTag) noexcept
         : elements(std::move(elems)) {}
+
+
+    explicit LinComb(typename std::vector<Element>::const_iterator first,
+            typename std::vector<Element>::const_iterator last)
+        : elements(first, last) {}
+
+    
+    explicit LinComb(const T& val, AssumeBasisOrderTag, const k& coeff = k{1}) {
+            elements.emplace_back(val, coeff);
+    }
 
     LinComb& operator+=(const LinComb& other) {
         std::vector<Element> result;
@@ -63,10 +74,10 @@ public:
             const T& valB = B[j].getValue();
             signedInt cmp = valA.compare(valB);
 
-            if (cmp > 0) { 
+            if (cmp < 0) { 
                 result.push_back(A[i]);
                 ++i;
-            } else if (cmp < 0) {
+            } else if (cmp > 0) {
                 result.push_back(B[j]);
                 ++j;
             } else {
@@ -114,6 +125,13 @@ public:
             return elements.back();
     }
 
+    BasisElement<T, k>& front() {
+            return elements.front();
+    }
+
+    void sort_without_deduplicate() {
+        std::sort(elements.begin(), elements.end());
+    }
 
     void sort_elements() {
         if (elements.size() <= 1) return;
@@ -173,9 +191,28 @@ public:
         return elements;
     }
 
+    std::vector<Element>& raw_elements_nonconst() {
+        return elements;
+    }
+
+
     void append_in_basis_order(const T& val, k coeff) {
         if (coeff == k{}) return;
         elements.emplace_back(val, coeff);
+    }
+
+
+    void append_in_basis_order(Element& be) {
+        elements.emplace_back(be);
+    }
+
+
+public:
+    void print() const {
+            for (const auto& elem : elements) {
+                    elem.getValue().print();
+                    std::cout << "Coefficient: " << elem.getCoefficient() << "\n\n";
+            }
     }
 
 };
