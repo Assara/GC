@@ -150,7 +150,6 @@ public:
         ContGC d_contraction() {
                 std::vector<BasisElement<typename GraphType::ContGraph, fieldType>> elems = d_contraction_without_sort();
                 ContGC dThis(std::move(elems));
-                cout << "KISS0" << endl;
                 return dThis;
         }
 
@@ -183,6 +182,13 @@ public:
                 return dThis;
         }
 
+        
+        ContGC d_even_contraction() {
+                std::vector<BasisElement<typename GraphType::ContGraph, fieldType>> elems = d_even_contraction_without_sort();
+                ContGC dThis(std::move(elems));
+                return dThis;
+        }
+
         void add(BasisElement<GraphType, fieldType>&& elem) {
                 vec.add(VectorSpace::LinComb<GraphType, fieldType>(std::move(elem)));
         }
@@ -195,11 +201,26 @@ public:
                 return vec.front().getValue().valence_array()[0];
         }
 
+
+        void expand_map2(unordered_map<SplitGraphType, L>& boundary_map, LinComb<GraphType, k> remainder) {
+                unordered_map<SplitGraphType, size_t> count_map;
+                
+                vector<unordered_set<SplitGraphType, bigInt>> splits;
+                splits.reserve(remainder.size());
+
+                
+
+                for (auto& be : remainder) {
+                        splits.push_back()
+                }
+
+        }
+
         void expand_map(std::unordered_map<SplitGraphType, L>& boundary_map,
                         std::unordered_set<GraphType>&            cousins,
                         std::unordered_set<GraphType>&            has_split){
                 std::unordered_set<SplitGraphType> to_contract;
-
+                
                 for (const GraphType& graph : cousins) {
                         if (has_split.contains(graph)) continue;
 
@@ -218,8 +239,6 @@ public:
                                                         .data();
 
 
-                                cout << "CONTRACTED EXAMPLE:" << endl;
-                                contracted.print();
                                 // construct the value (ThisGC) in-place
                                 boundary_map.try_emplace(sg, std::move(contracted));
                         }
@@ -232,7 +251,6 @@ public:
                 unordered_set<GraphType>  cousins;
                 unordered_set<GraphType> has_split;
 
-                cout << "BAJS1" << endl;
                 signedInt grade = vec.front().getValue().custom_filter();
 
                 size_t k = 0;
@@ -244,37 +262,53 @@ public:
                         k++;
                 }
 
-                  cout << "BAJS2" << endl;
                 L topGradeComb(vec.begin(), vec.begin() + k);
+                size_t max_depth = 10;
 
-                size_t max_depth = 5;
+
+                ThisGC boundary;
                 for (size_t i = 0; i < max_depth ; i++) {
-                        cout << "BAJS3" << endl;
+                        cout << "depth = " <<  i << endl;
                         expand_map(boundary_map, cousins, has_split);
-                        cout << "BAJS4" << endl;
+                        
+                        
+                        cout << "boundary_map.size() = " << boundary_map.size() <<  endl;
                         VectorSpace::BoundaryFinder solver(boundary_map);
-                        cout << "BAJS5" << endl;
+                  
                         auto co_boundary = solver.find_coboundary_or_empty(topGradeComb);
-                        cout << "BAJS6" << endl;
+                       
                         if (co_boundary.has_value()) {
-                                cout << "BAJS7" << endl;
+                             
 
                                 co_boundary -> print();
-                                cout << "BAJS8" << endl;
+                            
                                 SplitGC co_coundary_as_GC = SplitGC(std::move(*co_boundary));
-                                cout << "BAJS9" << endl;
+                            
                                 
                                 co_coundary_as_GC.print();
-                                cout << "BAJS10" << endl;
-                                ThisGC boundary = co_coundary_as_GC.d_contraction();
-
+                    
+                                boundary += co_coundary_as_GC.d_contraction();
                                 boundary.print();
-                                 cout << "BAJS11" << endl;
+                        
+                                return *this += boundary;
+                        } 
 
-
-
-                                *this += boundary;
+                        //Find a boundary that covers the seen graphs
+                        VectorSpace::BoundaryFinder filtered_solver(boundary_map, cousins);
+                        auto co_boundary2 = filtered_solver.find_coboundary_or_empty(topGradeComb);
+                        
+                        
+                        if (!co_boundary2.has_value()) {
+                                cout << "Mathematical error. We should always be able to find a covering co boundary here" << endl;
                         }
+                        
+                        SplitGC co_coundary_as_GC = SplitGC(std::move(*co_boundary2));
+                        boundary += co_coundary_as_GC.d_contraction();
+                        topGradeComb += boundary.data();
+
+                        for (auto b : topGradeComb) {
+                                cousins.insert(b.getValue());
+                        }          
                 }
 
                 return *this;

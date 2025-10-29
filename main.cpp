@@ -11,7 +11,7 @@
 using namespace std;
 
 
-const Int wheelSize = 9;
+const Int wheelSize = 11;
 
 int main() {
     cout << "hello " <<endl;
@@ -34,7 +34,7 @@ int main() {
     cout << "wheel = ";
     wheel.print();
     int i = 0;
-    while (wheel.frontValence() > 4 && i < 2) {
+    while (wheel.frontValence() > 4 && i < 4) {
         cout << "attempt" <<  i << endl;
         wheel = wheel.reduce2();
 

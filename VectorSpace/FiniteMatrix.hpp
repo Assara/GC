@@ -42,6 +42,13 @@ public:
 
 
     inline void set(size_t row, size_t col, k value) {
+        if (row >= rows()) {
+            cout << "invalid row";
+        }
+
+        if (col >= cols()) {
+            cout << "invalid col";
+        }
         M[row + n_rows * col] = value;
     }
 

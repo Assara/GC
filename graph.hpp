@@ -371,6 +371,8 @@ public:
             if (e < N_EDGES - 1) cout << ", ";
         }
         cout << endl;
+
+        cout << "grade = " << custom_filter() << endl;
     }
 
     bool operator==(Graph const& other) const {
