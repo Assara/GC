@@ -25,9 +25,6 @@ public:
         using ContGraphType = typename GraphType::ContGraph;
 
         using L                 =       VectorSpace::LinComb<GraphType, fieldType>;
-        using AssumeBasisOrderTag       = typename L::AssumeBasisOrderTag;
-        using AssumeBasisOrderTagCont   = typename ContGC::AssumeBasisOrderTag;
-        using AssumeBasisOrderTagSplit  = typename SplitGC::AssumeBasisOrderTag;
  
 
 
@@ -155,7 +152,7 @@ public:
 
         ContGC d_contraction_with_recording_seen_gaphs(unordered_set<ContGraphType> seenGraphs) {
                 std::vector<BasisElement<ContGraphType, fieldType>> elems = d_contraction_without_sort();
-                ContGC dThis(std::move(elems), AssumeBasisOrderTagCont{});
+                ContGC dThis(std::move(elems), AssumeBasisOrderTag{});
                 
                 dThis.standardize_all();
 
@@ -170,7 +167,7 @@ public:
 
         ContGC d_even_contraction_with_recording_seen_gaphs(unordered_set<ContGraphType> seenGraphs) {
                 std::vector<BasisElement<ContGraphType, fieldType>> elems = d_even_contraction_without_sort();
-                ContGC dThis(std::move(elems), AssumeBasisOrderTagCont{});
+                ContGC dThis(std::move(elems), AssumeBasisOrderTag{});
                 
                 dThis.standardize_all();
 
@@ -222,7 +219,7 @@ public:
                                 std::unordered_set<GraphType> seen_contractions;
 
                                 // use the correct tag type for SplitGC
-                                auto contracted = SplitGC(sg, AssumeBasisOrderTagSplit{})
+                                auto contracted = SplitGC(sg, AssumeBasisOrderTag{})
                                                         .d_even_contraction_with_recording_seen_gaphs(seen_contractions)
                                                         .data();
 
@@ -279,7 +276,7 @@ public:
                 
 
                 //Fix basis order 
-                boundary_map.emplace(G, SplitGC(G, AssumeBasisOrderTagSplit{}).d_even_contraction().data());
+                boundary_map.emplace(G, SplitGC(G, AssumeBasisOrderTag{}).d_even_contraction().data());
 
         }
 
