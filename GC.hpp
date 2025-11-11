@@ -24,7 +24,7 @@ public:
         using SplitGraphType = typename GraphType::SplitGraph;
         using ContGraphType = typename GraphType::ContGraph;
 
-        using L                 = VectorSpace::LinComb<GraphType, fieldType>;
+        using L                 =       VectorSpace::LinComb<GraphType, fieldType>;
         using AssumeBasisOrderTag       = typename L::AssumeBasisOrderTag;
         using AssumeBasisOrderTagCont   = typename ContGC::AssumeBasisOrderTag;
         using AssumeBasisOrderTagSplit  = typename SplitGC::AssumeBasisOrderTag;
@@ -178,6 +178,9 @@ public:
                         seenGraphs.insert(b.getValue());
 
                 }
+
+
+
                 dThis.sort_elements();
                 return dThis;
         }
@@ -199,21 +202,6 @@ public:
 
         Int frontValence() {
                 return vec.front().getValue().valence_array()[0];
-        }
-
-
-        void expand_map2(unordered_map<SplitGraphType, L>& boundary_map, LinComb<GraphType, k> remainder) {
-                unordered_map<SplitGraphType, size_t> count_map;
-                
-                vector<unordered_set<SplitGraphType, bigInt>> splits;
-                splits.reserve(remainder.size());
-
-                
-
-                for (auto& be : remainder) {
-                        splits.push_back()
-                }
-
         }
 
         void expand_map(std::unordered_map<SplitGraphType, L>& boundary_map,
@@ -246,42 +234,85 @@ public:
                 }
         }
 
-        ThisGC reduce2() {
-                unordered_map<SplitGraphType, L> boundary_map;
-                unordered_set<GraphType>  cousins;
-                unordered_set<GraphType> has_split;
 
-                signedInt grade = vec.front().getValue().custom_filter();
 
-                size_t k = 0;
-                for (auto b : vec) {
-                        if (b.getValue().custom_filter() != grade) {
-                                break;
-                        }                
-                        cousins.insert(b.getValue());
-                        k++;
+        static void expand_map2(unordered_map<SplitGraphType, L>& boundary_map, L remainder) {
+                unordered_map<SplitGraphType, bigInt> count_map;
+            
+
+                for (auto& be : remainder) {
+                        if (add_splits_if_cycle(boundary_map, be)) continue;
+                        be.getValue().add_even_split_counts(count_map);
                 }
 
-                L topGradeComb(vec.begin(), vec.begin() + k);
-                size_t max_depth = 10;
+                for (auto const& [graph, count] : count_map) {
+                        if (count >= 2) {
+                                add_graph_to_boundary_map(boundary_map, graph);
+                        }
+                }
+    
+        }
 
+
+        static bool add_splits_if_cycle(unordered_map<SplitGraphType, L>& boundary_map, const BasisElement<GraphType, fieldType>& be) {
+                
+                //FixDEadas
+                ContGC d_even_be = ThisGC(be).d_even_contraction();
+                if (d_even_be.size() != 0) {
+                        return false;
+                }
+
+                std::unordered_set<SplitGraphType> to_contract;
+
+                be.getValue().add_even_splits_to_set(to_contract);
+
+                for (auto G : to_contract) {
+                        add_graph_to_boundary_map(boundary_map, G);
+                }
+                return true;
+        }
+
+        static void add_graph_to_boundary_map(unordered_map<SplitGraphType, L>& boundary_map, const SplitGraphType& G) {
+                if (boundary_map.contains(G)) {
+                        return;
+                }
+                
+
+                //Fix basis order 
+                boundary_map.emplace(G, SplitGC(G, AssumeBasisOrderTagSplit{}).d_even_contraction().data());
+
+        }
+
+
+        ThisGC reduce2() {
+                unordered_map<SplitGraphType, L> boundary_map;
+                unordered_set<GraphType> seen_graphs;
+
+        
+                signedInt grade = vec.front().getValue().custom_filter();
+
+                auto it = std::upper_bound(
+                        vec.begin(), vec.end(), grade,
+                        [](auto const& value, auto const& b) {
+                                return value < b.getValue().custom_filter();
+                        });
+
+                L top_grade_comb(vec.begin(), it);
+                size_t max_depth = 10;
 
                 ThisGC boundary;
                 for (size_t i = 0; i < max_depth ; i++) {
                         cout << "depth = " <<  i << endl;
-                        expand_map(boundary_map, cousins, has_split);
-                        
+                        expand_map2(boundary_map, top_grade_comb);
                         
                         cout << "boundary_map.size() = " << boundary_map.size() <<  endl;
                         VectorSpace::BoundaryFinder solver(boundary_map);
                   
-                        auto co_boundary = solver.find_coboundary_or_empty(topGradeComb);
+                        auto co_boundary = solver.find_coboundary_or_empty(top_grade_comb);
                        
                         if (co_boundary.has_value()) {
-                             
-
                                 co_boundary -> print();
-                            
+                
                                 SplitGC co_coundary_as_GC = SplitGC(std::move(*co_boundary));
                             
                                 
@@ -294,8 +325,11 @@ public:
                         } 
 
                         //Find a boundary that covers the seen graphs
-                        VectorSpace::BoundaryFinder filtered_solver(boundary_map, cousins);
-                        auto co_boundary2 = filtered_solver.find_coboundary_or_empty(topGradeComb);
+                        for (auto& be : top_grade_comb) {
+                                seen_graphs.insert(be.getValue());
+                        }
+                        VectorSpace::BoundaryFinder filtered_solver(boundary_map, seen_graphs);
+                        auto co_boundary2 = filtered_solver.find_coboundary_or_empty(top_grade_comb);
                         
                         
                         if (!co_boundary2.has_value()) {
@@ -304,11 +338,16 @@ public:
                         
                         SplitGC co_coundary_as_GC = SplitGC(std::move(*co_boundary2));
                         boundary += co_coundary_as_GC.d_contraction();
-                        topGradeComb += boundary.data();
 
-                        for (auto b : topGradeComb) {
-                                cousins.insert(b.getValue());
-                        }          
+
+
+                        auto it = std::upper_bound(
+                                        boundary.data().begin(), boundary.data().end(), grade,
+                                        [](auto const& value, auto const& b) {
+                                                return value < b.getValue().custom_filter();
+                                        });
+
+                        top_grade_comb += L(boundary.data().begin(), it);        
                 }
 
                 return *this;
@@ -341,9 +380,8 @@ public:
                 
                         to_split.insert(b.getValue());
                 }
-
                 
-                const Int maxDepth = 10;
+                const Int maxDepth = 2;
                 int depth = 0;
 
                 while (++depth <= maxDepth) {
@@ -379,8 +417,7 @@ public:
                                 // split_set.erase(split);
                         }
                         split_set.clear();
-                
-                        cout << "BAJS2" ;
+    
                         VectorSpace::FiniteSubSpace<GraphType, fieldType> subSpace(boundaries);
                         yhat = ThisGC(subSpace.project_solve_then_map(vec));
                         cout << endl << "yhat.size() = " << yhat.vec.size() <<endl;

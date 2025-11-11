@@ -170,6 +170,24 @@ public:
                 }
     }
 
+    void split_vertex(Int split_vertex, const vector<Int>& adjacent, unordered_map<SplitGraph, bigInt>& result) const {
+            if constexpr (std::is_same_v<SplitGraph, void>) return;
+            if (adjacent.size() < 4) return;
+
+            Int max_index = adjacent.size() - 1;
+            for (Int i = 2; i < max_index; i++) {
+                    vector<Int> S = combutils::firstSubset(1, i);
+
+                    do {
+                            BasisElement<SplitGraph, fieldType> b(splitGraph(split_vertex, adjacent, S), 1);
+                            SplitGraph::std(b);
+                            if (0 != b.getCoefficient()) {
+                                result[b.getValue()]++;
+                            }
+                    } while (combutils::nextSubset(S, max_index));
+            }
+    }
+
     void add_splits_to_set(unordered_set<SplitGraph>& result) {
             vector<vector<Int>> adjRepresentation;
             adjRepresentation.reserve(N_VERTICES);
@@ -204,6 +222,42 @@ public:
                     } while (combutils::nextSubset(S, max_index));
                 }
     }
+
+        void split_vertex_even(Int splitVertex, const vector<Int>& adjacent, unordered_map<SplitGraph, bigInt>& result) const {
+            if (adjacent.size() < 5) return;
+            if (adjacent.size()%2 == 1) {
+                    split_vertex(splitVertex, adjacent, result);
+                    return;
+            }
+
+            Int max_index = adjacent.size() - 2;
+            for (Int i = 3; i < max_index; i+=2) {
+                    vector<Int> S = combutils::firstSubset(1, i);
+                    do {
+                            BasisElement<SplitGraph, fieldType> b(splitGraph(splitVertex, adjacent, S), 1);
+                            SplitGraph::std(b);
+                            if (0 != b.getCoefficient()) {
+                                result[b.getValue()]++;
+                            }
+                    } while (combutils::nextSubset(S, max_index));
+                }
+    }
+
+
+    
+    void add_even_split_counts(unordered_map<SplitGraph, bigInt>& result) const {
+            vector<vector<Int>> adjRepresentation;
+            adjRepresentation.reserve(N_VERTICES);
+
+            for (Int v = 0; v < N_VERTICES; v++) {
+                    adjRepresentation.push_back(adjacent(v));
+            }
+            for (Int v = 0; v < N_VERTICES; v++) {
+                    split_vertex_even(v, adjRepresentation[v], result);
+            }
+    }
+
+
 
     void add_even_splits_to_set(unordered_set<SplitGraph>& result) const {
             vector<vector<Int>> adjRepresentation;
