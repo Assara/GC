@@ -3,6 +3,7 @@
 #include "BasisElement.hpp"
 #include "ValidForDifferential.hpp"
 #include <vector>
+#include "tags.hpp"
 
 namespace VectorSpace {
 
@@ -46,7 +47,6 @@ public:
             standardize_and_sort();
     }
 
-     struct AssumeBasisOrderTag {};
      explicit LinComb(std::vector<Element>&& elems, AssumeBasisOrderTag) noexcept
         : elements(std::move(elems)) {}
 
