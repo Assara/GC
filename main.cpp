@@ -5,7 +5,7 @@
 
 #include "VectorSpace/LinComb.hpp"            // your differential graded vector space
 #include "VectorSpace/BasisElement.hpp"         // BasisElement
-#include "VectorSpace/ValidForDifferential.hpp" // concept enforcement
+#include "VectorSpace/ValidBasisElement.hpp" // concept enforcement
 
 
 using namespace std;

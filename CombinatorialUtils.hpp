@@ -61,5 +61,21 @@ namespace combutils {
         }
         return false; // equal
     }
+
+    template<typename T>
+    vector<T> intersection(unordered_set<T> const& a,
+                                unordered_set<T> const& b){
+        vector<T> result;
+
+        // iterate over the smaller set for efficiency
+        auto const& small = (a.size() < b.size()) ? a : b;
+        auto const& large = (a.size() < b.size()) ? b : a;
+
+        for (auto const& x : small)
+            if (large.contains(x))
+                result.push_back(x);
+
+        return result;
+    }
     
 }

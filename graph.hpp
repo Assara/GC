@@ -167,7 +167,7 @@ public:
                                 result.emplace(std::move(b.getValue()));
                             }
                     } while (combutils::nextSubset(S, max_index));
-                }
+            }
     }
 
     void split_vertex(Int split_vertex, const vector<Int>& adjacent, unordered_map<SplitGraph, bigInt>& result) const {
@@ -273,7 +273,7 @@ public:
 
     //only suitable after calling std
     bool has_double_edge() {
-        for (Int i = 0; i < ThisGraph::N_EDGES_ - 2; i++) {
+        for (Int i = 0; i < ThisGraph::N_EDGES_ - 1; i++) {
             if (getEdge(i) == getEdge(i+1)) {
                 return true;
             }

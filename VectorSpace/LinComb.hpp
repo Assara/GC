@@ -1,7 +1,7 @@
 #pragma once
 
 #include "BasisElement.hpp"
-#include "ValidForDifferential.hpp"
+#include "ValidBasisElement.hpp"
 #include <vector>
 #include "tags.hpp"
 
@@ -26,6 +26,12 @@ public:
     }
 
     explicit LinComb(const BasisElement<T, k>& elem) {
+        elements.push_back(elem);
+        standardize_all();
+    }
+
+    
+    explicit LinComb(const BasisElement<T, k>& elem, AssumeBasisOrderTag) {
         elements.push_back(elem);
     }
 
@@ -103,7 +109,7 @@ public:
         return *this;
     }
 
-    bigInt size() {
+    bigInt size() const {
         return elements.size();
     }
 

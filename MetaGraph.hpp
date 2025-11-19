@@ -1,0 +1,83 @@
+
+#pragma once
+
+#include "types.hpp"
+#include <utility>
+#include <vector>
+#include <unordered_map>
+#include <unordered_set>
+
+#include "VectorSpace/LinComb.hpp"
+
+using namespace::std;
+
+
+template<typename A, typename B, typename k> 
+requires VectorSpace::ValidBasisElement<A, k> && VectorSpace::ValidBasisElement<B, k>
+
+class MetaGraph {
+        using beA = BasisElement<A, k>;
+        using lcB = VectorSpace::LinComb<B,k>;
+        public:
+
+        struct Edge {
+            A x, y;
+            unordered_set<B> common_boundary_components; 
+        };
+
+        vector<Edge> edges;
+
+        auto begin()       { return edges.begin(); }
+        auto end()         { return edges.end(); }
+
+        MetaGraph(unordered_map<A, lcB> delta_of_remainder) {
+
+
+            for (auto it1 = delta_of_remainder.begin(); it1 != delta_of_remainder.end(); ++it1) {
+                auto it2 = it1;
+                it2++;
+                 
+                    for (; it2 != delta_of_remainder.end(); ++it2) {
+                        unordered_set<B> common_boundary_components = intersection(it1 -> second, it2 -> second);
+                        if (common_boundary_components.empty()) continue;
+
+                        this-> edges.push_back(Edge{it1 -> first, it2 -> first, common_boundary_components});
+
+                    }
+            }
+        }
+
+        // two pointer style. Linear complexity. Can be changed to interval halving approach if we ever want large X,Y here 
+        static unordered_set<B> intersection(lcB const& X, lcB const& Y) {
+            unordered_set<B> result;
+
+            auto itX  = X.begin();
+            auto endX = X.end();
+            auto itY  = Y.begin();
+            auto endY = Y.end();
+
+            while (itX != endX && itY != endY) {
+                auto const& ex = *itX; // BasisElement<B,k>
+                auto const& ey = *itY; // BasisElement<B,k>
+
+                int cmp = ex.compare(ey);
+
+                if (cmp < 0) {
+                    // ex < ey
+                    ++itX;
+                } else if (cmp > 0) {
+                    // ex > ey
+                    ++itY;
+                } else {
+                    // ex == ey
+                    result.insert(ex.getValue());   // take the underlying B
+                    ++itX;
+                    ++itY;
+                }
+            }
+
+            return result;
+    }
+
+
+};

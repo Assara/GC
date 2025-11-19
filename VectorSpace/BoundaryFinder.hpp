@@ -27,71 +27,90 @@ class BoundaryFinder {
     public:
 
     BoundaryFinder(unordered_map<B, VectorSpace::LinComb<A,k>>& delta) {
-        coBoundaryRepMap.reserve(delta.size());
-        size_t a = 0;
+            coBoundaryRepMap.reserve(delta.size());
+            size_t a = 0;
 
-        //construct the in out maps
-        for (const auto& entry : delta) {
-                coBoundaryRepMap.push_back(entry.first);
-                  
-                for (const BasisElement<A,k>& elem : entry.second) {
-                        if (auto [it, inserted] = boundaryRepMap.try_emplace(elem.getValue(), a); inserted) {
-                            ++a;
-                        }
-                }
-        }
-
-        // create the internal Map 
-        deltaRep = FM(coBoundaryRepMap.size(), boundaryRepMap.size());
-
-
-        for (size_t i = 0; i < deltaRep.rows(); ++i) {
-            const LinComb<A,k>& linComb = delta[coBoundaryRepMap[i]];
-
-            for (const BasisElement<A,k>& elem : linComb) {
-                    deltaRep.set(i, boundaryRepMap.at(elem.getValue()), elem.getCoefficient());
-            }
-        }
-    }
-
-
-    BoundaryFinder(unordered_map<B, VectorSpace::LinComb<A,k>>& delta, unordered_set<A> filter) {
-        coBoundaryRepMap.reserve(delta.size());
-        size_t a = 0;
-
-        //construct the in out maps
-        for (const auto& entry : delta) {
-                coBoundaryRepMap.push_back(entry.first);
-                  
-                for (const BasisElement<A,k>& elem : entry.second) {
-                        if (!filter.contains(elem.getValue())) {
-                            continue;
-                        }
-
-                        if (auto [it, inserted] = boundaryRepMap.try_emplace(elem.getValue(), a); inserted) {
-                            ++a;
-                        }
-                }
-        }
-
-        // create the internal Map 
-        deltaRep = FM(coBoundaryRepMap.size(), boundaryRepMap.size());
-
-
-        for (size_t i = 0; i < deltaRep.rows(); ++i) {
-            const LinComb<A,k>& linComb = delta[coBoundaryRepMap[i]];
-
-            for (const BasisElement<A,k>& elem : linComb) {
-                    const auto& key = elem.getValue();               // take by ref if cheap
-                    if (auto it = boundaryRepMap.find(key); it != boundaryRepMap.end()) {
-                            deltaRep.set(i, it->second, elem.getCoefficient());
+            //construct the in out maps
+            for (const auto& entry : delta) {
+                    coBoundaryRepMap.push_back(entry.first);
+                    
+                    for (const BasisElement<A,k>& elem : entry.second) {
+                            if (auto [it, inserted] = boundaryRepMap.try_emplace(elem.getValue(), a); inserted) {
+                                ++a;
+                            }
                     }
             }
-        }
+
+            // create the internal Map 
+            deltaRep = FM(coBoundaryRepMap.size(), boundaryRepMap.size());
+
+
+            for (size_t i = 0; i < deltaRep.rows(); ++i) {
+                    const LinComb<A,k>& linComb = delta[coBoundaryRepMap[i]];
+
+                    for (const BasisElement<A,k>& elem : linComb) {
+                            deltaRep.set(i, boundaryRepMap.at(elem.getValue()), elem.getCoefficient());
+                    }
+            }
     }
 
-    std::optional<LinComb<B,k>> find_coboundary_or_empty(LinComb<A,k> linComb) {
+
+        BoundaryFinder(unordered_map<B, VectorSpace::LinComb<A,k>>& delta, unordered_set<A> filter) {
+                coBoundaryRepMap.reserve(delta.size());
+                size_t a = 0;
+
+                cout << "filter size =" << filter.size() << endl;
+
+                cout << "delta size =" << delta.size()<< endl;
+
+
+                for (auto& graph : filter) {
+                        if (!boundaryRepMap.contains(graph)) {
+                                cout << "the mapped part of Delta is insufficient for the filter! " << endl;
+                        }
+                }
+
+                //construct the in out maps
+                for (const auto& entry : delta) {
+                        coBoundaryRepMap.push_back(entry.first);             
+                        //entry.second.print();
+                        for (const BasisElement<A,k>& elem : entry.second) {
+                                if (!filter.contains(elem.getValue())) continue;
+                                
+                                if (auto [it, inserted] = boundaryRepMap.try_emplace(elem.getValue(), a); inserted) {
+                                        ++a;
+                                } 
+                        }
+
+            }
+
+            // create the internal Map 
+            deltaRep = FM(coBoundaryRepMap.size(), boundaryRepMap.size());
+
+
+            for (size_t i = 0; i < deltaRep.rows(); ++i) {
+                    const LinComb<A,k>& linComb = delta[coBoundaryRepMap[i]];
+
+                    for (const BasisElement<A,k>& elem : linComb) {
+                            const auto& key = elem.getValue();      
+                            if (auto it = boundaryRepMap.find(key); it != boundaryRepMap.end()) {
+                                    deltaRep.set(i, it->second, elem.getCoefficient());
+                            }
+                    }
+            }
+
+            cout << "Created filtered boundary finder with dimensions. rows: "<< deltaRep.rows() << " cols: " << deltaRep.cols() <<endl;
+    }
+
+    std::optional<LinComb<B,k>> find_primitive_or_empty(LinComb<A,k> linComb) {
             Row rep = std::make_unique<k[]>(deltaRep.cols());
+
+            
+            cout  <<"rep = " ;
+            for (size_t i = 0 ; i < deltaRep.cols(); i++) {
+                cout <<  rep[i] << ", ";
+
+            }
 
             for (const BasisElement<A,k>& elem : linComb) {
                      const auto& key = elem.getValue(); 
@@ -113,6 +132,8 @@ class BoundaryFinder {
                 cout <<  coeffs[i] << ", ";
 
             }
+
+            cout << endl;
      
             LinComb<B, k> coBoundary;
             for (size_t i = 0; i < deltaRep.rows(); ++i) {

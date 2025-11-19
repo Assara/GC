@@ -82,8 +82,17 @@ class GraphStandadizer {
 
 
     BasisElement<GraphType, fieldType> standardize(GraphType graph, fieldType k) {
+        
+        if (GraphType::SWAP_EDGE_SIGN == -1 ) {
+                k *= graph.directAndSortEdges();
+                if (graph.has_double_edge())
+                    return BasisElement<GraphType, fieldType>(graph, 0); 
+        }
+
+
         CanonBuilder G = assignHair(graph);
         vector<CanonBuilder> attempts[2];
+
 
         // TODO reserve appropriate space for attempts
 
@@ -114,10 +123,7 @@ class GraphStandadizer {
 
         //cout << "Aut size = " << attempts[N_VERTICES%2].size() << endl;
         
-        if(GraphType::SWAP_EDGE_SIGN == -1 && attempts[N_VERTICES%2][0].G.has_double_edge()) {
-                return BasisElement<GraphType, fieldType>(attempts[N_VERTICES%2][0].G, 0); 
-        }
-
+      
 
         bool containsPlus = false;
         bool containsMinus = false;

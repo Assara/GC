@@ -7,6 +7,8 @@
 
 #include "VectorSpace/BoundaryFinder.hpp"
 
+#include "MetaGraph.hpp"
+
 template <
     Int N_VERTICES, Int N_EDGES,
     Int N_OUT_HAIR, Int N_IN_HAIR,
@@ -25,6 +27,8 @@ public:
         using ContGraphType = typename GraphType::ContGraph;
 
         using L                 =       VectorSpace::LinComb<GraphType, fieldType>;
+
+        using ContL                 =       VectorSpace::LinComb<ContGraphType, fieldType>;;
  
 
 
@@ -37,6 +41,8 @@ public:
 
         // Construct from a single BasisElement
         explicit GC(const BasisElement<GraphType, fieldType>& b) : vec(b) {}
+
+        explicit GC(const BasisElement<GraphType, fieldType>& b, AssumeBasisOrderTag) : vec(b, AssumeBasisOrderTag{}) {}
 
         // Construct from a GraphType (copying it into a BasisElement)
         explicit GC(const GraphType& G) : vec(G) {}
@@ -231,42 +237,81 @@ public:
                 }
         }
 
-
-
         static void expand_map2(unordered_map<SplitGraphType, L>& boundary_map, L remainder) {
-                unordered_map<SplitGraphType, bigInt> count_map;
-            
 
-                for (auto& be : remainder) {
-                        if (add_splits_if_cycle(boundary_map, be)) continue;
-                        be.getValue().add_even_split_counts(count_map);
+                unordered_map<GraphType, ContL> delta_remainder;
+                delta_remainder.reserve(remainder.size());
+
+                unordered_map<GraphType, unordered_set<SplitGraphType>> split_cache;
+                split_cache.reserve(remainder.size());
+                
+                for (const auto& be: remainder) {
+                        delta_remainder.emplace(be.getValue(), 
+                                ThisGC(be.getValue(), AssumeBasisOrderTag{}).d_even_contraction().data());
+
+                        be.getValue().add_even_splits_to_set(split_cache[be.getValue()]);
                 }
 
-                for (auto const& [graph, count] : count_map) {
-                        if (count >= 2) {
-                                add_graph_to_boundary_map(boundary_map, graph);
+                //add single graph cycle splits 
+                for (auto entry : delta_remainder) {
+                        if(entry.second.size() == 0) {
+                                add_splits_to_boundary_map(boundary_map, BasisElement<GraphType, fieldType>(entry.first));
                         }
                 }
-    
+     
+                MetaGraph<GraphType, ContGraphType, fieldType> metaGraph(delta_remainder);
+
+                for (const auto& metaEdge : metaGraph) {
+                        auto common_splits = combutils::intersection(split_cache[metaEdge.x], split_cache[metaEdge.y]);
+
+                        for (auto split : common_splits) {
+                                add_graph_to_boundary_map(boundary_map, split);
+                        }
+                        if (!common_splits.empty()) continue;
+
+                        //create upper delta
+                        
+                        unordered_map<SplitGraphType, L> upper_delta;
+                        upper_delta.clear();
+                        for (auto split : split_cache[metaEdge.x]) {
+                                upper_delta.emplace(split, 
+                                        SplitGC(split, AssumeBasisOrderTag{}).d_even_contraction().data());
+
+                        }
+                        for (auto split : split_cache[metaEdge.y]) {
+                                upper_delta.emplace(split, 
+                                        SplitGC(split, AssumeBasisOrderTag{}).d_even_contraction().data());
+
+                        }
+
+                        MetaGraph<SplitGraphType, GraphType, fieldType> upperMetaGraph(upper_delta);
+
+                        for (auto edge : upperMetaGraph) {
+                                add_graph_to_boundary_map(boundary_map, edge.x);
+                                add_graph_to_boundary_map(boundary_map, edge.y);
+                        }
+
+                }
         }
 
 
         static bool add_splits_if_cycle(unordered_map<SplitGraphType, L>& boundary_map, const BasisElement<GraphType, fieldType>& be) {
-                
-                //FixDEadas
-                ContGC d_even_be = ThisGC(be).d_even_contraction();
+                ContGC d_even_be = ThisGC(be, AssumeBasisOrderTag{}).d_even_contraction();
                 if (d_even_be.size() != 0) {
                         return false;
                 }
 
-                std::unordered_set<SplitGraphType> to_contract;
+                add_splits_to_boundary_map(boundary_map, be);
+                return true;
+        }
 
+        static void add_splits_to_boundary_map(unordered_map<SplitGraphType, L>& boundary_map, const BasisElement<GraphType, fieldType>& be) {
+                std::unordered_set<SplitGraphType> to_contract;
                 be.getValue().add_even_splits_to_set(to_contract);
 
                 for (auto G : to_contract) {
                         add_graph_to_boundary_map(boundary_map, G);
                 }
-                return true;
         }
 
         static void add_graph_to_boundary_map(unordered_map<SplitGraphType, L>& boundary_map, const SplitGraphType& G) {
@@ -274,10 +319,7 @@ public:
                         return;
                 }
                 
-
-                //Fix basis order 
                 boundary_map.emplace(G, SplitGC(G, AssumeBasisOrderTag{}).d_even_contraction().data());
-
         }
 
 
@@ -288,34 +330,83 @@ public:
         
                 signedInt grade = vec.front().getValue().custom_filter();
 
-                auto it = std::upper_bound(
-                        vec.begin(), vec.end(), grade,
-                        [](auto const& value, auto const& b) {
-                                return value < b.getValue().custom_filter();
-                        });
-
-                L top_grade_comb(vec.begin(), it);
+   
                 size_t max_depth = 10;
 
                 ThisGC boundary;
                 for (size_t i = 0; i < max_depth ; i++) {
                         cout << "depth = " <<  i << endl;
+          
+
+                            auto it = std::find_if(
+                                vec.begin(), vec.end(),
+                                [grade](auto const& elem) {
+                                        return elem.getValue().custom_filter() < grade;
+                                });
+
+
+                        L top_grade_comb(vec.begin(), it);
+
+                                
+                        cout << "top_grade_comb.front() grade : " << top_grade_comb.front().getValue().custom_filter() << endl;
+
+                        cout << "top_grade_comb.back() grade : " << top_grade_comb.back().getValue().custom_filter() << endl;
+
+
+                        ContGC shouldBe0 = ThisGC(top_grade_comb).d_even_contraction();
+
+                        
+
+                        if(shouldBe0.size() > 0) {
+
+                                cout << endl << endl;
+                                cout << "WARNING the top grad combination does not satisfy requierments, something is wrong!" << endl;
+                                shouldBe0.print();
+
+                                cout << "see graph above" << endl;
+                                
+
+
+                        } else {
+                                cout << "Top grade comb is good!" << endl;
+                        }
+
+                        cout << "top_grade_comb.size() = " << top_grade_comb.size() << endl;
+                        top_grade_comb.print();
+
+
                         expand_map2(boundary_map, top_grade_comb);
+
+                        bool exists = true;
+
+                        for (const auto& be : top_grade_comb) {
+                                exists = false;
+                                for (const auto& entry : boundary_map) {
+                                        exists = std::binary_search(entry.second.begin(), entry.second.end(), be);
+                                        if (exists) break;
+                                }
+                                if (!exists) {
+                                         cout << "insufficient map!!!!!! " << endl;
+                                         cout << "missing graph: " << endl;
+                                         be.getValue().print();
+                                }
+                        }
+
                         
                         cout << "boundary_map.size() = " << boundary_map.size() <<  endl;
                         VectorSpace::BoundaryFinder solver(boundary_map);
                   
-                        auto co_boundary = solver.find_coboundary_or_empty(top_grade_comb);
+                        auto primitive = solver.find_primitive_or_empty(top_grade_comb);
                        
-                        if (co_boundary.has_value()) {
-                                co_boundary -> print();
+                        if (primitive.has_value()) {
+                                primitive -> print();
                 
-                                SplitGC co_coundary_as_GC = SplitGC(std::move(*co_boundary));
+                                SplitGC primitive_as_GC = SplitGC(std::move(*primitive));
                             
                                 
-                                co_coundary_as_GC.print();
+                                primitive_as_GC.print();
                     
-                                boundary += co_coundary_as_GC.d_contraction();
+                                boundary += primitive_as_GC.d_contraction();
                                 boundary.print();
                         
                                 return *this += boundary;
@@ -326,29 +417,50 @@ public:
                                 seen_graphs.insert(be.getValue());
                         }
                         VectorSpace::BoundaryFinder filtered_solver(boundary_map, seen_graphs);
-                        auto co_boundary2 = filtered_solver.find_coboundary_or_empty(top_grade_comb);
+                        primitive = filtered_solver.find_primitive_or_empty(top_grade_comb);
                         
                         
-                        if (!co_boundary2.has_value()) {
+                        if (!primitive.has_value()) {
                                 cout << "Mathematical error. We should always be able to find a covering co boundary here" << endl;
                         }
                         
-                        SplitGC co_coundary_as_GC = SplitGC(std::move(*co_boundary2));
-                        boundary += co_coundary_as_GC.d_contraction();
+                        SplitGC primitive_as_GC = SplitGC(std::move(*primitive));
+                        boundary = primitive_as_GC.d_contraction();
 
 
 
-                        auto it = std::upper_bound(
-                                        boundary.data().begin(), boundary.data().end(), grade,
-                                        [](auto const& value, auto const& b) {
-                                                return value < b.getValue().custom_filter();
-                                        });
+                        if(boundary.d_contraction().size() > 0) {
 
-                        top_grade_comb += L(boundary.data().begin(), it);        
+                                cout << endl << endl;
+                                cout << "WARNING boundary is not a cycle!" << endl;
+                                boundary.d_contraction().print();
+
+                                cout << "see graph above" << endl;
+                                
+
+                        } else {
+                                cout << "Boundary comb is good!" << endl;
+                        }
+
+
+                        *this += boundary;
+
+
+                        for (const auto& be : this -> data()) {
+                                if (seen_graphs.contains(be.getValue())) {
+                                        be.getValue().print();
+
+                                        cout << "coefficient = " << be.getCoefficient() << endl;
+
+                                        cout << "MATH ERROR" << endl;
+                                }
+                        }
+                         
                 }
 
                 return *this;
         
+                
         }
 
 
