@@ -8,4 +8,4 @@ using signedInt = int;
 
 using bigInt = std::vector<Int>::size_type;
 
-using fieldType = double;
+using fieldType = Z32783;

@@ -42,6 +42,9 @@ public:
     using ContGraph = Graph<N_VERTICES - 1, N_EDGES - 1, N_OUT_HAIR, N_IN_HAIR, c, d>;
 
     using ThisGraph = Graph<N_VERTICES, N_EDGES, N_OUT_HAIR, N_IN_HAIR, c, d>;
+    
+    using ExtraEdgeGraph = Graph<N_VERTICES, N_EDGES + 1, N_OUT_HAIR, N_IN_HAIR, c, d>;
+
 
     Graph() = default;
 
@@ -223,7 +226,7 @@ public:
                 }
     }
 
-        void split_vertex_even(Int splitVertex, const vector<Int>& adjacent, unordered_map<SplitGraph, bigInt>& result) const {
+    void split_vertex_even(Int splitVertex, const vector<Int>& adjacent, unordered_map<SplitGraph, bigInt>& result) const {
             if (adjacent.size() < 5) return;
             if (adjacent.size()%2 == 1) {
                     split_vertex(splitVertex, adjacent, result);
@@ -244,7 +247,6 @@ public:
     }
 
 
-    
     void add_even_split_counts(unordered_map<SplitGraph, bigInt>& result) const {
             vector<vector<Int>> adjRepresentation;
             adjRepresentation.reserve(N_VERTICES);
@@ -256,8 +258,6 @@ public:
                     split_vertex_even(v, adjRepresentation[v], result);
             }
     }
-
-
 
     void add_even_splits_to_set(unordered_set<SplitGraph>& result) const {
             vector<vector<Int>> adjRepresentation;
@@ -271,7 +271,25 @@ public:
             }
     }
 
-    //only suitable after calling std
+    vector<unique_ptr<ExtraEdgeGraph>> add_edge_differential() {
+            vector<unique_ptr<ExtraEdgeGraph>> result;
+            result.reserve(N_VERTICES * (N_VERTICES - 1) - N_EDGES);
+
+            ExtraEdgeGraph base_graph;
+            std::copy_n(half_edges, SIZE, base_graph.half_edges);
+
+            for (Int u = 0; u < N_VERTICES - 1; u++) {
+                for (Int v = u+1; v < N_VERTICES; v++) {
+                    base_graph.half_edges[SIZE] = u;
+                    base_graph.half_edges[SIZE+1] = v;
+                    result.emplace_back(std::make_unique<ExtraEdgeGraph>(base_graph));
+                }
+            }
+            return result;
+    }
+
+
+    //only suitable after sorting and directing edges
     bool has_double_edge() {
         for (Int i = 0; i < ThisGraph::N_EDGES_ - 1; i++) {
             if (getEdge(i) == getEdge(i+1)) {

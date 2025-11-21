@@ -22,9 +22,11 @@ public:
         using SplitGC = GC<N_VERTICES + 1, N_EDGES + 1, N_OUT_HAIR, N_IN_HAIR, c, d>;
         using ContGC = GC<N_VERTICES - 1, N_EDGES - 1, N_OUT_HAIR, N_IN_HAIR, c, d>;
 
+        using ExtraEdgeGC = GC<N_VERTICES, N_EDGES + 1, N_OUT_HAIR, N_IN_HAIR, c, d>;
 
         using SplitGraphType = typename GraphType::SplitGraph;
         using ContGraphType = typename GraphType::ContGraph;
+        using ExtraEdgeGraphType = typename GraphType::ExtraEdgeGraph;
 
         using L                 =       VectorSpace::LinComb<GraphType, fieldType>;
 
@@ -102,6 +104,11 @@ public:
         static SplitGC delta(const BasisElement<GraphType, fieldType>& G) {
                 return SplitGC(G.getValue().split_vertex_differential(), G.getCoefficient());
         }
+
+        static ExtraEdgeGC add_edge_differential(const BasisElement<GraphType, fieldType>& G) {
+                return ExtraEdgeGC(G.getValue().add_edge_differential(), G.getCoefficient());
+        }
+
 
         vector<BasisElement<typename GraphType::ContGraph, fieldType>> d_contraction_without_sort() const {
                 using ContGraph = typename GraphType::ContGraph;
@@ -338,7 +345,7 @@ public:
                         cout << "depth = " <<  i << endl;
           
 
-                            auto it = std::find_if(
+                        auto it = std::find_if(
                                 vec.begin(), vec.end(),
                                 [grade](auto const& elem) {
                                         return elem.getValue().custom_filter() < grade;
@@ -412,48 +419,53 @@ public:
                                 return *this += boundary;
                         } 
 
-                        //Find a boundary that covers the seen graphs
-                        for (auto& be : top_grade_comb) {
-                                seen_graphs.insert(be.getValue());
-                        }
-                        VectorSpace::BoundaryFinder filtered_solver(boundary_map, seen_graphs);
-                        primitive = filtered_solver.find_primitive_or_empty(top_grade_comb);
-                        
-                        
-                        if (!primitive.has_value()) {
-                                cout << "Mathematical error. We should always be able to find a covering co boundary here" << endl;
-                        }
-                        
-                        SplitGC primitive_as_GC = SplitGC(std::move(*primitive));
-                        boundary = primitive_as_GC.d_contraction();
 
-
-
-                        if(boundary.d_contraction().size() > 0) {
-
-                                cout << endl << endl;
-                                cout << "WARNING boundary is not a cycle!" << endl;
-                                boundary.d_contraction().print();
-
-                                cout << "see graph above" << endl;
-                                
-
-                        } else {
-                                cout << "Boundary comb is good!" << endl;
-                        }
-
-
-                        *this += boundary;
-
-
-                        for (const auto& be : this -> data()) {
-                                if (seen_graphs.contains(be.getValue())) {
-                                        be.getValue().print();
-
-                                        cout << "coefficient = " << be.getCoefficient() << endl;
-
-                                        cout << "MATH ERROR" << endl;
+                        while (true) {
+                                //Find a boundary that covers the seen graphs
+                                for (auto& be : top_grade_comb) {
+                                        seen_graphs.insert(be.getValue());
                                 }
+                                VectorSpace::BoundaryFinder filtered_solver(boundary_map, seen_graphs);
+                                primitive = filtered_solver.find_primitive_or_empty(top_grade_comb);
+                                
+                                
+                                if (!primitive.has_value()) {
+                                      break;
+                                }
+                                
+                                SplitGC primitive_as_GC = SplitGC(std::move(*primitive));
+                                boundary = primitive_as_GC.d_contraction();
+
+                                if(boundary.d_contraction().size() > 0) {
+
+                                        cout << endl << endl;
+                                        cout << "WARNING boundary is not a cycle!" << endl;
+                                        boundary.d_contraction().print();
+
+                                        cout << "see graph above" << endl;
+                                        
+
+                                } else {
+                                        cout << "Boundary comb is good!" << endl;
+                                }
+
+
+                                *this += boundary; 
+                                for (const auto& be : this -> data()) {
+                                        if (seen_graphs.contains(be.getValue())) {
+                                                be.getValue().print();
+                                                cout << "coefficient = " << be.getCoefficient() << endl;
+                                                cout << "MATH ERROR" << endl;
+                                        } 
+                                }
+
+                                auto it = std::find_if(
+                                        vec.begin(), vec.end(),
+                                        [grade](auto const& elem) {
+                                                return elem.getValue().custom_filter() < grade;
+                                        });
+
+                                top_grade_comb = L(vec.begin(), it);
                         }
                          
                 }
@@ -552,16 +564,33 @@ private:
         // Recursive delta helper
         SplitGC delta_recursive(size_t start, size_t end) const {
                 if (end - start == 0) {
-                return SplitGC(); // empty
+                        return SplitGC(); // empty
                 }
                 if (end - start == 1) {
-                const auto& be = vec.raw_elements()[start];
-                return delta(be);
+                        const auto& be = vec.raw_elements()[start];
+                        return delta(be);
                 }
 
                 size_t mid = start + (end - start) / 2;
                 SplitGC left = delta_recursive(start, mid);
                 SplitGC right = delta_recursive(mid, end);
+                left += right;
+                return left;
+        }
+
+
+        ExtraEdgeGC add_edge_differential_recursive(size_t start, size_t end) const {
+                if (end - start == 0) {
+                        return ExtraEdgeGC(); // empty
+                }
+                if (end - start == 1) {
+                        const auto& be = vec.raw_elements()[start];
+                        return add_edge_differential(be);
+                }
+
+                size_t mid = start + (end - start) / 2;
+                SplitGC left = add_edge_differential_recursive(start, mid);
+                SplitGC right = add_edge_differential_recursive(mid, end);
                 left += right;
                 return left;
         }
