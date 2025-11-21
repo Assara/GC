@@ -127,9 +127,16 @@ public:
 
 
     void split_vertex(Int split_vertex, const vector<Int>& adjacent, vector<unique_ptr<SplitGraph>>& result) const {
-        if constexpr (std::is_same_v<SplitGraph, void>) return;
-        if (adjacent.size() < 4) return;
-
+        if (adjacent.size() < 4) {
+            if (adjacent.size() == 2 ) {
+                result.emplace_back(splitGraph(split_vertex, adjacent, vector<Int>(adjacent.back())));
+            }
+            else if (adjacent.size() < 2) {
+                result.emplace_back(splitGraph(split_vertex, adjacent, vector<Int>()));
+            }
+            return; 
+        }
+ 
         Int max_index = adjacent.size() - 1;
         for (Int i = 2; i < max_index; i++) {
             vector<Int> S = combutils::firstSubset(1, i);
@@ -140,10 +147,10 @@ public:
         }
     }
 
-    unique_ptr<SplitGraph> splitGraph(Int split_vertex, const vector<Int>& adjacent, vector<Int>& S) const {
+    unique_ptr<SplitGraph> splitGraph(Int split_vertex, const vector<Int>& adjacent, const vector<Int>& S) const {
             auto sg = make_unique<SplitGraph>();
             
-            std::copy_n(half_edges.begin(), SIZE, (*sg).half_edges.begin());
+            std::copy_n(half_edges.begin(), SIZE, sg->half_edges.begin());
             for (auto s : S) {
                 sg->half_edges[adjacent[s]] = N_VERTICES;
             }
