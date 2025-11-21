@@ -102,7 +102,7 @@ class BoundaryFinder {
             cout << "Created filtered boundary finder with dimensions. rows: "<< deltaRep.rows() << " cols: " << deltaRep.cols() <<endl;
     }
 
-    std::optional<LinComb<B,k>> find_primitive_or_empty(LinComb<A,k> linComb) {
+    std::optional<LinComb<B,k>> find_primitive_or_empty(const LinComb<A,k>& linComb) {
             Row rep = std::make_unique<k[]>(deltaRep.cols());
 
             

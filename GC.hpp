@@ -28,10 +28,9 @@ public:
         using ContGraphType = typename GraphType::ContGraph;
         using ExtraEdgeGraphType = typename GraphType::ExtraEdgeGraph;
 
-        using L                 =       VectorSpace::LinComb<GraphType, fieldType>;
-
-        using ContL                 =       VectorSpace::LinComb<ContGraphType, fieldType>;;
- 
+        using L      = VectorSpace::LinComb<GraphType, fieldType>;
+        using ContL  = VectorSpace::LinComb<ContGraphType, fieldType>;
+        using SplitL = VectorSpace::LinComb<SplitGraphType, fieldType>;
 
 
 private:
@@ -163,7 +162,7 @@ public:
                 return dThis;
         }
 
-        ContGC d_contraction_with_recording_seen_gaphs(unordered_set<ContGraphType> seenGraphs) {
+        ContGC add_contractions_to_set(unordered_set<ContGraphType>& seenGraphs) {
                 std::vector<BasisElement<ContGraphType, fieldType>> elems = d_contraction_without_sort();
                 ContGC dThis(std::move(elems), AssumeBasisOrderTag{});
                 
@@ -173,12 +172,19 @@ public:
                         seenGraphs.insert(b.getValue());
 
                 }
+                return dThis;
+        }
+
+        ContGC d_contraction_with_recording_seen_gaphs(unordered_set<ContGraphType>& seenGraphs) {
+                ContGC dThis = add_contractions_to_set(seenGraphs);
                 dThis.sort_elements();
                 return dThis;
         }
 
+ 
 
-        ContGC d_even_contraction_with_recording_seen_gaphs(unordered_set<ContGraphType> seenGraphs) {
+
+        ContGC d_even_contraction_with_recording_seen_gaphs(unordered_set<ContGraphType>& seenGraphs) {
                 std::vector<BasisElement<ContGraphType, fieldType>> elems = d_even_contraction_without_sort();
                 ContGC dThis(std::move(elems), AssumeBasisOrderTag{});
                 
@@ -204,6 +210,25 @@ public:
 
         void add(BasisElement<GraphType, fieldType>&& elem) {
                 vec.add(VectorSpace::LinComb<GraphType, fieldType>(std::move(elem)));
+        }
+
+
+        std::optional<ContGC> try_find_split_primitive() {
+                unordered_set<ContGraphType> seen_graphs;
+                add_contractions_to_set(seen_graphs);
+                unordered_map<ContGraphType, ThisGC> coboundary_map;
+
+                for (auto& gamma : seen_graphs) {
+                        coboundary_map.emplace(gamma, ThisGC(gamma, AssumeBasisOrderTag{}).delta());
+                }
+
+                VectorSpace::BoundaryFinder solver(coboundary_map);
+                       
+                std::optional<ContL> primitive_optional = solver.find_primitive_or_empty(this -> data());
+
+                return primitive_optional.transform([](ContL lin_comb) { 
+                        return ContGC(lin_comb);
+                });
         }
 
         bigInt size() {
