@@ -12,6 +12,11 @@ namespace graphaliases {
     template <Int N>
     using OddGraphdegZeroStandadizer = GraphStandadizer<N, 2 * N - 2, 0, 0, 0, 1>;
 
+
+    template <Int N>
+    using OddLoopGraphType = Graph<N, N, 0, 0, 0, 1>;
+
+
 }
 
 using namespace graphaliases;
@@ -34,5 +39,21 @@ OddGraphdegZero<N+1> wheel_graph() {
     W.setEdge(2*N-1, 1, N); 
 
     return W;
+}
+
+
+template<Int N> 
+OddLoopGraphType<N> loop_graph() {
+    array<Int, 2*N> arr{};
+
+    OddLoopGraphType<N>  loop(arr);
+
+    for (Int i = 0; i < N-1; ++i) {
+        loop.setEdge(i, i, i+1); 
+
+    }
+    loop.setEdge(N-1, N-1, 0); 
+
+    return loop;
 
 }

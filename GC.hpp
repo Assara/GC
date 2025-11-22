@@ -104,6 +104,10 @@ public:
                 return SplitGC(G.getValue().split_vertex_differential(), G.getCoefficient());
         }
 
+        ExtraEdgeGC add_edge_differential() {
+                return add_edge_differential_recursive(0, vec.raw_elements().size());
+        }
+
         static ExtraEdgeGC add_edge_differential(const BasisElement<GraphType, fieldType>& G) {
                 return ExtraEdgeGC(G.getValue().add_edge_differential(), G.getCoefficient());
         }
@@ -216,10 +220,10 @@ public:
         std::optional<ContGC> try_find_split_primitive() {
                 unordered_set<ContGraphType> seen_graphs;
                 add_contractions_to_set(seen_graphs);
-                unordered_map<ContGraphType, ThisGC> coboundary_map;
+                unordered_map<ContGraphType, L> coboundary_map;
 
                 for (auto& gamma : seen_graphs) {
-                        coboundary_map.emplace(gamma, ThisGC(gamma, AssumeBasisOrderTag{}).delta());
+                        coboundary_map.emplace(gamma, ContGC(gamma, AssumeBasisOrderTag{}).delta().data());
                 }
 
                 VectorSpace::BoundaryFinder solver(coboundary_map);
@@ -614,8 +618,8 @@ private:
                 }
 
                 size_t mid = start + (end - start) / 2;
-                SplitGC left = add_edge_differential_recursive(start, mid);
-                SplitGC right = add_edge_differential_recursive(mid, end);
+                ExtraEdgeGC left = add_edge_differential_recursive(start, mid);
+                ExtraEdgeGC right = add_edge_differential_recursive(mid, end);
                 left += right;
                 return left;
         }

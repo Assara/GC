@@ -134,6 +134,7 @@ public:
             else if (adjacent.size() < 2) {
                 result.emplace_back(splitGraph(split_vertex, adjacent, vector<Int>()));
             }
+            //do nothing for adjacent.size() == 3
             return; 
         }
  
@@ -278,12 +279,12 @@ public:
             }
     }
 
-    vector<unique_ptr<ExtraEdgeGraph>> add_edge_differential() {
+    vector<unique_ptr<ExtraEdgeGraph>> add_edge_differential() const {
             vector<unique_ptr<ExtraEdgeGraph>> result;
             result.reserve(N_VERTICES * (N_VERTICES - 1) - N_EDGES);
 
             ExtraEdgeGraph base_graph;
-            std::copy_n(half_edges, SIZE, base_graph.half_edges);
+            std::copy_n(half_edges.begin(), SIZE, base_graph.half_edges.begin());
 
             for (Int u = 0; u < N_VERTICES - 1; u++) {
                 for (Int v = u+1; v < N_VERTICES; v++) {

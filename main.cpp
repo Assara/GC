@@ -7,19 +7,14 @@
 #include "VectorSpace/BasisElement.hpp"         // BasisElement
 #include "VectorSpace/ValidBasisElement.hpp" // concept enforcement
 
-
 using namespace std;
 
 
 const Int wheelSize = 11;
 
-int main() {
-    cout << "hello " <<endl;
-
+void tryFindQuadraticRepresentativeForWheel11() {
     OddGraphdegZero<wheelSize + 1> W = wheel_graph<wheelSize>();
-   
     BasisElement<OddGraphdegZero<wheelSize + 1>, fieldType> res = BasisElement<OddGraphdegZero<wheelSize + 1>, fieldType>(W);
-
 
     res.getValue().print();
     cout << res.getCoefficient() << endl;
@@ -48,6 +43,33 @@ int main() {
     cout << "final representation: " << endl;
     wheel.print();
 
+}
+
+template<Int N>
+void tryFindFullWheelClassesByWaterfall() {
+    GC loop(loop_graph<4*N+1>());
+
+    GC loop_with_chord = loop.add_edge_differential();
+
+    loop_with_chord.print();
+
+
+    auto first_primitive = loop_with_chord.try_find_split_primitive();
+
+    
+
+    auto maybe_W3 = first_primitive-> add_edge_differential();
+
+    cout << "-------------------------------------" << endl;
+
+    maybe_W3.print();
+
+}
+
+
+
+int main() {
+    tryFindFullWheelClassesByWaterfall<1>();
     return 0;
 }
 
