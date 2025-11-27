@@ -8,7 +8,6 @@
 namespace VectorSpace {
 
 template<typename T, typename k>
-requires ValidBasisElement<T, k>
 class LinComb {
 public:
     using Element = BasisElement<T, k>;
@@ -23,6 +22,7 @@ public:
         for (auto& elem : elements) {
             elem.getValue().std(elem);
         }
+
     }
 
     explicit LinComb(const BasisElement<T, k>& elem) {
@@ -135,43 +135,44 @@ public:
             return elements.front();
     }
 
-    void sort_without_deduplicate() {
+    inline void reserve(size_t size) {
+            elements.reserve(size);
+    }
+
+    inline void sort_without_deduplicate() {
         std::sort(elements.begin(), elements.end());
     }
 
+    void remove_zeros() {
+        elements.erase(
+            std::remove_if(
+                elements.begin(),
+                elements.end(),
+                [](const Element& e) {
+                    return e.getCoefficient() == static_cast<k>(0);
+                }
+            ),
+            elements.end()
+        );
+    }
+
     void sort_elements() {
-        if (elements.size() <= 1) return;
-
-        std::vector<LinComb> wrapped;
-        wrapped.reserve(elements.size());
-        for (auto& e : elements) {
-            if (e.getCoefficient() != static_cast<k>(0)) {
-                LinComb single;
-                single.elements.push_back(std::move(e));
-                wrapped.push_back(std::move(single));
-            }
+        sort_without_deduplicate();
+        deduplicate_sorted();
+    }
+        
+    void deduplicate_sorted() {
+        if (elements.size() == 0) return;
+        for (std::size_t i = 0; i < elements.size()-1; ++i) {
+           elements[i+1].add_if_same(elements[i]);
         }
-        elements.clear();
-
-        while (wrapped.size() > 1) {
-            std::vector<LinComb> merged;
-            for (size_t i = 0; i + 1 < wrapped.size(); i += 2) {
-                wrapped[i] += wrapped[i + 1];
-                merged.push_back(std::move(wrapped[i]));
-            }
-            if (wrapped.size() % 2 != 0) {
-                merged.push_back(std::move(wrapped.back()));
-            }
-            wrapped = std::move(merged);
-        }
-
-        if (!wrapped.empty()) {
-            *this = std::move(wrapped.front());
-        }
+        remove_zeros();
     }
 
     void standardize_and_sort() {
         standardize_all();
+        cout << "after standardizing:" << endl;
+        print();
         sort_elements();
     }
 
@@ -215,6 +216,8 @@ public:
 
 public:
     void print() const {
+            cout << "LinCombPrint: "<< endl;
+
             for (const auto& elem : elements) {
                     elem.getValue().print();
                     std::cout << "Coefficient: " << elem.getCoefficient() << "\n\n";

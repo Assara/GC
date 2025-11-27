@@ -18,7 +18,7 @@ class GC {
 
 public:
         using ThisGC = GC<N_VERTICES, N_EDGES, N_OUT_HAIR, N_IN_HAIR, c, d>;
-        using GraphType = Graph<N_VERTICES, N_EDGES, N_OUT_HAIR, N_IN_HAIR, c, d>;
+        using GraphType = Graph<N_VERTICES, N_EDGES, N_OUT_HAIR, N_IN_HAIR, c, d, fieldType>;
         using SplitGC = GC<N_VERTICES + 1, N_EDGES + 1, N_OUT_HAIR, N_IN_HAIR, c, d>;
         using ContGC = GC<N_VERTICES - 1, N_EDGES - 1, N_OUT_HAIR, N_IN_HAIR, c, d>;
 
@@ -31,6 +31,7 @@ public:
         using L      = VectorSpace::LinComb<GraphType, fieldType>;
         using ContL  = VectorSpace::LinComb<ContGraphType, fieldType>;
         using SplitL = VectorSpace::LinComb<SplitGraphType, fieldType>;
+        using ExtraEdgeL = VectorSpace::LinComb<ExtraEdgeGraphType, fieldType>;
 
 
 private:
@@ -50,17 +51,8 @@ public:
 
         explicit GC(const GraphType& G, AssumeBasisOrderTag) : vec(G, AssumeBasisOrderTag{}) {}
 
-
-        // Construct from a ptr to GraphType (moving it into a BasisElement)
-        explicit GC(std::unique_ptr<GraphType>&& g, fieldType coeff = 1.0f)
-        : vec(BasisElement<GraphType, fieldType>(std::move(g), coeff)) {}
-
         // construct from a LinComb
-        explicit GC(const VectorSpace::LinComb<GraphType, fieldType>& v) : vec(v)  {}
-
-        // Construct from a vector of unique_ptrs to GraphType and a coefficient
-        explicit GC(std::vector<std::unique_ptr<GraphType>>&& graphs, fieldType coeff)
-                        : vec(std::move(graphs), coeff) {} 
+        explicit GC(VectorSpace::LinComb<GraphType, fieldType>& v) : vec(std::move(v))  {}
 
         explicit GC(std::vector<BasisElement<GraphType, fieldType>>&& elems)
                         : vec(std::move(elems)) {} 
@@ -101,7 +93,12 @@ public:
 
         // Static method to compute delta of a single basis element
         static SplitGC delta(const BasisElement<GraphType, fieldType>& G) {
-                return SplitGC(G.getValue().split_vertex_differential(), G.getCoefficient());
+
+
+                SplitL lin_comb = G.getValue().split_vertex_differential(G.getCoefficient());
+
+                lin_comb.print();
+                return SplitGC(lin_comb);
         }
 
         ExtraEdgeGC add_edge_differential() {
@@ -109,7 +106,10 @@ public:
         }
 
         static ExtraEdgeGC add_edge_differential(const BasisElement<GraphType, fieldType>& G) {
-                return ExtraEdgeGC(G.getValue().add_edge_differential(), G.getCoefficient());
+                ExtraEdgeL lin_comb = G.getValue().add_edge_differential(G.getCoefficient());
+
+
+                return ExtraEdgeGC(lin_comb);
         }
 
 
@@ -218,17 +218,38 @@ public:
 
 
         std::optional<ContGC> try_find_split_primitive() {
+
+                SplitGC expensie_sanity_check = this -> delta();
+
+                if (expensie_sanity_check.size() != 0) {
+                        cout << "Trying to find split primitive of something that is not a coboundary!" << endl;
+                } else {
+                        cout << "good coboundary!" << endl;
+                }
+
                 unordered_set<ContGraphType> seen_graphs;
                 add_contractions_to_set(seen_graphs);
                 unordered_map<ContGraphType, L> coboundary_map;
 
-                for (auto& gamma : seen_graphs) {
+
+
+                for (const auto& gamma : seen_graphs) {
+                        cout << "contracted_graph : " << endl;
+                        gamma.print();
+
                         coboundary_map.emplace(gamma, ContGC(gamma, AssumeBasisOrderTag{}).delta().data());
+
+
+                        cout << "---------------> " << endl;
+                        
+                        coboundary_map[gamma].print();
                 }
 
                 VectorSpace::BoundaryFinder solver(coboundary_map);
                        
                 std::optional<ContL> primitive_optional = solver.find_primitive_or_empty(this -> data());
+
+
 
                 return primitive_optional.transform([](ContL lin_comb) { 
                         return ContGC(lin_comb);
@@ -437,7 +458,7 @@ public:
                         if (primitive.has_value()) {
                                 primitive -> print();
                 
-                                SplitGC primitive_as_GC = SplitGC(std::move(*primitive));
+                                SplitGC primitive_as_GC = SplitGC(*primitive);
                             
                                 
                                 primitive_as_GC.print();
@@ -462,7 +483,7 @@ public:
                                       break;
                                 }
                                 
-                                SplitGC primitive_as_GC = SplitGC(std::move(*primitive));
+                                SplitGC primitive_as_GC = SplitGC(*primitive);
                                 boundary = primitive_as_GC.d_contraction();
 
                                 if(boundary.d_contraction().size() > 0) {
@@ -626,6 +647,7 @@ private:
 
 public: //debug
         void print() const {
+                cout<< "GC print of size : " << vec.size() << endl;
                 const auto& elems = vec.raw_elements();
                 for (const auto& elem : elems) {
                         elem.getValue().print();

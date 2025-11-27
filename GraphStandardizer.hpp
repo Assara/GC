@@ -9,13 +9,12 @@ template <
     Int N_OUT_HAIR,
     Int N_IN_HAIR,
     signedInt c,
-    signedInt d
+    signedInt d,
+    typename fieldType
 >
-
-
 class GraphStandadizer {
     public:
-    using GraphType = Graph<N_VERTICES,N_EDGES,N_OUT_HAIR, N_IN_HAIR,c,d>;
+    using GraphType = Graph<N_VERTICES,N_EDGES,N_OUT_HAIR, N_IN_HAIR,c,d, fieldType>;
 
     class CanonBuilder {
         public:
@@ -35,7 +34,7 @@ class GraphStandadizer {
             return sign;
         }
 
-        Int vertex_value(Int v) {
+        Int vertex_value(Int v) const {
             if(v < n_assignedVertices) {
                 return v;
             }
@@ -47,24 +46,24 @@ class GraphStandadizer {
             for (Int i = G.N_HAIR; i < G.SIZE; i+=2) {
                 Int a = G.half_edges[i];
                 Int b = G.half_edges[i+1];
-                ++ result[a][vertex_value(b)];
+                ++result[a][vertex_value(b)];
                 ++result[b][vertex_value(a)];
             }
 
             return result;
         }
 
-        GraphType vertex_values_graph() {
+        GraphType vertex_values_graph() const {
             GraphType fakeGraph = G;
 
             for (Int i = 0; i < GraphType::SIZE; ++i) {
-                fakeGraph.half_edges[i] = vertex_value(G.half_edges[i]);
+                fakeGraph.half_edges[i] = vertex_value(G.half_edge(i));
             }
 
             return fakeGraph;
         }
 
-        int compare(CanonBuilder other) {
+        int compare(const CanonBuilder& other) {
             return combutils::compareHalfEdges(vertex_values_graph().half_edges, other.vertex_values_graph().half_edges);
         } 
 
@@ -81,7 +80,7 @@ class GraphStandadizer {
     }    
 
 
-    BasisElement<GraphType, fieldType> standardize(GraphType graph, fieldType k) {
+    BasisElement<GraphType, fieldType> standardize(GraphType& graph, fieldType k) {
         
         if (GraphType::SWAP_EDGE_SIGN == -1 ) {
                 k *= graph.directAndSortEdges();

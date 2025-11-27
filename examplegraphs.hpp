@@ -6,15 +6,15 @@ namespace graphaliases {
 
     // Alias for a graph with odd degree zero condition.
     template <Int N>
-    using OddGraphdegZero = Graph<N, 2 * N - 2, 0, 0, 0, 1>;
+    using OddGraphdegZero = Graph<N, 2 * N - 2, 0, 0, 0, 1, fieldType>;
 
     // Alias for the GraphStandadizer corresponding to oddGraphdegZero.
     template <Int N>
-    using OddGraphdegZeroStandadizer = GraphStandadizer<N, 2 * N - 2, 0, 0, 0, 1>;
+    using OddGraphdegZeroStandadizer = GraphStandadizer<N, 2 * N - 2, 0, 0, 0, 1, fieldType>;
 
 
     template <Int N>
-    using OddLoopGraphType = Graph<N, N, 0, 0, 0, 1>;
+    using OddLoopGraphType = Graph<N, N, 0, 0, 0, 1, fieldType>;
 
 
 }

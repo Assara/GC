@@ -7,15 +7,15 @@
 #include <functional>
 static_assert(sizeof(std::size_t) == 8, "This hash expects 64-bit size_t.");
 
-template <Int N_VERTICES, Int N_EDGES, Int N_OUT_HAIR, Int N_IN_HAIR, signedInt c, signedInt d>
+template <Int N_VERTICES, Int N_EDGES, Int N_OUT_HAIR, Int N_IN_HAIR, signedInt c, signedInt d, typename fieldType>
 class Graph;
 
 namespace std {
 
 
-template <Int N_VERTICES, Int N_EDGES, Int N_OUT_HAIR, Int N_IN_HAIR, signedInt c, signedInt d>
-struct hash<Graph<N_VERTICES, N_EDGES, N_OUT_HAIR, N_IN_HAIR, c, d>> {
-    std::size_t operator()(const Graph<N_VERTICES, N_EDGES, N_OUT_HAIR, N_IN_HAIR, c, d>& g) const noexcept {
+template <Int N_VERTICES, Int N_EDGES, Int N_OUT_HAIR, Int N_IN_HAIR, signedInt c, signedInt d, typename fieldType>
+struct hash<Graph<N_VERTICES, N_EDGES, N_OUT_HAIR, N_IN_HAIR, c, d, fieldType>> {
+    std::size_t operator()(const Graph<N_VERTICES, N_EDGES, N_OUT_HAIR, N_IN_HAIR, c, d, fieldType>& g) const noexcept {
         // Treat half_edges (std::array<UInt, M>) as a byte buffer
         const unsigned char* p = reinterpret_cast<const unsigned char*>(g.half_edges.data());
         std::size_t len = sizeof(g.half_edges);
