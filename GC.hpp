@@ -101,7 +101,7 @@ public:
                 return SplitGC(lin_comb);
         }
 
-        ExtraEdgeGC add_edge_differential() {
+        ExtraEdgeGC add_edge_differential() const {
                 return add_edge_differential_recursive(0, vec.raw_elements().size());
         }
 
@@ -235,20 +235,18 @@ public:
 
                 for (const auto& gamma : seen_graphs) {
                         cout << "contracted_graph : " << endl;
-                        gamma.print();
-
+                
                         coboundary_map.emplace(gamma, ContGC(gamma, AssumeBasisOrderTag{}).delta().data());
-
-
-                        cout << "---------------> " << endl;
-                        
-                        coboundary_map[gamma].print();
+ 
                 }
 
                 VectorSpace::BoundaryFinder solver(coboundary_map);
                        
                 std::optional<ContL> primitive_optional = solver.find_primitive_or_empty(this -> data());
 
+
+                cout << "primitive:" << endl;
+                primitive_optional -> print();
 
 
                 return primitive_optional.transform([](ContL lin_comb) { 

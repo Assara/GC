@@ -64,11 +64,9 @@ template <
     Int N_VERTICES, Int N_EDGES
 > 
  std::optional<GC<N_VERTICES-1, N_EDGES, 0, 0, 0, 1>> push_down_the_waterfall(GC<N_VERTICES, N_EDGES, 0, 0, 0, 1> gamma) {
+
+    cout << "using push_down_the_waterfall: " ;
     auto with_edge_diff = gamma.add_edge_differential();    
-
-
-    cout << "with edge diff: " ;
-    with_edge_diff.print();
 
     return with_edge_diff
         .try_find_split_primitive();
@@ -78,6 +76,7 @@ template <
 void tryFindFullWheel5ClassByWaterfall() {
     GC loop(loop_graph<9>());
 
+    cout << "loop: ";
     loop.print();
 
     auto step1 = push_down_the_waterfall(loop);
@@ -86,30 +85,24 @@ void tryFindFullWheel5ClassByWaterfall() {
         cout << "Could not find primitive for step 1!! " << endl;
     }
 
+    cout << "STEP1 before applying add_edge_differential:" << endl;
     step1 -> print();
 
     auto test = step1 -> add_edge_differential();
-
 
     cout << "TESTLOG ------------------" << endl;
 
     auto a = step1 -> add_edge_differential();
     auto b = step1 -> delta();
 
-
     cout << "original:" << endl;
-
     step1 -> print();
-
-
 
     cout << "with add_edge_differential " << endl;
     a.print();
     cout << "add edge then split:" << endl;
     
     a.delta().print();
-
-
 
 }
 

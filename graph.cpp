@@ -11,4 +11,12 @@ std(BasisElement<ThisGraph, fieldType>& b) {
     b = s.standardize(b);
 }
 
-  
+
+template <Int N_VERTICES, Int N_EDGES, Int N_OUT_HAIR, Int N_IN_HAIR, signedInt c, signedInt d, typename fieldType>
+Graph<N_VERTICES, N_EDGES, N_OUT_HAIR, N_IN_HAIR, c, d, fieldType>::Basis Graph<N_VERTICES, N_EDGES, N_OUT_HAIR, N_IN_HAIR, c, d, fieldType>::
+canonized(BasisElement<ThisGraph, fieldType>& b) {
+    GraphStandadizer<N_VERTICES, N_EDGES, N_OUT_HAIR, N_IN_HAIR, c, d, fieldType> s;
+    return s.standardize(b);
+}
+
+    

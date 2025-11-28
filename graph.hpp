@@ -46,6 +46,9 @@ public:
     
     using ExtraEdgeGraph = Graph<N_VERTICES, N_EDGES + 1, N_OUT_HAIR, N_IN_HAIR, c, d, fieldType>;
 
+    using Basis = BasisElement<ThisGraph, fieldType>;
+
+
     Graph() = default;
 
     explicit Graph(const array<Int, SIZE>& arr) : half_edges(arr) {}
@@ -74,7 +77,9 @@ public:
 
     bool operator<(const Graph& o) const { return compare(o) < 0; }
 
-    static void std(BasisElement<ThisGraph, fieldType>& b);
+    static void std(Basis& b);
+
+    static Basis canonized(Basis& b);
 
     pair<Int, Int> getEdge(Int i) const {
         return { half_edges[N_HAIR + 2 * i], half_edges[N_HAIR + 2 * i + 1] };
@@ -106,12 +111,7 @@ public:
 
     VectorSpace::LinComb<SplitGraph, fieldType> split_vertex_differential(fieldType coef) const {
             VectorSpace::LinComb<SplitGraph, fieldType> splits = unsorted_splits(coef);
-            cout << "SPLITS SIZE BEFORE SORTING:" << splits.size() << endl;
-
-            splits.print();
-
             splits.standardize_and_sort();
-            cout << "SPLITS SIZE AFTER SORTING:" << splits.size() << endl;
             return splits;
     }
 
@@ -132,8 +132,6 @@ public:
 
             for (Int v = 0; v < N_VERTICES; v++) {
                     split_vertex(v, adjRepresentation[v], result, coef);
-
-                    cout << "RESULT SIZE IN UNORDERED SPLITS: " << result.size() << endl;
             }
             return result;
     }
@@ -143,15 +141,12 @@ public:
         if (adjacent.size() < 4) {
     
             if (adjacent.size() == 2 ) {
-                        cout << "splitting bivalent"<< endl;
-                         cout << "RESULT SIZE BEFORE ADDING" << result.size() << endl;
+
                 result.append_in_basis_order(splitGraph(split_vertex, adjacent, vector<Int>(adjacent.back())), coef);
-                            cout << "RESULT SIZE AFTER ADDING" << result.size() << endl;
             }
             else if (adjacent.size() < 2) {
                 result.append_in_basis_order(splitGraph(split_vertex, adjacent, vector<Int>()), coef);
             }
-            cout << "RESULT SIZE " << result.size() << endl;
             //do nothing for adjacent.size() == 3
             return; 
         }

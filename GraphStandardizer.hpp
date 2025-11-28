@@ -80,18 +80,16 @@ class GraphStandadizer {
     }    
 
 
-    BasisElement<GraphType, fieldType> standardize(GraphType& graph, fieldType k) {
-        
+    BasisElement<GraphType, fieldType> standardize(GraphType& graph, fieldType k) const {
         if (GraphType::SWAP_EDGE_SIGN == -1 ) {
                 k *= graph.directAndSortEdges();
-                if (graph.has_double_edge())
+                if (graph.has_double_edge()) {
                     return BasisElement<GraphType, fieldType>(graph, 0); 
+                }
         }
-
 
         CanonBuilder G = assignHair(graph);
         vector<CanonBuilder> attempts[2];
-
 
         // TODO reserve appropriate space for attempts
 
@@ -121,9 +119,7 @@ class GraphStandadizer {
         }
 
         //cout << "Aut size = " << attempts[N_VERTICES%2].size() << endl;
-        
       
-
         bool containsPlus = false;
         bool containsMinus = false;
 
@@ -135,16 +131,24 @@ class GraphStandadizer {
                 };
 
                 if (containsPlus && containsMinus) {
+    
                         return BasisElement<GraphType, fieldType>(attempts[N_VERTICES%2][0].G, 0);
                 }
         }
+
+
+        BasisElement<GraphType, fieldType> final_form;
+
         if (containsPlus) {
-            return BasisElement<GraphType, fieldType>(attempts[N_VERTICES%2][0].G, k);
+            final_form = BasisElement<GraphType, fieldType>(attempts[N_VERTICES%2][0].G, k);
+        } else {
+            final_form= BasisElement<GraphType, fieldType>(attempts[N_VERTICES%2][0].G, -k);
         }
-        return BasisElement<GraphType, fieldType>(attempts[N_VERTICES%2][0].G, -k);
+
+        return final_form;
     }
     
-    CanonBuilder assignHair(GraphType G) {
+    CanonBuilder assignHair(GraphType G) const {
         Int n_assigned = 0;
         signedInt sign = 1;
         for (Int i = 0; i < G.N_HAIR ; ++i) {

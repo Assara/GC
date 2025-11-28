@@ -18,11 +18,19 @@ private:
 public:
     LinComb() = default;
 
-    void standardize_all() {
+    void standardize_all() 
+    {
+        std::vector<Element> standardized;
+
         for (auto& elem : elements) {
-            elem.getValue().std(elem);
+
+            Element canon = elem.getValue().canonized(elem);
+            if (canon.getCoefficient() != 0) {  
+                standardized.emplace_back(std::move(canon));
+            }
         }
 
+        elements = std::move(standardized);
     }
 
     explicit LinComb(const BasisElement<T, k>& elem) {
@@ -171,8 +179,6 @@ public:
 
     void standardize_and_sort() {
         standardize_all();
-        cout << "after standardizing:" << endl;
-        print();
         sort_elements();
     }
 
