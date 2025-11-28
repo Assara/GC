@@ -258,6 +258,8 @@ public:
                     result.append_in_basis_order(base_graph, coef);
                 }
             }
+            result.standardize_and_sort();
+
             return result;
     }
 

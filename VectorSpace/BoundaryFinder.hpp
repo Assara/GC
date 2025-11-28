@@ -105,13 +105,6 @@ class BoundaryFinder {
     std::optional<LinComb<B,k>> find_primitive_or_empty(const LinComb<A,k>& linComb) {
             Row rep = std::make_unique<k[]>(deltaRep.cols());
 
-            
-            cout  <<"rep = " ;
-            for (size_t i = 0 ; i < deltaRep.cols(); i++) {
-                cout <<  rep[i] << ", ";
-
-            }
-
             for (const BasisElement<A,k>& elem : linComb) {
                      const auto& key = elem.getValue(); 
                      if (auto it = boundaryRepMap.find(key); it != boundaryRepMap.end()) {
@@ -122,28 +115,23 @@ class BoundaryFinder {
             optional<Col> coBoundaryRep = deltaRep.solve_exact_MT(rep);
 
             if (!coBoundaryRep.has_value()) {
+                cout << "COULD NOT FIND PRIMITIVE!" << endl;
                  return std::nullopt;
             }
 
             Col coeffs = std::move(coBoundaryRep.value()); 
-
-            cout  <<"coeffs = " ;
-            for (size_t i = 0 ; i < deltaRep.rows(); i++) {
-                cout <<  coeffs[i] << ", ";
-
-            }
-
-            cout << endl;
      
             LinComb<B, k> coBoundary;
+
             for (size_t i = 0; i < deltaRep.rows(); ++i) {
                 //not without standardizing or deduplicating
+                if (coeffs[i] == 0) continue;
                 coBoundary.append_in_basis_order(coBoundaryRepMap[i], -coeffs[i]);
             }
 
             //not necessarly sorted, but that is fine
-
-            return std::move(coBoundary);
+            coBoundary.print();
+            return coBoundary;
     }
 };
 

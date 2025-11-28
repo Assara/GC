@@ -234,10 +234,7 @@ public:
 
 
                 for (const auto& gamma : seen_graphs) {
-                        cout << "contracted_graph : " << endl;
-                
                         coboundary_map.emplace(gamma, ContGC(gamma, AssumeBasisOrderTag{}).delta().data());
- 
                 }
 
                 VectorSpace::BoundaryFinder solver(coboundary_map);
