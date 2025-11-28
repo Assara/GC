@@ -142,7 +142,7 @@ public:
     
             if (adjacent.size() == 2 ) {
 
-                result.append_in_basis_order(splitGraph(split_vertex, adjacent, vector<Int>(adjacent.back())), coef);
+                result.append_in_basis_order(splitGraph(split_vertex, adjacent, vector<Int>(adjacent.back())), -coef);
             }
             else if (adjacent.size() < 2) {
                 result.append_in_basis_order(splitGraph(split_vertex, adjacent, vector<Int>()), coef);
