@@ -30,9 +30,6 @@ public:
 
         using L      = VectorSpace::LinComb<GraphType, fieldType>;
         using ContL  = VectorSpace::LinComb<ContGraphType, fieldType>;
-        using SplitL = VectorSpace::LinComb<SplitGraphType, fieldType>;
-        using ExtraEdgeL = VectorSpace::LinComb<ExtraEdgeGraphType, fieldType>;
-
 
 private:
         VectorSpace::LinComb<GraphType, fieldType> vec;
@@ -77,6 +74,17 @@ public:
                 return *this;
         }
 
+        // += operator for summing GCs
+        ThisGC& operator*=(const fieldType scalar) {
+                return vec*=scalar;
+        }
+
+
+        bool operator==(const ThisGC& other) const {
+                return vec == other.vec;
+        }
+
+
         // Standardize and sort elements
         void standardize_all() { vec.standardize_all(); }
         void sort_elements()   { vec.sort_elements(); }
@@ -93,12 +101,7 @@ public:
 
         // Static method to compute delta of a single basis element
         static SplitGC delta(const BasisElement<GraphType, fieldType>& G) {
-
-
-                SplitL lin_comb = G.getValue().split_vertex_differential(G.getCoefficient());
-
-                lin_comb.print();
-                return SplitGC(lin_comb);
+                return SplitGC(G.getValue().split_vertex_differential(G.getCoefficient()));
         }
 
         ExtraEdgeGC add_edge_differential() const {
@@ -106,10 +109,7 @@ public:
         }
 
         static ExtraEdgeGC add_edge_differential(const BasisElement<GraphType, fieldType>& G) {
-                ExtraEdgeL lin_comb = G.getValue().add_edge_differential(G.getCoefficient());
-
-
-                return ExtraEdgeGC(lin_comb);
+                return ExtraEdgeGC(G.getValue().add_edge_differential(G.getCoefficient()));
         }
 
 
@@ -218,11 +218,15 @@ public:
 
 
         std::optional<ContGC> try_find_split_primitive() {
-
                 SplitGC expensie_sanity_check = this -> delta();
-
                 if (expensie_sanity_check.size() != 0) {
                         cout << "Trying to find split primitive of something that is not a coboundary!" << endl;
+                        
+                        expensie_sanity_check.print();
+
+                        cout << "Above should be 0" << endl;
+
+
                 } else {
                         cout << "good coboundary!" << endl;
                 }
@@ -231,8 +235,6 @@ public:
                 add_contractions_to_set(seen_graphs);
                 unordered_map<ContGraphType, L> coboundary_map;
 
-
-
                 for (const auto& gamma : seen_graphs) {
                         coboundary_map.emplace(gamma, ContGC(gamma, AssumeBasisOrderTag{}).delta().data());
                 }
@@ -240,12 +242,6 @@ public:
                 VectorSpace::BoundaryFinder solver(coboundary_map);
                        
                 std::optional<ContL> primitive_optional = solver.find_primitive_or_empty(this -> data());
-
-
-                cout << "primitive:" << endl;
-                primitive_optional -> print();
-
-
                 return primitive_optional.transform([](ContL lin_comb) { 
                         return ContGC(lin_comb);
                 });
@@ -417,8 +413,6 @@ public:
 
                                 cout << "see graph above" << endl;
                                 
-
-
                         } else {
                                 cout << "Top grade comb is good!" << endl;
                         }
