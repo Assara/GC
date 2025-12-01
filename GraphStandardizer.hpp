@@ -4,9 +4,17 @@
 
 
 template <
-    typename GraphType>
-class GraphStandardizer {
+    Int N_VERTICES,
+    Int N_EDGES,
+    Int N_OUT_HAIR,
+    Int N_IN_HAIR,
+    signedInt c,
+    signedInt d,
+    typename fieldType
+>
+class GraphStandadizer {
     public:
+    using GraphType = Graph<N_VERTICES,N_EDGES,N_OUT_HAIR, N_IN_HAIR,c,d, fieldType>;
 
     class CanonBuilder {
         public:
@@ -14,10 +22,10 @@ class GraphStandardizer {
         Int n_assignedVertices;
         signedInt sign;
 
-
         CanonBuilder(const GraphType& initialGraph, Int n, signedInt s)
             : G(initialGraph), n_assignedVertices(n) {
             n_assignedVertices = n;
+    
             sign = s*G.directAndSortEdges();
         }
 
@@ -30,11 +38,11 @@ class GraphStandardizer {
             if(v < n_assignedVertices) {
                 return v;
             }
-            return GraphType::N_VERTICES_;
+            return N_VERTICES;
         }
 
-        array<array<Int, GraphType::N_VERTICES_+1>,GraphType::N_VERTICES_> score_vertices() {
-            array<array<Int, GraphType::N_VERTICES_+1>,GraphType::N_VERTICES_> result{};
+        array<array<Int, N_VERTICES+1>,N_VERTICES> score_vertices() {
+            array<array<Int, N_VERTICES+1>,N_VERTICES> result{};
             for (Int i = G.N_HAIR; i < G.SIZE; i+=2) {
                 Int a = G.half_edges[i];
                 Int b = G.half_edges[i+1];
@@ -87,11 +95,11 @@ class GraphStandardizer {
 
         attempts[G.n_assignedVertices%2].push_back(G);
 
-        for (Int n = G.n_assignedVertices; n < GraphType::N_VERTICES_; n++) {                    
+        for (Int n = G.n_assignedVertices; n < N_VERTICES; n++) {                    
             
             attempts[(n+1)%2].clear();
             for (CanonBuilder attempt : attempts[n%2]) {
-                for (Int l = attempt.n_assignedVertices; l < GraphType::N_VERTICES_; ++l) {
+                for (Int l = attempt.n_assignedVertices; l < N_VERTICES; ++l) {
                     CanonBuilder next = attempt.with_assigned_next(l);
                     if (attempts[(n+1)%2].empty()) {
                         attempts[(n+1)%2].push_back(next);
@@ -110,13 +118,13 @@ class GraphStandardizer {
             }
         }
 
-        //cout << "Aut size = " << attempts[GraphType::N_VERTICES_%2].size() << endl;
+        //cout << "Aut size = " << attempts[N_VERTICES%2].size() << endl;
       
         bool containsPlus = false;
         bool containsMinus = false;
 
-        for (bigInt i = 0; i < attempts[GraphType::N_VERTICES_%2].size(); i++) {
-                if (attempts[GraphType::N_VERTICES_%2][i].sign > 0) {
+        for (bigInt i = 0; i < attempts[N_VERTICES%2].size(); i++) {
+                if (attempts[N_VERTICES%2][i].sign > 0) {
                         containsPlus = true;
                 } else {
                         containsMinus = true;
@@ -124,7 +132,7 @@ class GraphStandardizer {
 
                 if (containsPlus && containsMinus) {
     
-                        return BasisElement<GraphType, fieldType>(attempts[GraphType::N_VERTICES_%2][0].G, 0);
+                        return BasisElement<GraphType, fieldType>(attempts[N_VERTICES%2][0].G, 0);
                 }
         }
 
@@ -132,9 +140,9 @@ class GraphStandardizer {
         BasisElement<GraphType, fieldType> final_form;
 
         if (containsPlus) {
-            final_form = BasisElement<GraphType, fieldType>(attempts[GraphType::N_VERTICES_%2][0].G, k);
+            final_form = BasisElement<GraphType, fieldType>(attempts[N_VERTICES%2][0].G, k);
         } else {
-            final_form= BasisElement<GraphType, fieldType>(attempts[GraphType::N_VERTICES_%2][0].G, -k);
+            final_form= BasisElement<GraphType, fieldType>(attempts[N_VERTICES%2][0].G, -k);
         }
 
         return final_form;

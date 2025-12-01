@@ -13,7 +13,7 @@ concept ValidBasisElement =
     
     
     requires(BasisElement<T, k>& b) {
-        { T::standardized(b) } -> std::same_as<BasisElement<T, k>>;
+        { T::std(b) } -> std::same_as<void>;
     };
 
     

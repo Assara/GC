@@ -67,13 +67,9 @@ template <
 
     cout << "using push_down_the_waterfall: " ;
     auto with_edge_diff = gamma.add_edge_differential();    
-    
 
-    auto primitive = with_edge_diff
+    return with_edge_diff
         .try_find_split_primitive();
-
-    cout << "finished edge diff:" << endl;
-    return primitive;
 }
 
 
@@ -89,84 +85,29 @@ void tryFindFullWheel5ClassByWaterfall() {
         cout << "Could not find primitive for step 1!! " << endl;
     }
 
-    cout << "split then add: " << endl;
-    step1 -> delta().add_edge_differential().print();
+    cout << "STEP1 before applying add_edge_differential:" << endl;
+    step1 -> print();
 
+    auto test = step1 -> add_edge_differential();
 
-    cout << "add then split: " << endl;
-    step1 -> add_edge_differential ().delta().print();
+    cout << "TESTLOG ------------------" << endl;
 
+    auto a = step1 -> add_edge_differential();
+    auto b = step1 -> delta();
 
-        cout << "delta ^2: " << endl;
-    step1 -> delta().delta().print();
+    cout << "original:" << endl;
+    step1 -> print();
 
-    /*
-    auto step2 = push_down_the_waterfall(*step1);
-
-    if (!step2) {
-        cout << "Could not find primitive for step 2!! " << endl;
-    }
-
-    auto step3 = push_down_the_waterfall(*step2);
-
-    if (!step3) {
-        cout << "Could not find primitive for step 3!! " << endl;
-    }
-
-    auto full_W5_class = step3 -> add_edge_differential();
-
-    cout << "full W5 class" << endl;
-    full_W5_class.print();
-
-    */
-}
-
-/*
-
-void tryFindFullWheel7ClassByWaterfall() {
-    GC loop(loop_graph<13>());
-
-    cout << "loop: ";
-    loop.print();
-
-    auto step1 = push_down_the_waterfall(loop);
-
-    if (!step1) {
-        cout << "Could not find primitive for step 1!! " << endl;
-    }
-
-    auto step2 = push_down_the_waterfall(*step1);
-
-    if (!step2) {
-        cout << "Could not find primitive for step 2!! " << endl;
-    }
-
-    auto step3 = push_down_the_waterfall(*step2);
-
-    if (!step3) {
-        cout << "Could not find primitive for step 3!! " << endl;
-    }
-
+    cout << "with add_edge_differential " << endl;
+    a.print();
+    cout << "add edge then split:" << endl;
     
-    auto step4 = push_down_the_waterfall(*step3);
+    a.delta().print();
 
-    if (!step4) {
-        cout << "Could not find primitive for step 4!! " << endl;
-    }
-
-    auto step5 = push_down_the_waterfall(*step4);
-
-    if (!step5) {
-        cout << "Could not find primitive for step 5!! " << endl;
-    }
-
-
-    auto full_W7_class = step5 -> add_edge_differential();
-
-    cout << "full W7 class" << endl;
-    full_W7_class.print();
 }
-*/
+
+
+
 
 
 int main() {

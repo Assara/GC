@@ -11,6 +11,7 @@
 #include "Types.hpp"
 #include "permutation.hpp"
 #include "CombinatorialUtils.hpp"
+#include "VectorSpace/LinComb.hpp"
 #include "graph_hash.hpp"
 #include <ranges>
 
@@ -18,9 +19,6 @@ using namespace std;
 
 template<typename T, typename k>
 class BasisElement;
-
-template<typename GraphType>
-class GraphStandardizer;
 
 template <
     Int N_VERTICES,
@@ -36,19 +34,20 @@ public:
     static constexpr Int SIZE = N_IN_HAIR + N_OUT_HAIR + (Int)2 * N_EDGES;
     static constexpr Int N_HAIR = N_IN_HAIR + N_OUT_HAIR;
     static constexpr Int N_EDGES_ = N_EDGES;
-    static constexpr Int N_VERTICES_ = N_VERTICES;
     static constexpr signedInt FLIP_EDGE_SIGN = ((c % 2) != 0 && (d % 2) != 0) ? -1 : 1;
     static constexpr signedInt SWAP_EDGE_SIGN = (((c + d) % 2) != 0) ? -1 : 1;
     static constexpr signedInt SWAP_VERTICES_SIGN = -1 * SWAP_EDGE_SIGN;
 
     using SplitGraph = Graph<N_VERTICES + 1, N_EDGES + 1, N_OUT_HAIR, N_IN_HAIR, c, d, fieldType>;
+   
     using ContGraph = Graph<N_VERTICES - 1, N_EDGES - 1, N_OUT_HAIR, N_IN_HAIR, c, d, fieldType>;
-    using ThisGraph = Graph<N_VERTICES, N_EDGES, N_OUT_HAIR, N_IN_HAIR, c, d, fieldType>;
-    using ExtraEdgeGraph = Graph<N_VERTICES, N_EDGES + 1, N_OUT_HAIR, N_IN_HAIR, c, d, fieldType>;
-    using Base = BasisElement<ThisGraph, fieldType>;
 
-    using SplitBase = BasisElement<SplitGraph, fieldType>;
-    using ExtraEdgeBase = BasisElement<ExtraEdgeGraph, fieldType>;
+    using ThisGraph = Graph<N_VERTICES, N_EDGES, N_OUT_HAIR, N_IN_HAIR, c, d, fieldType>;
+    
+    using ExtraEdgeGraph = Graph<N_VERTICES, N_EDGES + 1, N_OUT_HAIR, N_IN_HAIR, c, d, fieldType>;
+
+    using Basis = BasisElement<ThisGraph, fieldType>;
+
 
     Graph() = default;
 
@@ -78,10 +77,9 @@ public:
 
     bool operator<(const Graph& o) const { return compare(o) < 0; }
 
-    static Base standardized(Base& b) {
-        GraphStandardizer<ThisGraph> s;
-        return s.standardize(b);
-    }
+    static void std(Basis& b);
+
+    static Basis canonized(Basis& b);
 
     pair<Int, Int> getEdge(Int i) const {
         return { half_edges[N_HAIR + 2 * i], half_edges[N_HAIR + 2 * i + 1] };
@@ -111,7 +109,15 @@ public:
         return valence;
     }
 
-    vector<SplitBase> split_vertex_differential(fieldType coef) const {
+    VectorSpace::LinComb<SplitGraph, fieldType> split_vertex_differential(fieldType coef) const {
+            VectorSpace::LinComb<SplitGraph, fieldType> splits = unsorted_splits(coef);
+            splits.standardize_and_sort();
+            return splits;
+    }
+
+
+
+    VectorSpace::LinComb<SplitGraph, fieldType> unsorted_splits(fieldType coef) const {
             vector<vector<Int>> adjRepresentation;
             adjRepresentation.reserve(N_VERTICES);
 
@@ -121,7 +127,7 @@ public:
                     resultSize += combutils::n_splits(adjRepresentation.back().size());
             }
 
-            vector<SplitBase> result;
+            VectorSpace::LinComb<SplitGraph, fieldType> result;
             result.reserve(resultSize);
 
             for (Int v = 0; v < N_VERTICES; v++) {
@@ -131,13 +137,15 @@ public:
     }
 
 
-    void split_vertex(Int split_vertex, const vector<Int>& adjacent, vector<SplitBase>& result, const fieldType coef) const {
+    void split_vertex(Int split_vertex, const vector<Int>& adjacent, VectorSpace::LinComb<SplitGraph, fieldType>& result, fieldType coef) const {
         if (adjacent.size() < 4) {
-            if (adjacent.size() == 2) { 
-                result.emplace_back(SplitBase(splitGraph(split_vertex, adjacent, vector<Int>(adjacent.back())), -coef));
+    
+            if (adjacent.size() == 2 ) {
+
+                result.append_in_basis_order(splitGraph(split_vertex, adjacent, vector<Int>(adjacent.back())), -coef);
             }
             else if (adjacent.size() < 2) {
-                result.emplace_back(SplitBase(splitGraph(split_vertex, adjacent, vector<Int>()), coef));
+                result.append_in_basis_order(splitGraph(split_vertex, adjacent, vector<Int>()), coef);
             }
             //do nothing for adjacent.size() == 3
             return; 
@@ -148,7 +156,7 @@ public:
             vector<Int> S = combutils::firstSubset(1, i);
 
             do {
-                   result.emplace_back(SplitBase(splitGraph(split_vertex, adjacent, vector<Int>(adjacent.back())), coef));
+                result.append_in_basis_order(splitGraph(split_vertex, adjacent, S), coef);
             } while (combutils::nextSubset(S, max_index));
         }
     }
@@ -168,7 +176,7 @@ public:
     }
 
     void add_splits_to_set(unordered_set<SplitGraph>& result) {
-            vector<SplitBase> splits = split_vertex_differential(fieldType{1});
+            VectorSpace::LinComb<SplitGraph, fieldType> splits = unsorted_splits();
             splits.standardize_all();
 
             
@@ -181,7 +189,7 @@ public:
     }
 
 
-      vector<SplitBase> unsorted_even_splits(fieldType coef) const {
+     VectorSpace::LinComb<SplitGraph, fieldType> unsorted_even_splits(fieldType coef) const {
             vector<vector<Int>> adjRepresentation;
             adjRepresentation.reserve(N_VERTICES);
 
@@ -191,7 +199,7 @@ public:
                     resultSize += combutils::n_splits(adjRepresentation.back().size());
             }
 
-            vector<SplitBase> result;
+            VectorSpace::LinComb<SplitGraph, fieldType> result;
             result.reserve(resultSize);
 
             for (Int v = 0; v < N_VERTICES; v++) {
@@ -200,7 +208,7 @@ public:
             return result;
     }
 
-    void split_vertex_even(Int vertex_to_split, const vector<Int>& adjacent,  vector<SplitBase>& result, fieldType coef) const {
+    void split_vertex_even(Int vertex_to_split, const vector<Int>& adjacent, VectorSpace::LinComb<SplitGraph,fieldType>& result, fieldType coef) const {
         //odd vertices and bivalent vertices are handled the same way
 
         if (adjacent.size()%2 == 1 || adjacent.size() == 2) {
@@ -218,38 +226,39 @@ public:
             vector<Int> S = combutils::firstSubset(1, i);
 
             do {
-                result.emplace_back(SplitBase(splitGraph(vertex_to_split, adjacent, S), coef));
+                result.append_in_basis_order(splitGraph(vertex_to_split, adjacent, S), coef);
             } while (combutils::nextSubset(S, max_index));
         }
     }
 
     void add_even_splits_to_set(unordered_set<SplitGraph>& result) const {
-            vector<SplitBase> splits = unsorted_even_splits(fieldType{1});
+            VectorSpace::LinComb<SplitGraph, fieldType> splits = unsorted_even_splits(fieldType{1});
+            splits.standardize_all();
 
             constexpr fieldType zero{}; 
-            for (auto& be : splits) {
-                SplitBase tmp = SplitGraph::standardized(be);
-
-                if (tmp.getCoefficient() != zero) {
-                    result.emplace(tmp.getValue());
+            for (auto const& be : splits) {
+                if (be.getCoefficient() != zero) {
+                    result.emplace(be.getValue());
                 }
             }
     }
 
-    vector<ExtraEdgeBase> add_edge_differential(const fieldType coef) const {
-            vector<ExtraEdgeBase> result;
+    VectorSpace::LinComb<ExtraEdgeGraph, fieldType> add_edge_differential(fieldType coef) const {
+            VectorSpace::LinComb<ExtraEdgeGraph, fieldType> result;
             result.reserve(N_VERTICES * (N_VERTICES - 1) - N_EDGES);
 
+                
             ExtraEdgeGraph base_graph;
-            std::copy_n(half_edges.begin(), SIZE, base_graph.half_edges.begin());
+            std::copy_n(half_edges.begin(), SIZE, base_graph.half_edges.begin() + 2);
 
             for (Int u = 0; u < N_VERTICES - 1; u++) {
                 for (Int v = u+1; v < N_VERTICES; v++) {
-                    base_graph.half_edges[SIZE] = u;
-                    base_graph.half_edges[SIZE+1] = v;
-                    result.emplace_back(ExtraEdgeBase(base_graph, coef));
+                    base_graph.half_edges[0] = u;
+                    base_graph.half_edges[1] = v;
+                    result.append_in_basis_order(base_graph, coef);
                 }
             }
+            result.standardize_and_sort();
 
             return result;
     }

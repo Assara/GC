@@ -24,7 +24,7 @@ public:
 
         for (auto& elem : elements) {
 
-            Element canon = elem.getValue().standardized(elem);
+            Element canon = elem.getValue().canonized(elem);
             if (canon.getCoefficient() != 0) {  
                 standardized.emplace_back(std::move(canon));
             }
@@ -126,19 +126,6 @@ public:
         copy += other;
         return copy;
     }
-
-    bool operator==(const LinComb& other) const {
-        if (size() != other.size()) {
-            return false;
-        }
-        for (size_t i = 0; i < size(); i++) {
-            if (!elements[i].full_equals(other.raw_elements()[i])) return false;
-        }
-        return true;
-
-    } 
-    
-
 
     void add(const LinComb& other) {
         *this += other;

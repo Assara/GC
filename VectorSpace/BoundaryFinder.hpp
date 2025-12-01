@@ -73,7 +73,7 @@ class BoundaryFinder {
                 //construct the in out maps
                 for (const auto& entry : delta) {
                         coBoundaryRepMap.push_back(entry.first);             
-        
+                        //entry.second.print();
                         for (const BasisElement<A,k>& elem : entry.second) {
                                 if (!filter.contains(elem.getValue())) continue;
                                 
@@ -121,15 +121,17 @@ class BoundaryFinder {
 
             Col coeffs = std::move(coBoundaryRep.value()); 
      
-            LinComb<B, k> primitive;
+            LinComb<B, k> coBoundary;
 
             for (size_t i = 0; i < deltaRep.rows(); ++i) {
                 //not without standardizing or deduplicating
                 if (coeffs[i] == 0) continue;
-                primitive.append_in_basis_order(coBoundaryRepMap[i], -coeffs[i]);
+                coBoundary.append_in_basis_order(coBoundaryRepMap[i], -coeffs[i]);
             }
+
             //not necessarly sorted, but that is fine
-            return primitive;
+            coBoundary.print();
+            return coBoundary;
     }
 };
 

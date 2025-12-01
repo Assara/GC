@@ -10,7 +10,7 @@ namespace graphaliases {
 
     // Alias for the GraphStandadizer corresponding to oddGraphdegZero.
     template <Int N>
-    using OddGraphdegZeroStandadizer = GraphStandardizer<OddGraphdegZero<N>>;
+    using OddGraphdegZeroStandadizer = GraphStandadizer<N, 2 * N - 2, 0, 0, 0, 1, fieldType>;
 
 
     template <Int N>

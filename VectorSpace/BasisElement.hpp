@@ -70,11 +70,6 @@ public:
         return compare(rhs) == 0;  // equality by value (coeff ignored)
     }
 
-    bool full_equals(const BasisElement& other) const noexcept {
-        return value == other.getValue() && coefficient == other.getCoefficient();
-    }
-
-
     void set_coefficient(k c) noexcept { coefficient = c; }
 
     void add_if_same(BasisElement& other) {
