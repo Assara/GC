@@ -85,24 +85,27 @@ void tryFindFullWheel5ClassByWaterfall() {
         cout << "Could not find primitive for step 1!! " << endl;
     }
 
-    cout << "STEP1 before applying add_edge_differential:" << endl;
-    step1 -> print();
-
-    auto test = step1 -> add_edge_differential();
-
-    cout << "TESTLOG ------------------" << endl;
-
-    auto a = step1 -> add_edge_differential();
-    auto b = step1 -> delta();
-
-    cout << "original:" << endl;
-    step1 -> print();
-
-    cout << "with add_edge_differential " << endl;
-    a.print();
-    cout << "add edge then split:" << endl;
     
-    a.delta().print();
+    auto step2 = push_down_the_waterfall(*step1);
+
+    if (!step2) {
+        cout << "Could not find primitive for step 2!! " << endl;
+    }
+
+    
+    auto step3 = push_down_the_waterfall(*step2);
+
+    if (!step3) {
+        cout << "Could not find primitive for step 3!! " << endl;
+    }
+
+
+    cout << "W5 class:" << endl;
+
+    step3 -> add_edge_differential().print();
+
+
+
 
 }
 
