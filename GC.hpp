@@ -32,6 +32,7 @@ public:
         using SplitL = VectorSpace::LinComb<SplitGraphType, fieldType>;
         using ExtraEdgeL = VectorSpace::LinComb<ExtraEdgeGraphType, fieldType>;
 
+		using Base      = BasisElement<GraphType, fieldType>;
 
 private:
         VectorSpace::LinComb<GraphType, fieldType> vec;
@@ -53,10 +54,10 @@ public:
         // construct from a LinComb
         explicit GC(VectorSpace::LinComb<GraphType, fieldType>& v) : vec(std::move(v))  {}
 
-        explicit GC(std::vector<BasisElement<GraphType, fieldType>>&& elems)
+        explicit GC(std::vector<Base>&& elems)
                         : vec(std::move(elems)) {} 
 
-        explicit GC(std::vector<BasisElement<GraphType, fieldType>>&& elems,
+        explicit GC(std::vector<Base>&& elems,
                         AssumeBasisOrderTag)                    
                 : vec(std::move(elems), AssumeBasisOrderTag{})  
         {}
@@ -80,6 +81,7 @@ public:
         void standardize_all() { vec.standardize_all(); }
         void sort_elements()   { vec.sort_elements(); }
         void standardize_and_sort() { vec.standardize_and_sort(); }
+        
 
         BasisElement<GraphType, fieldType>& back() {
                 return vec.back();
@@ -92,11 +94,8 @@ public:
 
         // Static method to compute delta of a single basis element
         static SplitGC delta(const BasisElement<GraphType, fieldType>& G) {
-
-
                 SplitL lin_comb = G.getValue().split_vertex_differential(G.getCoefficient());
 
-                lin_comb.print();
                 return SplitGC(lin_comb);
         }
 
@@ -218,19 +217,17 @@ public:
 
         std::optional<ContGC> try_find_split_primitive() {
 
-                SplitGC expensie_sanity_check = this -> delta();
+                /*SplitGC expensie_sanity_check = this -> delta();
 
                 if (expensie_sanity_check.size() != 0) {
                         cout << "Trying to find split primitive of something that is not a coboundary!" << endl;
                 } else {
                         cout << "good coboundary!" << endl;
-                }
+                }*/
 
                 unordered_set<ContGraphType> seen_graphs;
                 add_contractions_to_set(seen_graphs);
                 unordered_map<ContGraphType, L> coboundary_map;
-
-
 
                 for (const auto& gamma : seen_graphs) {
                         coboundary_map.emplace(gamma, ContGC(gamma, AssumeBasisOrderTag{}).delta().data());
@@ -239,11 +236,6 @@ public:
                 VectorSpace::BoundaryFinder solver(coboundary_map);
                        
                 std::optional<ContL> primitive_optional = solver.find_primitive_or_empty(this -> data());
-
-
-                cout << "primitive:" << endl;
-                primitive_optional -> print();
-
 
                 return primitive_optional.transform([](ContL lin_comb) { 
                         return ContGC(lin_comb);
@@ -257,6 +249,25 @@ public:
         Int frontValence() {
                 return vec.front().getValue().valence_array()[0];
         }
+        
+        unordered_map<GraphType, SplitL> map_split_differential() {
+			unordered_map<GraphType, SplitL> delta;
+			for (const auto& be : vec) {
+					delta.emplace(be.getValue(), be.getValue().split_vertex_differential(fieldType{1}));
+			}
+			return delta;
+		}
+		
+		ThisGC filtered(unordered_set<GraphType>& filter) {
+				vector<Base> filtered;
+				
+				for (const auto& be : vec) {
+						if (!filter.contains(be.getValue())) continue;
+						filtered.push_back(be);	
+				}
+	
+				return ThisGC(std::move(filtered), AssumeBasisOrderTag{});
+		}
 
         void expand_map(std::unordered_map<SplitGraphType, L>& boundary_map,
                         std::unordered_set<GraphType>&            cousins,
@@ -519,8 +530,6 @@ public:
                 
         }
 
-
-
         ThisGC reduce() {
                 if (vec.raw_elements().empty()) {
                         return ThisGC{};
@@ -640,12 +649,13 @@ private:
         }
 
 public: //debug
-        void print() const {
-                cout<< "GC print of size : " << vec.size() << endl;
+        void print(std::ostream& out = std::cout) const {
+                out<< "GC print of size : " << vec.size() << endl;
+                out<< "Coefficient type : " << TypeName<fieldType>::name() << endl;
                 const auto& elems = vec.raw_elements();
                 for (const auto& elem : elems) {
-                        elem.getValue().print();
-                        std::cout << "Coefficient: " << elem.getCoefficient() << "\n\n";
+                        elem.getValue().print(out);
+                        out << "Coefficient: " << elem.getCoefficient() << "\n\n";
                 }
         }
 

@@ -9,6 +9,9 @@ namespace graphaliases {
     // Alias for a graph with odd degree zero condition.
     template <Int N>
     using OddGraphdegZero = Graph<N, 2 * N - 2, 0, 0, 0, 1, fieldType>;
+    
+    template <Int N>
+    using OddGCdegZero = GC<N, 2 * N - 2, 0, 0, 0, 1>;
 
 
     template <Int N>

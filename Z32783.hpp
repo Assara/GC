@@ -14,16 +14,15 @@ class Z32783 {
     std::uint32_t v_;                            // always in [0, MOD-1]
 
 public:
-    // Constructors
-    Z32783() : v_(0) {}
+	// Constructors
+	constexpr Z32783() : v_(0) {}
 
-    // Allow implicit construction from any integral type (lets you pass 0, 1, etc.).
-    template <class T, std::enable_if_t<std::is_integral_v<T>, int> = 0>
-    /* not explicit */ constexpr Z32783(T x) {
-        std::int64_t r = static_cast<std::int64_t>(x) % static_cast<std::int64_t>(MOD);
-        if (r < 0) r += MOD;
-        v_ = static_cast<std::uint32_t>(r);
-    }
+	template <class T, std::enable_if_t<std::is_integral_v<T>, int> = 0>
+	/* not explicit */ constexpr Z32783(T x) {
+		long long r = static_cast<long long>(x) % static_cast<long long>(MOD);
+		if (r < 0) r += MOD;
+		v_ = static_cast<std::uint32_t>(r);
+	}
 
     // Accessors
     std::uint32_t value() const { return v_; }

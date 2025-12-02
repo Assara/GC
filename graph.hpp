@@ -87,6 +87,12 @@ public:
 		    GraphStandardizer<N_VERTICES, N_EDGES, N_OUT_HAIR, N_IN_HAIR, c, d, fieldType> s;
 			return s.standardize(b);
 	}
+	
+	ThisGraph canonical_represesentation() {
+			Basis be = Basis(*this);
+			return ThisGraph::canonized(be).getValue();
+	}
+	
 
     pair<Int, Int> getEdge(Int i) const {
         return { half_edges[N_HAIR + 2 * i], half_edges[N_HAIR + 2 * i + 1] };
@@ -395,38 +401,39 @@ public:
         return SWAP_VERTICES_SIGN;
     }
 
-    void print() const {
-        cout << "printing graph: " << endl;
+	void print(std::ostream& out = std::cout) const {
+		out << "printing graph:\n";
 
-        if (N_OUT_HAIR > 0) {
-            cout << "out_hair: ";
-            for (Int i = 0; i < N_OUT_HAIR; ++i) {
-                cout << +half_edges[i];
-                if (i < N_OUT_HAIR - 1) cout << ", ";
-            }
-            cout << "\n";
-        }
+		if (N_OUT_HAIR > 0) {
+			out << "out_hair: ";
+			for (Int i = 0; i < N_OUT_HAIR; ++i) {
+				out << +half_edges[i];
+				if (i < N_OUT_HAIR - 1) out << ", ";
+			}
+			out << "\n";
+		}
 
-        if (N_IN_HAIR > 0) {
-            cout << "in_hair: ";
-            for (Int i = 0; i < N_IN_HAIR; ++i) {
-                cout << +half_edges[N_OUT_HAIR + i];
-                if (i < N_IN_HAIR - 1) cout << ", ";
-            }
-            cout << "\n";
-        }
+		if (N_IN_HAIR > 0) {
+			out << "in_hair: ";
+			for (Int i = 0; i < N_IN_HAIR; ++i) {
+				out << +half_edges[N_OUT_HAIR + i];
+				if (i < N_IN_HAIR - 1) out << ", ";
+			}
+			out << "\n";
+		}
 
-        cout << "edges: ";
-        for (Int e = 0; e < N_EDGES; ++e) {
-            Int base = N_HAIR + 2 * e;
-            cout << "(" << +half_edges[base] << "," << +half_edges[base + 1] << ")";
-            if (e < N_EDGES - 1) cout << ", ";
-        }
-        cout << endl;
+		out << "edges: ";
+		for (Int e = 0; e < N_EDGES; ++e) {
+			Int base = N_HAIR + 2 * e;
+			out << "(" << +half_edges[base] << "," << +half_edges[base + 1] << ")";
+			if (e < N_EDGES - 1) out << ", ";
+		}
+		out << "\n";
 
-        cout << "grade = " << custom_filter() << endl;
-    }
-
+		out << "grade = " << custom_filter() << "\n";
+	}
+	
+	
     bool operator==(Graph const& other) const {
         return half_edges == other.half_edges;
     }

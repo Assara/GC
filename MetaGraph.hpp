@@ -80,4 +80,24 @@ class MetaGraph {
     }
 
 
+	unordered_set<A> component_containing(A a) {
+		bool added_new = true;
+		
+		unordered_set<A> result;
+		result.insert(a);
+		
+		while (added_new) {
+			added_new = false;
+			for (const Edge& edge: edges) {
+				if (result.contains(edge.x)) {
+						added_new |= result.insert(edge.y).second;
+				} else if(result.contains(edge.y)) {
+						added_new |= result.insert(edge.x).second;
+				} 
+			}
+		}
+		
+		return result;
+		
+	}
 };

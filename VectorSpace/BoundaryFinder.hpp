@@ -130,7 +130,6 @@ class BoundaryFinder {
             }
 
             //not necessarly sorted, but that is fine
-            coBoundary.print();
             return coBoundary;
     }
 };
