@@ -2,10 +2,8 @@
 //#include "graph.hpp"
 #include "examplegraphs.hpp"
 
+#include "VectorSpace/LinComb.hpp"
 
-#include "VectorSpace/LinComb.hpp"            // your differential graded vector space
-#include "VectorSpace/BasisElement.hpp"         // BasisElement
-#include "VectorSpace/ValidBasisElement.hpp" // concept enforcement
 
 using namespace std;
 
@@ -19,7 +17,7 @@ void tryFindQuadraticRepresentativeForWheel11() {
     res.getValue().print();
     cout << res.getCoefficient() << endl;
 
-    VectorSpace::LinComb<OddGraphdegZero<wheelSize + 1>, fieldType> dglin = VectorSpace::LinComb<OddGraphdegZero<wheelSize + 1>, fieldType>(res);
+    VectorSpace::LinComb<OddGraphdegZero<wheelSize + 1>, fieldType> dglin(res);
 
     dglin.standardize_all();
 

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "GraphStandardizer.hpp"
 #include "VectorSpace/LinComb.hpp"
 #include "VectorSpace/FiniteSubSpace.hpp"
 #include "VectorSpace/BasisElement.hpp"

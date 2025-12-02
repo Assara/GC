@@ -1,5 +1,7 @@
-#include "graph.cpp"
+#include "graph.hpp"
+#include "GC.hpp"
 
+ 
 using namespace std;
 
 namespace graphaliases {
@@ -7,10 +9,6 @@ namespace graphaliases {
     // Alias for a graph with odd degree zero condition.
     template <Int N>
     using OddGraphdegZero = Graph<N, 2 * N - 2, 0, 0, 0, 1, fieldType>;
-
-    // Alias for the GraphStandadizer corresponding to oddGraphdegZero.
-    template <Int N>
-    using OddGraphdegZeroStandadizer = GraphStandadizer<N, 2 * N - 2, 0, 0, 0, 1, fieldType>;
 
 
     template <Int N>

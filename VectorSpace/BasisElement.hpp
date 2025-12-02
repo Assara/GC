@@ -1,6 +1,5 @@
 #pragma once
 
-#include "../Types.hpp"
 #include "HasCompare.hpp"
 // #include <memory>   // no longer needed
 

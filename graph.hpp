@@ -8,11 +8,12 @@
 #include <unordered_set>
 #include <iostream>
 #include <algorithm>
-#include "Types.hpp"
+#include "types.hpp"
 #include "permutation.hpp"
 #include "CombinatorialUtils.hpp"
 #include "VectorSpace/LinComb.hpp"
 #include "graph_hash.hpp"
+#include "GraphStandardizer.hpp"
 #include <ranges>
 
 using namespace std;
@@ -77,9 +78,15 @@ public:
 
     bool operator<(const Graph& o) const { return compare(o) < 0; }
 
-    static void std(Basis& b);
+    static void std(Basis& b) {
+			GraphStandardizer<N_VERTICES, N_EDGES, N_OUT_HAIR, N_IN_HAIR, c, d, fieldType> s;
+			b = s.standardize(b);
+	}
 
-    static Basis canonized(Basis& b);
+    static Basis canonized(Basis& b) {
+		    GraphStandardizer<N_VERTICES, N_EDGES, N_OUT_HAIR, N_IN_HAIR, c, d, fieldType> s;
+			return s.standardize(b);
+	}
 
     pair<Int, Int> getEdge(Int i) const {
         return { half_edges[N_HAIR + 2 * i], half_edges[N_HAIR + 2 * i + 1] };

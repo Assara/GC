@@ -4,12 +4,12 @@
 #include <iostream>
 #include <numeric>
 #include <cstring>
-#include "Types.hpp"
+#include "types.hpp"
 
 using namespace std;
 
 namespace combutils {
-    bool nextSubset(vector<Int>& S, Int A_max_index) {
+    inline bool nextSubset(vector<Int>& S, Int A_max_index) {
         Int i = 0;
         for (; i < S.size(); ++i) {
             if (S[i] < A_max_index - i) {
@@ -26,8 +26,7 @@ namespace combutils {
         return true;
     }
 
-
-    vector<Int> firstSubset(Int startIndex, Int size) {
+    inline vector<Int> firstSubset(Int startIndex, Int size) {
         vector<Int> subset(size);
         for (Int i = 0; i < size; ++i) {
             subset[i] = startIndex + (size - 1 - i);
@@ -36,7 +35,7 @@ namespace combutils {
     }
 
 
-    bigInt n_splits(bigInt n_adjacent) {
+    inline bigInt n_splits(bigInt n_adjacent) {
         if (n_adjacent < 4) {
             return 0;
         }
@@ -46,7 +45,7 @@ namespace combutils {
 
 
     template<size_t N>
-    signedInt compareHalfEdges(const std::array<Int, N>& a, const std::array<Int, N>& b) {
+    inline signedInt compareHalfEdges(const std::array<Int, N>& a, const std::array<Int, N>& b) {
         return std::memcmp(a.data(), b.data(), N * sizeof(Int));
 
     }

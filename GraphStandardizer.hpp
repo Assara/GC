@@ -1,7 +1,5 @@
-#include "graph.hpp"
 #include <utility>
 #include "VectorSpace/BasisElement.hpp"
-
 
 template <
     Int N_VERTICES,
@@ -12,7 +10,18 @@ template <
     signedInt d,
     typename fieldType
 >
-class GraphStandadizer {
+class Graph;
+
+template <
+    Int N_VERTICES,
+    Int N_EDGES,
+    Int N_OUT_HAIR,
+    Int N_IN_HAIR,
+    signedInt c,
+    signedInt d,
+    typename fieldType
+>
+class GraphStandardizer {
     public:
     using GraphType = Graph<N_VERTICES,N_EDGES,N_OUT_HAIR, N_IN_HAIR,c,d, fieldType>;
 
