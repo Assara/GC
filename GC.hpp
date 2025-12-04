@@ -3,6 +3,7 @@
 #include "VectorSpace/LinComb.hpp"
 #include "VectorSpace/FiniteSubSpace.hpp"
 #include "VectorSpace/BasisElement.hpp"
+#include "VectorSpace/sparse_primitive_finder.hpp"
 
 #include "VectorSpace/BoundaryFinder.hpp"
 
@@ -164,17 +165,33 @@ public:
                 return dThis;
         }
 
-        ContGC add_contractions_to_set(unordered_set<ContGraphType>& seenGraphs) {
+        void add_contractions_to_set(unordered_set<ContGraphType>& seenGraphs) {
                 std::vector<BasisElement<ContGraphType, fieldType>> elems = d_contraction_without_sort();
                 ContGC dThis(std::move(elems), AssumeBasisOrderTag{});
                 
                 dThis.standardize_all();
 
-                for (auto b : dThis.data()) {
+                for (auto b : dThis.data()) {					
                         seenGraphs.insert(b.getValue());
+                }
+        }
+        
+        
+        unordered_map<ContGraphType, bigInt> contractions_count_map() const {
+                std::vector<BasisElement<ContGraphType, fieldType>> elems = d_contraction_without_sort();
+                ContGC dThis(std::move(elems), AssumeBasisOrderTag{});
+                
+                dThis.standardize_all();
+				unordered_map<ContGraphType, bigInt> count_map;
+				count_map.reserve(dThis.size());
+
+
+				
+                for (auto b : dThis.data()) {
+                        count_map[b.getValue()]++;
 
                 }
-                return dThis;
+                return count_map;
         }
 
         ContGC d_contraction_with_recording_seen_gaphs(unordered_set<ContGraphType>& seenGraphs) {
@@ -224,19 +241,34 @@ public:
                 } else {
                         cout << "good coboundary!" << endl;
                 }*/
-
-                unordered_set<ContGraphType> seen_graphs;
-                add_contractions_to_set(seen_graphs);
+                
+                unordered_map<ContGraphType, bigInt> contraction_counts = contractions_count_map();
+                cout << "created contraction counts. total size: " << contraction_counts.size() <<endl;
                 unordered_map<ContGraphType, L> coboundary_map;
+			
+				size_t map_size = 0;
+				for (const auto& gamma : contraction_counts) {
+						if (gamma.second > 1) map_size++;
+				} 
+				
+				cout << "map_size = " << map_size <<  endl;
+				coboundary_map.reserve(map_size);
 
-                for (const auto& gamma : seen_graphs) {
-                        coboundary_map.emplace(gamma, ContGC(gamma, AssumeBasisOrderTag{}).delta().data());
+                for (const auto& gamma : contraction_counts) {
+						if (gamma.second < 2) continue;
+                        coboundary_map.emplace(gamma.first, ContGC(gamma.first, AssumeBasisOrderTag{}).delta().data());
                 }
+                
+                cout << "created couboundary map!" << endl;
 
                 VectorSpace::BoundaryFinder solver(coboundary_map);
                        
+                       
+                cout << "created solver" << endl;
                 std::optional<ContL> primitive_optional = solver.find_primitive_or_empty(this -> data());
 
+
+				cout << "solved "<< endl;
                 return primitive_optional.transform([](ContL lin_comb) { 
                         return ContGC(lin_comb);
                 });

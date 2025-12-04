@@ -13,8 +13,6 @@ using namespace::std;
 
 
 template<typename A, typename B, typename k> 
-requires VectorSpace::ValidBasisElement<A, k> && VectorSpace::ValidBasisElement<B, k>
-
 class MetaGraph {
         using beA = BasisElement<A, k>;
         using lcB = VectorSpace::LinComb<B,k>;

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "BasisElement.hpp"
-#include "ValidBasisElement.hpp"
+#include "HasCanonized.hpp"
 #include <vector>
 #include "tags.hpp"
 
@@ -18,8 +18,12 @@ private:
 public:
     LinComb() = default;
 
-    void standardize_all() 
-    {
+    void standardize_all() {
+		if constexpr (!HasCanonized<T,k>) {
+			cout << "should not use this path!" << endl;
+			return;
+		}
+		
         std::vector<Element> standardized;
 
         for (auto& elem : elements) {
@@ -86,7 +90,13 @@ public:
         while (i < A.size() && j < B.size()) {
             const T& valA = A[i].getValue();
             const T& valB = B[j].getValue();
-            signedInt cmp = valA.compare(valB);
+            
+            signedInt cmp;
+			if constexpr (HasCompare<T>) {
+				cmp = valA.compare(valB);
+			} else {
+				cmp = static_cast<signedInt>((valA > valB) - (valA < valB));
+			}
 
             if (cmp < 0) { 
                 result.push_back(A[i]);

@@ -28,6 +28,8 @@ class BoundaryFinder {
 
     BoundaryFinder(unordered_map<B, VectorSpace::LinComb<A,k>>& delta) {
             coBoundaryRepMap.reserve(delta.size());
+            
+            cout << "reserved coBoundaryRepMap space" << endl;
             size_t a = 0;
 
             //construct the in out maps
@@ -40,10 +42,13 @@ class BoundaryFinder {
                             }
                     }
             }
+            
+            cout << "created coBoundaryRepMap. now reserving matrix of size: " << coBoundaryRepMap.size() * boundaryRepMap.size() << endl;
 
             // create the internal Map 
             deltaRep = FM(coBoundaryRepMap.size(), boundaryRepMap.size());
-
+		
+			cout << "reserved matrix" << endl;
 
             for (size_t i = 0; i < deltaRep.rows(); ++i) {
                     const LinComb<A,k>& linComb = delta[coBoundaryRepMap[i]];
@@ -52,6 +57,9 @@ class BoundaryFinder {
                             deltaRep.set(i, boundaryRepMap.at(elem.getValue()), elem.getCoefficient());
                     }
             }
+            
+            
+			cout << "filled matrix" << endl;
     }
 
 
@@ -109,7 +117,10 @@ class BoundaryFinder {
                      const auto& key = elem.getValue(); 
                      if (auto it = boundaryRepMap.find(key); it != boundaryRepMap.end()) {
                             rep[it->second] = elem.getCoefficient();
-                     }
+                     } else {
+							cout << "Have not enumerated all elements:" << endl;
+							return std::nullopt;
+					}
             }
 
             optional<Col> coBoundaryRep = deltaRep.solve_exact_MT(rep);

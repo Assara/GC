@@ -55,11 +55,19 @@ public:
     T*       operator->()       noexcept { return &value; }
 
     // --- comparisons (value-based) ---
+	signedInt compare(const BasisElement& other) const noexcept {
+		const T& a = value;
+		const T& b = other.value;
 
-    // assumes T has compare(const T&) const -> signedInt
-    signedInt compare(const BasisElement& other) const noexcept {
-        return value.compare(other.value);
-    }
+		if constexpr (HasCompare<T>) {
+			// Underlying value type has its own compare()
+			return a.compare(b);
+		} else {
+			// Fallback: use relational operators (works for size_t, ints, etc.)
+			// (a > b) - (a < b) → -1, 0, +1
+			return static_cast<signedInt>((a > b) - (a < b));
+		}
+	}
 
     bool operator<(const BasisElement& rhs) const noexcept {
         return compare(rhs) < 0;   // strict weak ordering via T::compare

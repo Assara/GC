@@ -63,7 +63,9 @@ template <
 > 
  std::optional<GC<N_VERTICES-1, N_EDGES, 0, 0, 0, 1>> push_down_the_waterfall(GC<N_VERTICES, N_EDGES, 0, 0, 0, 1> gamma) {
     cout << "using push_down_the_waterfall: " ;
-    auto with_edge_diff = gamma.add_edge_differential();    
+    auto with_edge_diff = gamma.add_edge_differential();  
+    cout << "completed edge differential. size = " << with_edge_diff.size() << endl;
+      
     return with_edge_diff
         .try_find_split_primitive();
 }
@@ -89,7 +91,7 @@ void tryFindFullWheel5ClassByWaterfall() {
         cout << "Could not find primitive for step 2!! " << endl;
     }
 
-    
+ 
     auto step3 = push_down_the_waterfall(*step2);
 
     if (!step3) {
@@ -112,14 +114,14 @@ void tryFindFullWheel7ClassByWaterfall() {
 
     auto step1 = push_down_the_waterfall(loop);
 
-    if (!step1) {
+    if (!step1.has_value()) {
         cout << "Could not find primitive for step 1!! " << endl;
     }
 
     
     auto step2 = push_down_the_waterfall(*step1);
 
-    if (!step2) {
+    if (!step2.has_value()) {
         cout << "Could not find primitive for step 2!! " << endl;
     }
 
@@ -189,30 +191,30 @@ void tryFindFullWheel9ClassByWaterfall() {
 
     auto step1 = push_down_the_waterfall(loop);
 
-    if (!step1) {
+    if (!step1.has_value()) {
         cout << "Could not find primitive for step 1!! " << endl;
     }
 	cout << "step 2" << endl;
     
     auto step2 = push_down_the_waterfall(*step1);
 
-    if (!step2) {
+    if (!step2.has_value()) {
         cout << "Could not find primitive for step 2!! " << endl;
     }
 	cout << "step 3" << endl;
     
     auto step3 = push_down_the_waterfall(*step2);
 
-    if (!step3) {
+    if (!step3.has_value()) {
         cout << "Could not find primitive for step 3!! " << endl;
     }
     
     cout << "trying step 4. step3.size() = " << step3 -> size() << endl;
     
-    
+  
     auto step4 = push_down_the_waterfall(*step3);
 
-    if (!step4) {
+    if (!step4.has_value()) {
         cout << "Could not find primitive for step 4!! " << endl;
       
         return;
@@ -223,7 +225,7 @@ void tryFindFullWheel9ClassByWaterfall() {
     cout << "step 5" << endl;
     auto step5 = push_down_the_waterfall(*step4);
 
-    if (!step5) {
+    if (!step5.has_value()) {
         cout << "Could not find primitive for step 5!! " << endl;
     }
     
@@ -232,7 +234,7 @@ void tryFindFullWheel9ClassByWaterfall() {
     cout << "step 6" << endl;
     auto step6 = push_down_the_waterfall(*step5);
 
-    if (!step6) {
+    if (!step6.has_value()) {
         cout << "Could not find primitive for step 6!! " << endl;
     }
     
@@ -240,7 +242,7 @@ void tryFindFullWheel9ClassByWaterfall() {
     
     auto step7 = push_down_the_waterfall(*step6);
 
-    if (!step7) {
+    if (!step7.has_value()) {
         cout << "Could not find primitive for step 7!! " << endl;
     }
 
@@ -277,7 +279,7 @@ void tryFindFullWheel9ClassByWaterfall() {
 
 
 int main() {
-    tryFindFullWheel9ClassByWaterfall();
+    tryFindFullWheel5ClassByWaterfall();
     return 0;
 }
 

@@ -7,7 +7,6 @@
 namespace VectorSpace {
 
 template<typename T, typename k>
-requires ValidBasisElement<T, k>
 class FiniteSubSpace {
 public:
     using FM  = FiniteMatrix<k>;
