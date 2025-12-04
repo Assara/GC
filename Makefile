@@ -4,8 +4,8 @@
 CXX       := clang++
 LD        := clang++
 
-# Automatically include ALL subdirectories
-INC := $(shell find . -type d -printf "-I%p ")
+# Explicit include directories (adjust as needed)
+INC       := -I. -IVectorSpace -Ioutput
 
 # Compiler and linker flags
 CXXFLAGS  := -std=c++23 -O3 -march=native -Wall -Wextra -Wpedantic $(INC) -flto
