@@ -261,13 +261,28 @@ public:
                 
                 cout << "created couboundary map!" << endl;
 
-                VectorSpace::BoundaryFinder solver(coboundary_map);
+                VectorSpace::sparse_primitive_finder solver(coboundary_map);
                        
-                       
+       
                 cout << "created solver" << endl;
                 std::optional<ContL> primitive_optional = solver.find_primitive_or_empty(this -> data());
+                
+                if (!primitive_optional.has_value()) {
+					//try with old dense solver
+		
+					cout << "trying with dense solver" << endl;
 
-
+					VectorSpace::BoundaryFinder solver(coboundary_map);
+						   
+		   
+					cout << "created solver" << endl;
+					primitive_optional = solver.find_primitive_or_empty(this -> data());
+				
+					if (primitive_optional.has_value()) {
+							cout << "sparse solver is bugged" << endl; 
+					}
+				}
+                
 				cout << "solved "<< endl;
                 return primitive_optional.transform([](ContL lin_comb) { 
                         return ContGC(lin_comb);

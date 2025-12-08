@@ -4,12 +4,20 @@
 CXX       := clang++
 LD        := clang++
 
+# SuiteSparse include dir (on Ubuntu)
+SUITESPARSE_INC := -I/usr/include/suitesparse
+
 # Explicit include directories (adjust as needed)
-INC       := -I. -IVectorSpace -Ioutput
+INC       := -I. -IVectorSpace -Ioutput $(SUITESPARSE_INC)
+
+# SuiteSparse libs
+SUITESPARSE_LIBS := \
+    -lspqr -lcholmod -lsuitesparseconfig \
+    -lamd -lcolamd -lcamd -lccolamd -ldl
 
 # Compiler and linker flags
 CXXFLAGS  := -std=c++23 -O3 -march=native -Wall -Wextra -Wpedantic $(INC) -flto
-LDFLAGS   := -flto -fuse-ld=lld
+LDFLAGS   := -flto -fuse-ld=lld $(SUITESPARSE_LIBS)
 
 # Output binary
 TARGET    := gc
@@ -31,7 +39,7 @@ all: $(TARGET)
 
 # Link everything into one optimized binary
 $(TARGET): $(OBJS)
-	@echo "🚧 Linking $(TARGET) with Clang + LLD..."
+	@echo "🚧 Linking $(TARGET) with Clang + LLD + SuiteSparse..."
 	$(LD) $(OBJS) $(LDFLAGS) -o $(TARGET)
 	@echo "✅ Build complete."
 

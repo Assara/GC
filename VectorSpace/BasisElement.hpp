@@ -70,11 +70,11 @@ public:
 	}
 
     bool operator<(const BasisElement& rhs) const noexcept {
-        return compare(rhs) < 0;   // strict weak ordering via T::compare
+		return value < rhs.getValue();
     }
 
     bool operator==(const BasisElement& rhs) const noexcept {
-        return compare(rhs) == 0;  // equality by value (coeff ignored)
+        return value == rhs.getValue(); // equality by value (coeff ignored)
     }
 
     void set_coefficient(k c) noexcept { coefficient = c; }
