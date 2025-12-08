@@ -40,15 +40,10 @@ private:
 			
 			result.sort_without_deduplicate();
 			
-			cout << "something" << endl;
 			return result;
 	}
 	
 	LinComb<B, k> domain_enumeration_inverse(const LinComb<size_t, k>& input) {
-		
-			cout << "using domain_enumeration_inverse! input.size() =" << input.size() << endl;
-			
-			
 			LinComb<B, k> result;
 			
 			for (const auto& be : input) {
@@ -59,16 +54,9 @@ private:
 				} 
 				
 				result.append_in_basis_order(BasisElement(domain_space_enumeration[be.getValue()], be.getCoefficient()));
-			}
-			
-			cout << "finished  domain_enumeration_inverse;" << endl;
-			
-			
-			cout << "domain_enumeration_inverse result above " << endl;
-			
+			}			
 			//result.sort_without_deduplicate(); //this does not have to be sorted for current applications
 			return result;
-	 
 	}
 	
 
@@ -81,16 +69,11 @@ public:
         domain_space_enumeration.reserve(delta.size());
         
         for (const auto& entry : delta) {
-			cout << "domain graph; " << endl;
-			entry.first.print();
-			
+	
             domain_space_enumeration.push_back(entry.first);   // each B becomes a row
-            
-			cout << "finished domain_space_enumeration " << endl;
-            
+  
 			map_representative.add_col(map_to_enumeration_basis(entry.second));
 			
-			cout << "finished map_representative.add_row " << endl;
         }
   
   
@@ -100,8 +83,6 @@ public:
 
 	std::optional<LinComb<B,k>> find_primitive_or_empty(LinComb<A,k> y) {
 		cout << "using sparse_primitive_finder for LinComb:" << endl;
-		
-		y.print();
 		
 		
 		auto y_enumerated = map_to_enumeration_basis(y);

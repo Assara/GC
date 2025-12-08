@@ -18,112 +18,112 @@ Coefficient: 12012
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,3), (1,4), (1,6), (2,5), (3,6), (4,7), (5,7), (6,7)
 grade = 8
-Coefficient: 3857
+Coefficient: 2180
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,3), (1,4), (2,3), (2,6), (4,7), (5,6), (5,7), (6,7)
 grade = 6
-Coefficient: 21588
+Coefficient: 4241
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,3), (1,4), (2,5), (2,6), (3,6), (4,7), (5,7), (6,7)
 grade = 6
-Coefficient: 28484
+Coefficient: 15079
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,3), (1,4), (2,5), (3,6), (4,7), (5,6), (5,7), (6,7)
 grade = 6
-Coefficient: 21219
+Coefficient: 22870
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,3), (1,4), (2,6), (2,7), (3,5), (4,6), (5,7), (6,7)
 grade = 6
-Coefficient: 11564
+Coefficient: 9913
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,3), (1,6), (1,7), (2,4), (3,5), (4,6), (5,7), (6,7)
 grade = 8
-Coefficient: 16271
+Coefficient: 354
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,3), (1,6), (1,7), (2,4), (3,6), (4,5), (5,7), (6,7)
 grade = 8
-Coefficient: 9469
+Coefficient: 11146
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,3), (1,6), (1,7), (2,4), (3,6), (4,7), (5,6), (5,7)
 grade = 8
-Coefficient: 21808
+Coefficient: 3265
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,3), (1,6), (2,4), (2,6), (3,5), (4,7), (5,7), (6,7)
 grade = 6
-Coefficient: 15085
+Coefficient: 781
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,3), (1,6), (2,4), (2,7), (3,5), (4,6), (5,7), (6,7)
 grade = 6
-Coefficient: 32243
+Coefficient: 264
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,3), (1,6), (2,4), (2,7), (3,5), (4,7), (5,6), (6,7)
 grade = 6
-Coefficient: 8390
+Coefficient: 25439
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,3), (1,6), (2,4), (2,7), (3,6), (4,7), (5,6), (5,7)
 grade = 6
-Coefficient: 5317
+Coefficient: 3887
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,3), (1,6), (2,4), (2,7), (3,7), (4,6), (5,6), (5,7)
 grade = 6
-Coefficient: 12536
+Coefficient: 16699
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,3), (1,6), (2,4), (3,5), (4,6), (4,7), (5,7), (6,7)
 grade = 6
-Coefficient: 16512
+Coefficient: 32429
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,3), (1,6), (2,4), (3,6), (4,5), (4,7), (5,7), (6,7)
 grade = 6
-Coefficient: 4576
+Coefficient: 21052
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,3), (1,6), (2,4), (3,6), (4,7), (5,6), (5,7), (6,7)
 grade = 6
-Coefficient: 2860
+Coefficient: 2691
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,3), (1,6), (2,4), (3,7), (4,5), (4,6), (5,7), (6,7)
 grade = 6
-Coefficient: 20847
+Coefficient: 21406
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,3), (1,6), (2,4), (3,7), (4,5), (4,7), (5,6), (6,7)
 grade = 6
-Coefficient: 31676
+Coefficient: 17020
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,3), (1,6), (2,4), (3,7), (4,5), (5,6), (5,7), (6,7)
 grade = 6
-Coefficient: 1833
+Coefficient: 31262
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,3), (1,6), (2,4), (3,7), (4,6), (4,7), (5,6), (5,7)
 grade = 6
-Coefficient: 29371
+Coefficient: 18319
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,3), (1,6), (2,4), (3,7), (4,6), (5,6), (5,7), (6,7)
 grade = 6
-Coefficient: 31597
+Coefficient: 427
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,3), (1,6), (2,4), (3,7), (4,7), (5,6), (5,7), (6,7)
 grade = 6
-Coefficient: 7714
+Coefficient: 4360
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,3), (1,6), (2,6), (2,7), (3,4), (4,5), (5,7), (6,7)
@@ -133,170 +133,170 @@ Coefficient: 20771
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,3), (1,6), (2,6), (2,7), (3,4), (4,7), (5,6), (5,7)
 grade = 6
-Coefficient: 1385
+Coefficient: 29163
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,3), (1,6), (2,6), (2,7), (3,7), (4,5), (4,6), (5,7)
 grade = 6
-Coefficient: 7064
+Coefficient: 22279
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,3), (1,6), (2,6), (3,7), (4,5), (4,6), (4,7), (5,7)
 grade = 6
-Coefficient: 9817
+Coefficient: 24304
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,3), (1,6), (2,6), (3,7), (4,5), (4,6), (5,7), (6,7)
 grade = 6
-Coefficient: 7725
+Coefficient: 10456
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,6), (1,7), (2,3), (3,4), (4,6), (5,6), (5,7), (6,7)
 grade = 6
-Coefficient: 30950
+Coefficient: 1521
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,6), (1,7), (2,3), (3,6), (3,7), (4,5), (4,6), (5,7)
 grade = 6
-Coefficient: 31664
+Coefficient: 488
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,6), (1,7), (2,3), (3,6), (4,5), (4,6), (4,7), (5,7)
 grade = 6
-Coefficient: 21133
+Coefficient: 10000
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,6), (1,7), (2,3), (3,6), (4,5), (4,6), (5,7), (6,7)
 grade = 6
-Coefficient: 3019
+Coefficient: 30835
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,6), (1,7), (2,6), (3,4), (3,5), (4,6), (5,7), (6,7)
 grade = 6
-Coefficient: 10585
+Coefficient: 13147
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (0,5), (1,2), (1,6), (1,7), (2,6), (3,4), (3,6), (4,7), (5,6), (5,7)
 grade = 6
-Coefficient: 16317
+Coefficient: 13755
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (1,2), (1,3), (1,5), (2,4), (2,6), (3,5), (3,6), (4,7), (5,7), (6,7)
 grade = 4
-Coefficient: 32523
+Coefficient: 26740
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (1,2), (1,3), (1,5), (2,4), (2,6), (3,5), (3,7), (4,6), (5,7), (6,7)
 grade = 4
-Coefficient: 28601
+Coefficient: 1601
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (1,2), (1,3), (1,5), (2,4), (2,6), (3,5), (3,7), (4,7), (5,6), (6,7)
 grade = 4
-Coefficient: 4897
+Coefficient: 29159
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (1,2), (1,3), (1,5), (2,4), (2,6), (3,5), (4,7), (5,6), (5,7), (6,7)
 grade = 4
-Coefficient: 12407
+Coefficient: 23973
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (1,2), (1,3), (1,5), (2,4), (2,6), (3,6), (3,7), (4,5), (5,7), (6,7)
 grade = 4
-Coefficient: 1209
+Coefficient: 14205
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (1,2), (1,3), (1,5), (2,4), (2,6), (3,6), (3,7), (4,7), (5,6), (5,7)
 grade = 4
-Coefficient: 1965
+Coefficient: 3052
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (1,2), (1,3), (1,5), (2,4), (2,6), (3,7), (4,5), (5,6), (5,7), (6,7)
 grade = 4
-Coefficient: 15733
+Coefficient: 28950
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (1,2), (1,3), (1,5), (2,4), (2,6), (3,7), (4,7), (5,6), (5,7), (6,7)
 grade = 4
-Coefficient: 17698
+Coefficient: 32002
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (1,2), (1,3), (1,5), (2,4), (3,6), (4,5), (4,7), (5,6), (5,7), (6,7)
 grade = 4
-Coefficient: 20376
+Coefficient: 8810
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (1,2), (1,3), (1,5), (2,4), (3,6), (4,6), (4,7), (5,6), (5,7), (6,7)
 grade = 4
-Coefficient: 29923
+Coefficient: 30092
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (1,2), (1,3), (1,5), (2,6), (2,7), (3,4), (4,5), (4,6), (5,7), (6,7)
 grade = 4
-Coefficient: 31379
+Coefficient: 32687
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (1,2), (1,3), (1,5), (2,6), (2,7), (3,4), (4,6), (5,6), (5,7), (6,7)
 grade = 4
-Coefficient: 20402
+Coefficient: 4668
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (1,2), (1,3), (1,5), (2,6), (2,7), (3,6), (3,7), (4,5), (4,6), (5,7)
 grade = 4
-Coefficient: 6268
+Coefficient: 24741
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (1,2), (1,3), (1,5), (2,6), (2,7), (3,6), (4,5), (4,6), (4,7), (5,7)
 grade = 4
-Coefficient: 22433
+Coefficient: 885
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (1,2), (1,3), (1,5), (2,6), (2,7), (3,6), (4,5), (4,6), (5,7), (6,7)
 grade = 4
-Coefficient: 10849
+Coefficient: 11936
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (1,2), (1,3), (1,5), (2,6), (2,7), (3,6), (4,5), (4,7), (5,7), (6,7)
 grade = 4
-Coefficient: 11564
+Coefficient: 9913
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (1,2), (1,3), (1,5), (2,6), (3,7), (4,5), (4,6), (4,7), (5,6), (6,7)
 grade = 4
-Coefficient: 28404
+Coefficient: 24272
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (1,2), (1,5), (1,6), (2,3), (3,5), (3,6), (4,5), (4,7), (5,7), (6,7)
 grade = 4
-Coefficient: 12314
+Coefficient: 28054
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (1,2), (1,5), (1,6), (2,3), (3,5), (3,7), (4,5), (4,6), (5,7), (6,7)
 grade = 4
-Coefficient: 26831
+Coefficient: 3794
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (1,2), (1,5), (1,6), (2,3), (3,5), (3,7), (4,6), (4,7), (5,6), (5,7)
 grade = 4
-Coefficient: 15800
+Coefficient: 20541
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (1,2), (1,5), (1,6), (2,3), (3,5), (3,7), (4,6), (4,7), (5,6), (6,7)
 grade = 4
-Coefficient: 30326
+Coefficient: 31587
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (1,2), (1,5), (1,6), (2,3), (3,5), (4,5), (4,6), (4,7), (5,7), (6,7)
 grade = 4
-Coefficient: 32094
+Coefficient: 30664
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (1,2), (1,5), (1,6), (2,7), (3,4), (3,5), (3,7), (4,6), (5,6), (6,7)
 grade = 4
-Coefficient: 11967
+Coefficient: 16268
 
 printing graph:
 edges: (0,1), (0,2), (0,3), (0,4), (1,2), (1,5), (1,6), (2,7), (3,5), (3,6), (3,7), (4,5), (4,7), (6,7)
 grade = 4
-Coefficient: 30955
+Coefficient: 32575
 

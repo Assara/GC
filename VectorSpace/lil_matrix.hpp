@@ -209,7 +209,7 @@ public:
 			if (r < 0) {
 				// free variable ⇒ choose 0
 				continue;
-			}
+			}	
 			k x_col = b[static_cast<std::size_t>(r)];
 			if (x_col != k{}) {
 				solution.append_in_basis_order(col, x_col); // domain index
