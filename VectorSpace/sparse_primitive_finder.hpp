@@ -1,7 +1,7 @@
 #pragma once
 
 #include "LinComb.hpp"
-#include "lil_matrix.hpp"
+#include "row_based_lil_matrix.hpp"
 
 #include <vector>
 #include <unordered_map>
@@ -19,7 +19,7 @@ class sparse_primitive_finder {
 
 private:
     std::vector<B> domain_space_enumeration;               // row index -> B basis element
-    lil_matrix<k> map_representative;                           // map B -> A
+    row_based_lil_matrix<k> map_representative;                           // map B -> A
     std::unordered_map<A, std::size_t> image_space_enumeration; // A basis -> column index
     
   
@@ -39,7 +39,6 @@ private:
 			
 			
 			result.sort_without_deduplicate();
-			
 			return result;
 	}
 	
@@ -72,14 +71,21 @@ public:
 	
             domain_space_enumeration.push_back(entry.first);   // each B becomes a row
   
-			map_representative.add_col(map_to_enumeration_basis(entry.second));
+			size_t domain_index = domain_space_enumeration.size() -1; 
+  
+			auto col = map_to_enumeration_basis(entry.second);
+  
+			for (auto& be : col) {
+					map_representative.add_element(be.getValue(), domain_index, be.getCoefficient());
+			}
+			
 			
         }
   
-  
+			
 		cout << "finished contructing sparse matrix and enumeration maps " << endl; 
+		delta.clear();
     }
-
 
 	std::optional<LinComb<B,k>> find_primitive_or_empty(LinComb<A,k> y) {
 		cout << "using sparse_primitive_finder for LinComb:" << endl;

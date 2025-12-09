@@ -280,6 +280,4 @@ public:
         DomainVec solution = back_substitute(rows, b, pivot_col_for_row, rank);
         return solution;
     }
-    
-   
 };
