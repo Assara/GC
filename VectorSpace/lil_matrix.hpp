@@ -67,161 +67,219 @@ public:
 		}
         return result;
     }
+  
+
+
+private: //solver helpers
+    using RowSystem   = std::vector<DomainVec>;
+    using DenseVector = std::vector<k>;
+
+    // Coefficient of variable `col` in a row
+    static k get_coeff_in_col(const DomainVec& row, std::size_t col) {
+        for (const auto& term : row) {
+            std::size_t j = term.getValue();
+            if (j == col) return term.getCoefficient();
+            if (j > col) break; // basis-order invariant
+        }
+        return k{};
+    }
+
+    // Build row-wise representation rows[i] from cols_
+    void build_rows_from_columns(RowSystem& rows) const {
+        const std::size_t m = image_dim_;
+        const std::size_t n = cols_.size();
+
+        rows.assign(m, DomainVec{});
+
+        for (std::size_t j = 0; j < n; ++j) {
+            const ImageVec& col = cols_[j];
+            for (const auto& term : col) {
+                std::size_t i = term.getValue();  // row index in image
+                if (i >= m) continue;             // or assert
+                k coeff = term.getCoefficient();
+                if (coeff != k{}) {
+                    rows[i].append_in_basis_order(j, coeff); // var j
+                }
+            }
+        }
+    }
+
+    // Build dense RHS b from sparse y
+    void build_rhs_from_y(const ImageVec& y, DenseVector& b) const {
+        const std::size_t m = image_dim_;
+        b.assign(m, k{});
+        for (const auto& term : y) {
+            std::size_t i = term.getValue(); // row index
+            if (i < m) {
+                b[i] = term.getCoefficient();
+            }
+        }
+    }
+
+    // Forward elimination: put (rows, b) into row-echelon form
+    // Returns the rank and fills pivot_row_for_col, pivot_col_for_row.
+    std::size_t forward_elimination(
+        RowSystem& rows,
+        DenseVector& b,
+        std::vector<int>& pivot_row_for_col,
+        std::vector<int>& pivot_col_for_row
+    ) const {
+        const std::size_t m = rows.size();
+        const std::size_t n = cols_.size();
+
+        pivot_row_for_col.assign(n, -1);
+        pivot_col_for_row.assign(m, -1);
+
+        std::size_t pivot_row = 0;
+        const std::size_t max_rank = std::min(m, n);
+
+        for (std::size_t col = 0; col < n && pivot_row < max_rank; ++col) {
+            // Find pivot row with nonzero coeff in column `col`
+            std::size_t pivot = pivot_row;
+            while (pivot < m && get_coeff_in_col(rows[pivot], col) == k{}) {
+                ++pivot;
+            }
+            if (pivot == m) {
+                // No pivot in this column ⇒ free variable
+                continue;
+            }
+
+            // Swap pivot row up
+            if (pivot != pivot_row) {
+                std::swap(rows[pivot], rows[pivot_row]);
+                std::swap(b[pivot],    b[pivot_row]);
+            }
+
+            // Normalize pivot row so that coeff in column `col` is 1
+            k pivot_val = get_coeff_in_col(rows[pivot_row], col);
+            // Adjust depending on your field type:
+            //   k inv_pivot = pivot_val.inv();
+            k inv_pivot = k{1} / pivot_val;
+
+            rows[pivot_row].scalar_multiply(inv_pivot);
+            b[pivot_row] *= inv_pivot;
+
+            // Eliminate this variable from rows BELOW the pivot row
+            for (std::size_t i = pivot_row + 1; i < m; ++i) {
+                k factor = get_coeff_in_col(rows[i], col);
+                if (factor == k{}) continue;
+
+                // row_i ← row_i - factor * row_pivot
+                rows[i] = rows[i].add_scaled(rows[pivot_row], -factor);
+                b[i]   -= factor * b[pivot_row];
+            }
+
+            pivot_row_for_col[col]       = static_cast<int>(pivot_row);
+            pivot_col_for_row[pivot_row] = static_cast<int>(col);
+            ++pivot_row;
+        }
+
+        return pivot_row; // rank
+    }
+
+    // Check for inconsistency: row = 0 but RHS != 0
+    static bool has_inconsistency(const RowSystem& rows, const DenseVector& b) {
+        const std::size_t m = rows.size();
+
+        auto is_zero_row = [](const DomainVec& row) {
+            for (const auto& term : row) {
+                if (term.getCoefficient() != k{}) return false;
+            }
+            return true;
+        };
+
+        for (std::size_t i = 0; i < m; ++i) {
+            if (is_zero_row(rows[i]) && b[i] != k{}) {
+                return true; // 0 = nonzero ⇒ no solution
+            }
+        }
+        return false;
+    }
+
+    // Back-substitution given row-echelon form
+    DomainVec back_substitute(
+        const RowSystem& rows,
+        const DenseVector& b,
+        const std::vector<int>& pivot_col_for_row,
+        std::size_t rank
+    ) const {
+        const std::size_t n = cols_.size();
+        std::vector<k> x(n, k{}); // dense domain vector
+
+        if (rank > 0) {
+            // Work from last pivot row up to first
+            for (int i = static_cast<int>(rank) - 1; i >= 0; --i) {
+                int pc = pivot_col_for_row[static_cast<std::size_t>(i)];
+                if (pc < 0) continue; // shouldn't happen for i < rank
+
+                std::size_t col = static_cast<std::size_t>(pc);
+
+                // sum_{j != col} a_ij * x_j
+                k sum = k{};
+                const DomainVec& row = rows[static_cast<std::size_t>(i)];
+                for (const auto& term : row) {
+                    std::size_t j = term.getValue();
+                    if (j == col) continue;
+                    if (x[j] != k{}) {
+                        sum += term.getCoefficient() * x[j];
+                    }
+                }
+
+                // pivot coefficient is 1 after normalization
+                x[col] = b[static_cast<std::size_t>(i)] - sum;
+            }
+        }
+
+        // Convert dense x into sparse DomainVec
+        DomainVec solution;
+        solution.reserve(n);
+        for (std::size_t col = 0; col < n; ++col) {
+            if (x[col] != k{}) {
+                solution.append_in_basis_order(col, x[col]);
+            }
+        }
+        solution.shrink_to_fit();
+        return solution;
+    }
     
-    
-    
-    
+public:
     std::optional<DomainVec> solve_MX_equals_y(const ImageVec& y) const {
-		const std::size_t m = image_dim_;      // number of rows (Image dimension)
-		const std::size_t n = cols_.size();    // number of columns (Domain dimension)
+        const std::size_t m = image_dim_;
+        const std::size_t n = cols_.size();
 
-		// Trivial cases
-		if (m == 0 || n == 0) {
-			// 0 * X = y  ⇒ solvable iff y == 0
-			for (const auto& term : y) {
-				if (term.getCoefficient() != k{}) {
-					return std::nullopt;
-				}
-			}
-			return DomainVec{}; // X = 0
-		}
+        // Trivial cases
+        if (m == 0 || n == 0) {
+            // 0 * X = y  ⇒ solvable iff y == 0
+            for (const auto& term : y) {
+                if (term.getCoefficient() != k{}) {
+                    return std::nullopt;
+                }
+            }
+            return DomainVec{}; // X = 0
+        }
 
-		// --- Build row-wise representation from columns ---
+        // 1. Build rows and RHS
+        RowSystem rows;
+        DenseVector b;
+        build_rows_from_columns(rows);
+        build_rhs_from_y(y, b);
 
-		// rows[i]: equation for row i, as a LinComb of domain indices (0..n-1)
-		std::vector<DomainVec> rows(m);
+        // 2. Forward elimination
+        std::vector<int> pivot_row_for_col;
+        std::vector<int> pivot_col_for_row;
+        std::size_t rank = forward_elimination(
+            rows, b, pivot_row_for_col, pivot_col_for_row
+        );
 
-		// For each column j (domain index), distribute its entries into rows[i]
-		for (std::size_t j = 0; j < n; ++j) {
-			const ImageVec& col = cols_[j];
-			for (const auto& term : col) {
-				std::size_t i = term.getValue();  // image index (row)
-				if (i >= m) {
-					// If this ever triggers, image_dim_ is inconsistent with col indices.
-					continue;                     // or assert(false);
-				}
-				k coeff = term.getCoefficient();
-				if (coeff != k{}) {
-					// variable j appears in row i with coefficient 'coeff'
-					rows[i].append_in_basis_order(j, coeff);
-				}
-			}
-		}
+        // 3. Inconsistency check
+        if (has_inconsistency(rows, b)) {
+            return std::nullopt;
+        }
 
-		// --- Build RHS vector b from y (dense length m) ---
-
-		std::vector<k> b(m, k{});
-		for (const auto& term : y) {
-			std::size_t i = term.getValue();      // row index
-			if (i < m) {
-				b[i] = term.getCoefficient();
-			}
-		}
-
-		// Helper: get coefficient of variable 'col' in a row
-		auto get_coeff = [](const DomainVec& row, std::size_t col) -> k {
-			for (const auto& term : row) {
-				std::size_t j = term.getValue();
-				if (j == col) return term.getCoefficient();
-				if (j > col) break;               // rows are kept sorted
-			}
-			return k{}; // zero
-		};
-
-		// pivot_row_for_col[j] = index of pivot row for variable j, or -1 if free
-		std::vector<int> pivot_row_for_col(n, -1);
-
-		std::size_t pivot_row = 0;
-
-		// --- Sparse Gaussian elimination on rows ---
-
-		for (std::size_t col = 0; col < n && pivot_row < m; ++col) {
-			// find pivot row with nonzero coeff in column 'col'
-			std::size_t pivot = pivot_row;
-			while (pivot < m && get_coeff(rows[pivot], col) == k{}) {
-				++pivot;
-			}
-
-			if (pivot == m) {
-				// no pivot in this column ⇒ free variable
-				continue;
-			}
-
-			// swap pivot row up
-			if (pivot != pivot_row) {
-				std::swap(rows[pivot], rows[pivot_row]);
-				std::swap(b[pivot],    b[pivot_row]);
-			}
-
-			// normalize pivot row so that coeff in column 'col' is 1
-			k pivot_val = get_coeff(rows[pivot_row], col);
-			// Use whatever inverse you use for k:
-			//   k inv_pivot = pivot_val.inv();
-			// or, if appropriate:
-			k inv_pivot = k{1} / pivot_val;
-
-			rows[pivot_row].scalar_multiply(inv_pivot);
-			b[pivot_row] *= inv_pivot;
-
-			// eliminate this variable from all other rows
-			for (std::size_t i = 0; i < m; ++i) {
-				if (i == pivot_row) continue;
-
-				k factor = get_coeff(rows[i], col);
-				if (factor == k{}) continue;
-
-				// row_i ← row_i - factor * row_pivot
-				DomainVec tmp = rows[pivot_row];   // copy pivot row
-				tmp.scalar_multiply(-factor);
-				rows[i] += tmp;                    // uses LinComb::operator+=
-
-				// *** THIS WAS MISSING BEFORE: update RHS as well ***
-				b[i] -= factor * b[pivot_row];
-			}
-
-			pivot_row_for_col[col] = static_cast<int>(pivot_row);
-			++pivot_row;
-		}
-
-		// --- Check for inconsistency: 0 ... 0 = nonzero ---
-
-		auto is_zero_row = [](const DomainVec& row) {
-			for (const auto& term : row) {
-				if (term.getCoefficient() != k{}) return false;
-			}
-			return true;
-		};
-
-		for (std::size_t i = 0; i < m; ++i) {
-			if (is_zero_row(rows[i]) && b[i] != k{}) {
-				// 0 = nonzero ⇒ no solution
-				return std::nullopt;
-			}
-		}
-
-		// --- Read off one particular solution: free vars = 0 (no support minimization) ---
-
-		DomainVec solution;
-		solution.reserve(n);
-
-		for (std::size_t col = 0; col < n; ++col) {
-			int r = pivot_row_for_col[col];
-			if (r < 0) {
-				// free variable ⇒ choose 0
-				continue;
-			}	
-			k x_col = b[static_cast<std::size_t>(r)];
-			if (x_col != k{}) {
-				solution.append_in_basis_order(col, x_col); // domain index
-			}
-		}
-
-		solution.shrink_to_fit();
-		return solution;
-	}
-
-	
-
+        // 4. Back-substitution (free vars = 0)
+        DomainVec solution = back_substitute(rows, b, pivot_col_for_row, rank);
+        return solution;
+    }
     
    
 };

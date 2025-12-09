@@ -152,6 +152,9 @@ void tryFindFullWheel7ClassByWaterfall() {
 	MetaGraph metaGraph(W7_class.map_split_differential());
 	
 	
+	
+	cout << "W7 size before filtering: " << W7_class.size() << endl;
+	
 	unordered_set<OddGraphdegZero<8>> important_graphs = metaGraph.component_containing(wheel_graph<7>().canonical_represesentation());
 	
 
@@ -159,8 +162,6 @@ void tryFindFullWheel7ClassByWaterfall() {
 
 
 	auto W7_class_filtered = W7_class.filtered(important_graphs);
-	
-
 	
 	
 	auto d_W7_class = W7_class_filtered.delta();

@@ -184,8 +184,6 @@ public:
                 dThis.standardize_all();
 				unordered_map<ContGraphType, bigInt> count_map;
 				count_map.reserve(dThis.size());
-
-
 				
                 for (auto b : dThis.data()) {
                         count_map[b.getValue()]++;

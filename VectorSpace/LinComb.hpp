@@ -83,7 +83,6 @@ public:
         elements.emplace_back(val, coeff);
     }
 
-
     void append_in_basis_order(const Element& be) {
         elements.emplace_back(be);
     }
@@ -148,6 +147,58 @@ public:
 		*this = *this + other;
 		return *this;
 	}
+	
+	LinComb add_scaled(const LinComb& other, k scalar) {
+		LinComb result;
+		if (scalar == k{} || other.size() == 0) {
+			return *this; 
+		}
+
+		const auto& A = this->elements;
+		const auto& B = other.elements;
+		
+		result.reserve(A.size() + B.size());
+
+		std::size_t i = 0, j = 0;
+
+		while (i < A.size() && j < B.size()) {
+			const T& valA = A[i].getValue();
+			const T& valB = B[j].getValue();
+
+			signedInt cmp;
+			if constexpr (HasCompare<T>) {
+				cmp = valA.compare(valB);
+			} else {
+				cmp = static_cast<signedInt>((valA > valB) - (valA < valB));
+			}
+
+			if (cmp < 0) {
+				result.append_in_basis_order(A[i]);
+				++i;
+			} else if (cmp > 0) {
+				result.append_in_basis_order(B[j].getValue(), B[j].getCoefficient() * scalar);
+				++j;
+			} else {
+				k sumCoeff = A[i].getCoefficient() + B[j].getCoefficient() * scalar;
+				if (sumCoeff != k{}) {
+					result.append_in_basis_order(valA, sumCoeff);
+				}
+				++i;
+				++j;
+			}
+		}
+
+		while (i < A.size()) {
+			result.append_in_basis_order(A[i++]);
+		}
+		while (j < B.size()) {
+			result.append_in_basis_order(B[j].getValue(), B[j].getCoefficient() * scalar);
+			++j;
+		}
+		
+		return result;
+	}
+	
 
     bigInt size() const {
         return elements.size();
@@ -222,6 +273,11 @@ public:
             }
             return *this;
     }
+	
+    
+    LinComb& operator*=(k scalar) {
+			return scalar_multiply(scalar);
+	}
 
     LinComb operator*(k scalar) const {
         LinComb result = *this;
