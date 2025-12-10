@@ -287,10 +287,37 @@ public:
         return false;
 
     }
-
-    static BasisElement<ContGraph, fieldType> contract_edge(const BasisElement<ThisGraph, fieldType>& be, Int i) {
-            const auto& half_edges = be.getValue().half_edges;
-
+    
+    VectorSpace::LinComb<ContGraph, fieldType> contraction_differential(fieldType k) const {
+		
+		VectorSpace::LinComb<ContGraph, fieldType> result;
+		
+		for(Int i = 0; i < N_EDGES_; i++) {
+				result.append_in_basis_order(contract_edge(i, k));
+		}
+		result.standardize_and_sort();
+		return result;
+	}
+	
+	unordered_set<ContGraph> contraction_set() const {
+		
+		unordered_set<ContGraph> result;
+		result.reserve(N_EDGES_);
+		
+		for(Int i = 0; i < N_EDGES_; i++) {
+				auto be = contract_edge(i, fieldType{1});
+				ContGraph::std(be);
+				
+				if (be.getCoefficient() != fieldType{0}) {
+						result.emplace(be.getValue());
+				}		 
+		}
+		return result;
+	}
+	
+    
+    
+    BasisElement<ContGraph, fieldType> contract_edge(Int i, fieldType k) const {
             const Int edge_index = N_HAIR + 2 * i;
             const Int contraction_vertex = min(half_edges[edge_index], half_edges[edge_index + 1]);
             const Int deletion_vertex = max(half_edges[edge_index], half_edges[edge_index + 1]);
@@ -300,7 +327,7 @@ public:
                     return BasisElement<ContGraph, fieldType>(ContGraph{}, static_cast<fieldType>(0));
             }
 
-            BasisElement<ContGraph, fieldType> contracted(ContGraph(), be.getCoefficient());
+            BasisElement<ContGraph, fieldType> contracted(ContGraph(), k);
  
             for (Int j = 0; j < edge_index; ++j) {
                     contracted.getValue().half_edges[j] =  
@@ -325,6 +352,11 @@ public:
             }
 
             return contracted;
+	}
+    
+
+    static BasisElement<ContGraph, fieldType> contract_edge(const BasisElement<ThisGraph, fieldType>& be, Int i) {
+            return be.getValue().contract_edge(i, be.getCoefficient());
     }
 
     static Int contraction_value(Int v, Int contraction_vertex, Int deletion_vertex) {

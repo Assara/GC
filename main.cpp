@@ -221,8 +221,6 @@ void tryFindFullWheel9ClassByWaterfall() {
         return;
     }
     
-    
-    
     cout << "step 5" << endl;
     auto step5 = push_down_the_waterfall(*step4);
 
@@ -280,7 +278,7 @@ void tryFindFullWheel9ClassByWaterfall() {
 
 
 int main() {
-    tryFindFullWheel9ClassByWaterfall();
+    tryFindFullWheel7ClassByWaterfall();
     return 0;
 }
 

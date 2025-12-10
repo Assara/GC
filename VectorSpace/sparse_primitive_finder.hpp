@@ -66,7 +66,7 @@ public:
     // -----------------------------------------------------
     sparse_primitive_finder(std::unordered_map<B, LinComb<A,k>>& delta) {
         domain_space_enumeration.reserve(delta.size());
-        
+        size_t n_matrix_entries = 0;
         for (const auto& entry : delta) {
 	
             domain_space_enumeration.push_back(entry.first);   // each B becomes a row
@@ -75,15 +75,21 @@ public:
   
 			auto col = map_to_enumeration_basis(entry.second);
   
+
 			for (auto& be : col) {
 					map_representative.add_element(be.getValue(), domain_index, be.getCoefficient());
+					n_matrix_entries++;
 			}
 			
+
 			
         }
   
-			
-		cout << "finished contructing sparse matrix and enumeration maps " << endl; 
+  
+		cout << "created sparse solver: domain_dim = " << domain_space_enumeration.size() << endl
+				<< "image_space_dim = " <<  image_space_enumeration.size() << endl
+				<< "number of matrix entries =" <<  n_matrix_entries << endl;
+		
 		delta.clear();
     }
 
@@ -95,9 +101,10 @@ public:
 		
 		cout << "mapped to enumeration!!!" << endl;
 		
+		//we do not need this anymore, but we do need heap space.
+		image_space_enumeration.clear();
 		
 		auto X_enumerated = map_representative.solve_MX_equals_y(y_enumerated);
-		
 		
 		cout << "solved!!!" << endl;
 		

@@ -203,6 +203,15 @@ public:
     bigInt size() const {
         return elements.size();
     }
+    
+    bool empty() const {
+        return elements.empty();
+    }
+    
+    bool is_zero() const {
+        return elements.empty();
+    }
+    
 
     void add(const LinComb& other) {
         *this += other;

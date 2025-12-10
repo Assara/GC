@@ -171,8 +171,8 @@ public:
                 
                 dThis.standardize_all();
 
-                for (auto b : dThis.data()) {					
-                        seenGraphs.insert(b.getValue());
+                for (auto b : dThis.data()) {	
+						if (b.getCoefficient != fieldType{}) seenGraphs.insert(b.getValue());
                 }
         }
         
@@ -211,9 +211,7 @@ public:
                         seenGraphs.insert(b.getValue());
 
                 }
-
-
-
+                
                 dThis.sort_elements();
                 return dThis;
         }
@@ -228,8 +226,71 @@ public:
         void add(BasisElement<GraphType, fieldType>&& elem) {
                 vec.add(VectorSpace::LinComb<GraphType, fieldType>(std::move(elem)));
         }
-
-
+        
+        
+        
+        std::optional<ContGC> try_find_split_primitive2() {
+				unordered_map<GraphType, unordered_set<ContGraphType>> contraction_cache;
+				unordered_map<GraphType, SplitL> split_diff;
+				
+				contraction_cache.reserve(size());
+				
+				
+				for (const auto& be : data()) {
+						contraction_cache.emplace(be.getValue(), be.getValue().contraction_set());
+						split_diff.emplace(be.getValue(), be.getValue().split_vertex_differential(be.getCoefficient()));
+				}
+				
+				cout << "created contraction cache and split diff" << endl;
+				
+				MetaGraph split_meta_graph(split_diff);
+				
+				cout << "Created meta graph" << endl;
+				split_diff.clear();
+				
+				unordered_map<ContGraphType, L> upper_split_diff;
+				for (const auto& meta_edge : split_meta_graph) {						
+						for (const ContGraphType& g : contraction_cache[meta_edge.x]) {
+									if (!contraction_cache[meta_edge.y].contains(g)) { 
+										continue;
+									}
+									//we are in the intersection
+									
+									if (!upper_split_diff.contains(g)) {
+										upper_split_diff.emplace(g, g.split_vertex_differential(fieldType{1}));
+									}
+									break;
+					
+							}
+				} 
+				
+				for (const GraphType& h: split_meta_graph.hair) {
+						for (const ContGraphType& g: contraction_cache[h]) {
+								upper_split_diff.emplace(g, g.split_vertex_differential(fieldType{1}));
+						}
+				}
+				cout << "created upper split differential. size = " << upper_split_diff.size();
+				contraction_cache.clear();
+				
+				
+				//todo: also clear split_meta_graph
+				
+				
+				VectorSpace::sparse_primitive_finder solver(upper_split_diff);
+                       
+       
+                cout << "created solver" << endl;
+                std::optional<ContL> primitive_optional = solver.find_primitive_or_empty(this -> data());
+                
+				
+				cout << "solved "<< endl;
+                return primitive_optional.transform([](ContL lin_comb) { 
+                        return ContGC(lin_comb);
+                });
+				 
+		}
+        
+        
         std::optional<ContGC> try_find_split_primitive() {
 
                 /*SplitGC expensie_sanity_check = this -> delta();

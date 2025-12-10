@@ -20,10 +20,12 @@ class MetaGraph {
 
         struct Edge {
             A x, y;
-            unordered_set<B> common_boundary_components; 
+            unordered_set<B> common_boundary_components; // perhaps unnessesary 
         };
 
         vector<Edge> edges;
+        
+        vector<A> hair;
 
         auto begin()       { return edges.begin(); }
         auto end()         { return edges.end(); }
@@ -32,9 +34,14 @@ class MetaGraph {
 
 
             for (auto it1 = delta_of_remainder.begin(); it1 != delta_of_remainder.end(); ++it1) {
+				
+				if (it1 -> second.empty()) {
+					hair.push_back(it1 -> first);
+					continue;
+				}
+				
                 auto it2 = it1;
                 it2++;
-                 
                     for (; it2 != delta_of_remainder.end(); ++it2) {
                         unordered_set<B> common_boundary_components = intersection(it1 -> second, it2 -> second);
                         if (common_boundary_components.empty()) continue;
