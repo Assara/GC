@@ -2,8 +2,11 @@
 
 #include "BasisElement.hpp"
 #include "HasCanonized.hpp"
+#include <algorithm>  
 #include <vector>
+#include <iostream>
 #include "tags.hpp"
+
 
 namespace VectorSpace {
 
@@ -20,7 +23,6 @@ public:
 
     void standardize_all() {
 		if constexpr (!HasCanonized<T,k>) {
-			cout << "should not use this path!" << endl;
 			return;
 		}
 		
@@ -305,7 +307,7 @@ public:
 
 public:
     void print() const {
-            cout << "LinCombPrint: "<< endl;
+            std::cout << "LinCombPrint: "<< std::endl;
 
             for (const auto& elem : elements) {
                     elem.getValue().print();

@@ -4,7 +4,6 @@
 #include <fstream>
 #include "VectorSpace/LinComb.hpp"
 
-
 using namespace std;
 
 

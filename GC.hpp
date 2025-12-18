@@ -3,7 +3,7 @@
 #include "VectorSpace/LinComb.hpp"
 #include "VectorSpace/FiniteSubSpace.hpp"
 #include "VectorSpace/BasisElement.hpp"
-#include "VectorSpace/sparse_primitive_finder.hpp"
+#include "VectorSpace/wiedemann_primitive_finder.hpp"
 
 #include "VectorSpace/BoundaryFinder.hpp"
 
@@ -276,7 +276,7 @@ public:
 				//todo: also clear split_meta_graph
 				
 				
-				VectorSpace::sparse_primitive_finder solver(upper_split_diff);
+				VectorSpace::wiedemann_primitive_finder solver(upper_split_diff);
                        
        
                 cout << "created solver" << endl;
@@ -320,7 +320,7 @@ public:
                 
                 cout << "created couboundary map!" << endl;
 
-                VectorSpace::sparse_primitive_finder solver(coboundary_map);
+                VectorSpace::wiedemann_primitive_finder solver(coboundary_map);
                        
        
                 cout << "created solver" << endl;

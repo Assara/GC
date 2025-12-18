@@ -12,10 +12,15 @@ class lil_matrix {
 public:
     using DomainVec = VectorSpace::LinComb<std::size_t, k>; // we are expecting indices to be in [0, cols.size())
     using ImageVec = VectorSpace::LinComb<std::size_t, k>;  // we are expecting indices to be in [0, image_dim)
+    
+    using DenseDomainVec = std::unique_ptr<k[]>; //assumed to hold cols.size() elements
+    using DenseImageVec = std::unique_ptr<k[]>; //assumed to hold  image_dim elements
 
 private:
     std::vector<ImageVec> cols_;   // dynamic number of rows
     size_t image_dim_ = 0;
+    
+    
 
 public:
     lil_matrix() = default;
@@ -54,6 +59,91 @@ public:
         }
         return result;
     }
+    
+    DenseImageVec reserve_dense_image_vec() const {
+			return std::make_unique<k[]>(image_dim());
+	}
+	
+	DenseDomainVec reserve_dense_domain_vec() const {
+			return std::make_unique<k[]>(cols_.size());
+	}
+	
+	DenseImageVec make_dense_image_vec_zero() const {
+		DenseImageVec v = reserve_dense_image_vec();
+		for (std::size_t i = 0; i < image_dim(); ++i) {
+			v[i] = k{0};
+		}
+		return v;
+	}
+	
+	DenseDomainVec make_dense_domain_vec_zero() const {
+		DenseDomainVec v = reserve_dense_domain_vec();
+		for (std::size_t i = 0; i < domain_dim(); ++i) {
+			v[i] = k{0};
+		}
+		return v;
+	}
+	
+	DenseImageVec make_dense_image_vec_random(std::uint64_t seed = 0xC0FFEEULL) const {		     
+        DenseImageVec rv = reserve_dense_image_vec();
+
+        std::mt19937_64 rng(seed);
+        std::uniform_int_distribution<std::uint64_t> dist(0, k::modulus() - 1);
+
+        for (std::size_t i = 0; i < image_dim(); ++i) {
+            rv[i] = k(dist(rng));
+        }
+        return rv;
+
+	}
+	
+	
+	DenseDomainVec make_dense_domain_vec_random(std::uint64_t seed = 0xC0FFEEULL) const {
+        DenseDomainVec rv = reserve_dense_domain_vec();
+
+        std::mt19937_64 rng(seed);
+        std::uniform_int_distribution<std::uint64_t> dist(0, k::modulus() - 1);
+
+        for (std::size_t i = 0; i < domain_dim(); ++i) {
+            rv[i] = k(dist(rng));
+        }
+        return rv;
+
+	}
+
+
+
+	
+    
+	// y = M * x
+	DenseImageVec evaluate_from_dense(const DenseDomainVec& input) const {
+			DenseImageVec result = make_dense_image_vec_zero();  // size = image_dim(), zero-initialized
+
+			for (std::size_t i = 0; i < domain_dim(); ++i) {     // loop columns
+					const auto& col = cols_[i];
+					for (const auto& be : col) {
+							std::size_t row = be.getValue();             // row index
+							result[row] += input[i] * be.getCoefficient();
+					}
+			}
+
+			return result;   // moved
+	}
+
+	// x = M^T * y
+	DenseDomainVec evaluate_transpose_dense(const DenseImageVec& input) const {
+			DenseDomainVec result = make_dense_domain_vec_zero(); // size = domain_dim(), zero-initialized
+
+			for (std::size_t i = 0; i < domain_dim(); ++i) {  // loop columns
+					const auto& col = cols_[i];
+					for (const auto& be : col) {
+							std::size_t row = be.getValue();          // row index
+							result[i] += input[row] * be.getCoefficient();
+					}
+			}
+
+			return result;   // moved
+	}
 
         
    // used for testing. could be smarter
