@@ -277,7 +277,7 @@ void tryFindFullWheel9ClassByWaterfall() {
 
 
 int main() {
-    tryFindFullWheel7ClassByWaterfall();
+    tryFindFullWheel9ClassByWaterfall();
     return 0;
 }
 
