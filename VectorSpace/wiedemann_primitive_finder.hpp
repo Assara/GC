@@ -5,6 +5,7 @@
 #include "wiedemann_helper.hpp"
 
 
+
 #include <vector>
 #include <unordered_map>
 #include <optional>
@@ -16,6 +17,9 @@ namespace VectorSpace {
 
 template<typename A, typename B, typename k>
 class wiedemann_primitive_finder {
+
+
+public:
 
 
 private:
@@ -92,7 +96,7 @@ public:
 			map_representative.add_col(std::move(col));	
 			
         }
-  
+        
 		cout << "created sparse solver: domain_dim = " << domain_space_enumeration.size() << endl
 				<< "image_space_dim = " <<  image_space_enumeration.size() << endl
 				<< "number of matrix entries =" <<  n_matrix_entries << endl;

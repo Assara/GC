@@ -24,19 +24,18 @@ public:
     void standardize_all() {
 		if constexpr (!HasCanonized<T,k>) {
 			return;
-		}
-		
-        std::vector<Element> standardized;
+		} else {	
+			std::vector<Element> standardized;
+			for (auto& elem : elements) {
 
-        for (auto& elem : elements) {
+				Element canon = elem.getValue().canonized(elem);
+				if (canon.getCoefficient() != 0) {  
+					standardized.emplace_back(std::move(canon));
+				}
+			}
 
-            Element canon = elem.getValue().canonized(elem);
-            if (canon.getCoefficient() != 0) {  
-                standardized.emplace_back(std::move(canon));
-            }
-        }
-
-        elements = std::move(standardized);
+			elements = std::move(standardized);
+         }
     }
 
     explicit LinComb(const BasisElement<T, k>& elem) {

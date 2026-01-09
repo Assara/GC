@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <optional>
 
-#include "VectorSpace/LinComb.hpp"  // adjust include path
+#include "LinComb.hpp"
 
 template<typename k>
 class lil_matrix {
@@ -51,6 +51,20 @@ public:
 		}
 		cols_.emplace_back(std::move(col));
 	}
+	
+	void add_element(std::size_t image_index,
+                     std::size_t domain_index,
+                     const k& coefficient) {
+        if (coefficient == k{}) return;
+
+        if (domain_index >= cols_.size()) {
+            cols_.resize(domain_index + 1);  // extend with empty rows
+        }
+
+        cols_[domain_index].append_in_basis_order(image_index, coefficient);
+        image_dim_ = std::max(image_dim_, image_index + 1);
+    }
+	
 
     inline std::size_t size() const {
         std::size_t result = 0;
@@ -96,6 +110,12 @@ public:
         return rv;
 
 	}
+	
+	void sort_cols() {
+        for (auto& col : cols_) {
+            col.standardize_and_sort();
+        }
+    }
 	
 	
 	DenseDomainVec make_dense_domain_vec_random(std::uint64_t seed = 0xC0FFEEULL) const {

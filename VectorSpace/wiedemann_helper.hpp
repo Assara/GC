@@ -6,6 +6,10 @@
 #include <cstddef>
 #include <utility>
 #include <iostream>
+#include <chrono>
+
+
+#include "../timer_accum.hpp"
 
 #include "lil_matrix.hpp"
 #include "berlekamp_massey_state.hpp"
@@ -17,17 +21,37 @@ class wiedemann_solver {
 public:
     using ImageVec  = typename lil_matrix<k>::DenseImageVec;   // expected: std::unique_ptr<k[]>
     using DomainVec = typename lil_matrix<k>::DenseDomainVec;  // expected: std::unique_ptr<k[]>
+    
+    
+    struct timing_t {
+    timer_accum eval_M;      // M * x
+    timer_accum eval_MT;     // M^T * y
+    //timer_accum bm;          // Berlekamp–Massey 
+};
+
+	mutable timing_t timing;
+
+	void print_timing() const {
+		timing.eval_M.print("M * x");
+		timing.eval_MT.print("M^T * y");
+	}
 
 private:
     const lil_matrix<k>& M;
     ImageVec random_vector; // length = M.image_dim()
 
 private:
-    ImageVec M_MT(const ImageVec& y) const {
-        // Requires lil_matrix to accept const refs for dense vectors.
-        DomainVec v = M.evaluate_transpose_dense(y);
+ImageVec M_MT(const ImageVec& y) const {
+    DomainVec v;
+    {
+        timer_accum::guard g(timing.eval_MT);
+        v = M.evaluate_transpose_dense(y);
+    }
+    {
+        timer_accum::guard g(timing.eval_M);
         return M.evaluate_from_dense(v);
     }
+}
 
     DomainVec MT_M(const DomainVec& x) const {
         ImageVec v = M.evaluate_from_dense(x);
@@ -97,6 +121,8 @@ private:
 
 		bool verified = verify_result(y0, result);
 
+		print_timing();
+
 		if (!verified) {
 			ImageVec y_found = M.evaluate_from_dense(result);
 
@@ -115,10 +141,6 @@ private:
 		return result;
 	}
 
-
-
-      
-    
     bool verify_result(const ImageVec& y0, const DomainVec& X) const {
 			ImageVec y_found = M.evaluate_from_dense(X);
 			
@@ -162,7 +184,10 @@ public:
     std::optional<DomainVec> solve_MX_equals_y(const ImageVec& y0) {
         // Build scalar sequence s_i = <r, y_i>, y_{i+1} = (M M^T) y_i
         std::vector<k> signatures;
-        signatures.reserve(64);
+        
+        std::size_t slack = 8;
+        
+        signatures.reserve(2* M.image_dim() + slack);
 
         signatures.emplace_back(get_signature(y0));
 
@@ -172,7 +197,7 @@ public:
         berlekamp_massey_state<k> bm_state(signatures); // adjust template as needed
         bm_state.process_all_new();
 
-        std::size_t slack = 8;
+  
         std::size_t more_needed = bm_state.more_needed(slack);
 
         while (more_needed > 0) {
