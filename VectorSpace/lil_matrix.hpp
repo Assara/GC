@@ -152,20 +152,26 @@ public:
 
 	// x = M^T * y
 	DenseDomainVec evaluate_transpose_dense(const DenseImageVec& input) const {
-			DenseDomainVec result = make_dense_domain_vec_zero(); // size = domain_dim(), zero-initialized
+		DenseDomainVec result = reserve_dense_domain_vec(); // sized to domain_dim(); no need to be zeroed
 
-			for (std::size_t i = 0; i < domain_dim(); ++i) {  // loop columns
-					const auto& col = cols_[i];
-					for (const auto& be : col) {
-							std::size_t row = be.getValue();          // row index
-							result[i] += input[row] * be.getCoefficient();
-					}
+		const std::size_t n = domain_dim();
+
+		#pragma omp parallel for schedule(static)
+		for (std::int64_t ii = 0; ii < static_cast<std::int64_t>(n); ++ii) {
+			const std::size_t i = static_cast<std::size_t>(ii);
+			const auto& col = cols_[i];
+
+			k acc = k{0};
+			for (const auto& be : col) {
+				const std::size_t row = be.getValue(); // row index
+				acc += input[row] * be.getCoefficient();
 			}
+			result[i] = acc;
+		}
 
-			return result;   // moved
+		return result; // moved
 	}
-
-        
+			
    // used for testing. could be smarter
     const ImageVec evaluate(DomainVec& input) const {
         ImageVec result;

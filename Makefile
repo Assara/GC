@@ -9,9 +9,14 @@ BUILD_DIR := build
 # Include directories
 INC       := -I. -IVectorSpace
 
+# ---- OpenMP ----
+# For Clang on Linux, libomp is typical. If your system uses libgomp instead, see notes below.
+OPENMP_CXXFLAGS := -fopenmp=libomp
+OPENMP_LDFLAGS  := -fopenmp=libomp -lomp
+
 # Compiler and linker flags
-CXXFLAGS  := -std=c++23 -O3 -march=native -Wall -Wextra -Wpedantic $(INC) -flto
-LDFLAGS   := -flto -fuse-ld=lld
+CXXFLAGS  := -std=c++23 -O3 -march=native -Wall -Wextra -Wpedantic $(INC) -flto $(OPENMP_CXXFLAGS)
+LDFLAGS   := -flto -fuse-ld=lld $(OPENMP_LDFLAGS)
 
 # ======= SOURCE / BUILD SETUP =======
 
