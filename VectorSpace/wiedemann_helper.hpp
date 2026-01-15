@@ -8,11 +8,11 @@
 #include <iostream>
 #include <chrono>
 
-
 #include "../timer_accum.hpp"
 
 #include "lil_matrix.hpp"
 #include "berlekamp_massey_state.hpp"
+
 
 namespace VectorSpace {
 
@@ -38,26 +38,41 @@ public:
 
 private:
     const lil_matrix<k>& M;
-    ImageVec random_vector; // length = M.image_dim()
+    const ImageVec random_vector; // length = M.image_dim()
+    
+    
+    const compressed_sparse_matrix<k> compressed_M;
+    const compressed_sparse_matrix<k> compressed_transpose_M;
+    
+public:
+    explicit wiedemann_solver(const lil_matrix<k>& matrix)
+        : M(matrix),
+        random_vector(M.make_dense_image_vec_random()),
+        compressed_M(M.to_compressed_sparse_matrix()),
+        compressed_transpose_M(M.transpose().to_compressed_sparse_matrix()) {
+    }
+
+    
 
 private:
-ImageVec M_MT(const ImageVec& y) const {
-    DomainVec v;
-    {
-        timer_accum::guard g(timing.eval_MT);
-        v = M.evaluate_transpose_dense(y);
-    }
-    {
-        timer_accum::guard g(timing.eval_M);
-        return M.evaluate_from_dense(v);
-    }
-}
+	ImageVec M_MT(const ImageVec& y) const {
+		DomainVec v;
+		{
+			timer_accum::guard g(timing.eval_MT);
+			v = M.evaluate_transpose_dense(y);
+		}
+		{
+			timer_accum::guard g(timing.eval_M);
+			return compressed_transpose_M.evaluate_transpose(v);
+		}
+	}
 
+/*
     DomainVec MT_M(const DomainVec& x) const {
         ImageVec v = M.evaluate_from_dense(x);
         return M.evaluate_transpose_dense(v);
     }
-
+*/
     k get_signature(const ImageVec& y) const {
         k result = k{0};
         for (std::size_t i = 0; i < M.image_dim(); ++i) {
@@ -174,13 +189,6 @@ ImageVec M_MT(const ImageVec& y) const {
 
 
 public:
-    explicit wiedemann_solver(const lil_matrix<k>& matrix)
-        : M(matrix) {
-        // Allocate and fill random_vector
-        random_vector = M.make_dense_image_vec_random();
-    }
-    
-
     std::optional<DomainVec> solve_MX_equals_y(const ImageVec& y0) {
         // Build scalar sequence s_i = <r, y_i>, y_{i+1} = (M M^T) y_i
         std::vector<k> signatures;

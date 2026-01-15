@@ -10,7 +10,6 @@ public:
     using DenseDomainVec = std::unique_ptr<k[]>;
     using DenseImageVec  = std::unique_ptr<k[]>;
 
-private:
     std::vector<Basis> rows_and_coeffs_;   // concatenated columns
     std::vector<offset_type> col_ptr_;     // size = ncols + 1
     indexType image_dim_{0};
@@ -63,7 +62,7 @@ public:
     }
 
     // --- x = M^T * y ---
-    DenseDomainVec evaluate_transpose_dense(const DenseImageVec& input) const {
+    DenseDomainVec evaluate_transpose(const DenseImageVec& input) const {
         DenseDomainVec result = reserve_dense_domain_vec();
         const indexType ncols = domain_dim();
 

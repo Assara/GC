@@ -5,7 +5,11 @@
 #include <cstddef>
 #include <optional>
 
+
 #include "LinComb.hpp"
+#include "compressed_sparse_matrix.hpp"
+
+
 
 template<typename k>
 class lil_matrix {
@@ -183,7 +187,45 @@ public:
 		}
         return result;
     }
-  
+    
+    // Return the transposed matrix Mt = M^T.
+	// M : image_dim_ x domain_dim()
+	// Mt: domain_dim() x image_dim_
+	lil_matrix transpose() const {
+		const std::size_t m = image_dim_;      // rows in M
+		const std::size_t n = domain_dim();    // cols in M
+
+		lil_matrix Mt(m); // reserve rows (= domain indices) up to m
+
+		for (std::size_t j = 0; j < n; ++j) {
+			const auto& col = cols_[j];
+			for (const auto& term : col) {
+				const std::size_t i = term.getValue(); // row index in M
+				Mt.add_element(
+					/*image_index=*/ j,                 // row in Mt
+					/*domain_index=*/ i,                // col in Mt
+					/*coefficient=*/ term.getCoefficient()
+				);
+			}
+		}
+
+		return Mt;
+	}
+    
+    
+    compressed_sparse_matrix<k> to_compressed_sparse_matrix() const {
+		using CSM = compressed_sparse_matrix<k>;
+
+		CSM M(static_cast<typename CSM::indexType>(image_dim_));
+		M.rows_and_coeffs_.reserve(size());          // total nnz
+		M.col_ptr_.reserve(domain_dim() + 1);         // columns + sentinel
+
+		for (const auto& col : cols_) {
+			M.add_col(col.raw_elements());
+		}
+
+		return M;
+	}
 
 
 private: //solver helpers
