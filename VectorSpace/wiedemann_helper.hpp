@@ -26,7 +26,7 @@ public:
     struct timing_t {
     timer_accum eval_M;      // M * x
     timer_accum eval_MT;     // M^T * y
-    //timer_accum bm;          // Berlekamp–Massey 
+    timer_accum bm;          // Berlekamp–Massey 
 };
 
 	mutable timing_t timing;
@@ -34,6 +34,7 @@ public:
 	void print_timing() const {
 		timing.eval_M.print("M * x");
 		timing.eval_MT.print("M^T * y");
+		timing.bm.print("berlekamp massey computations:");
 	}
 
 private:
@@ -59,7 +60,7 @@ private:
 		DomainVec v;
 		{
 			timer_accum::guard g(timing.eval_MT);
-			v = M.evaluate_transpose_dense(y);
+			v = compressed_M.evaluate_transpose(y);
 		}
 		{
 			timer_accum::guard g(timing.eval_M);
@@ -139,7 +140,7 @@ private:
 		print_timing();
 
 		if (!verified) {
-			ImageVec y_found = M.evaluate_from_dense(result);
+			ImageVec y_found = compressed_transpose_M.evaluate_transpose(result);
 
 			std::cout << "False solution. connection_poly =" << std::endl;
 			for (auto c : C) std::cout << c << ", ";
@@ -202,9 +203,10 @@ public:
         ImageVec yi = M_MT(y0);
         signatures.emplace_back(get_signature(yi));
 
-        berlekamp_massey_state<k> bm_state(signatures); // adjust template as needed
-        bm_state.process_all_new();
-
+	
+		berlekamp_massey_state<k> bm_state(signatures); // adjust template as needed
+		bm_state.process_all_new();
+		
   
         std::size_t more_needed = bm_state.more_needed(slack);
 
@@ -213,8 +215,12 @@ public:
                 yi = M_MT(yi);
                 signatures.emplace_back(get_signature(yi));
             }
-            bm_state.process_all_new();
-            more_needed = bm_state.more_needed(slack);
+			{
+				timer_accum::guard g(timing.bm);
+				
+				bm_state.process_all_new();
+				more_needed = bm_state.more_needed(slack);
+			}
         }
 		
         return recompute_solution(y0, bm_state.connection_poly());

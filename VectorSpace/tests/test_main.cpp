@@ -159,5 +159,5 @@ bool performance_test_wiedemann_solver(size_t image_dim, size_t domain_dim, size
 }
 
 int main() {
-		performance_test_wiedemann_solver(10000, 30000, 300000);
+		performance_test_wiedemann_solver(60000, 180000, 1800000);
 }

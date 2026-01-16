@@ -18,8 +18,8 @@ REPO_ROOT   := $(strip $(abspath $(THIS_DIR)/../..))
 #  - VectorSpace/ itself (so includes like "lil_matrix.hpp" work if headers live there)
 CPPFLAGS += -I"$(REPO_ROOT)/include" -I"$(REPO_ROOT)" -I"$(VSPACE_ROOT)"
 
-CXXFLAGS += $(STD) -O2 -g -Wall -Wextra -Wpedantic
-LDFLAGS  +=
+CXXFLAGS += $(STD) -O2 -g -Wall -Wextra -Wpedantic -fopenmp
+LDFLAGS  += -fopenmp
 LDLIBS   +=
 
 BIN_DIR := $(THIS_DIR)/bin

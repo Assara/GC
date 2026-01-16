@@ -221,7 +221,7 @@ public:
 		M.col_ptr_.reserve(domain_dim() + 1);         // columns + sentinel
 
 		for (const auto& col : cols_) {
-			M.add_col(col.raw_elements());
+			M.add_col_size_t(col.raw_elements());
 		}
 
 		return M;
