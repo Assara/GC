@@ -98,6 +98,21 @@ public:
 
     
     
+	bool operator==(const LinComb& other) const {
+		if (size() != other.size()) {
+			return false;
+		}
+		
+		for (size_t i = 0; i<size(); i++) {
+			if (!elements[i].total_equality(other.raw_elements()[i])) {
+					return false;
+			}
+		}
+		
+		return true;
+	}
+    
+    
 	LinComb operator+(const LinComb& other) const {
 		LinComb result;
 		const auto& A = this->elements;

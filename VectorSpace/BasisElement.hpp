@@ -76,6 +76,11 @@ public:
     bool operator==(const BasisElement& rhs) const noexcept {
         return value == rhs.getValue(); // equality by value (coeff ignored)
     }
+    
+    bool total_equality(const BasisElement& rhs) const noexcept {
+        return value == rhs.getValue() && coefficient == rhs.getCoefficient(); // equality by value (coeff ignored)
+    }
+    
 
     void set_coefficient(k c) noexcept { coefficient = c; }
 

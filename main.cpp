@@ -66,7 +66,7 @@ template <
     cout << "completed edge differential. size = " << with_edge_diff.size() << endl;
       
     return with_edge_diff
-        .try_find_split_primitive();
+        .try_find_split_primitive_graded();
 }
 
 
@@ -98,9 +98,19 @@ void tryFindFullWheel5ClassByWaterfall() {
     }
 
 
+ 
+    auto W5 = step3 -> add_edge_differential();
+    
+    
     cout << "W5 class:" << endl;
+    W5.print();
+    
+    
+    cout << "dW5 (should be 0)" << endl;
+    
+    
+    W5.delta().print();
 
-    step3 -> add_edge_differential().print();
 
 }
 
@@ -135,7 +145,7 @@ void tryFindFullWheel7ClassByWaterfall() {
 
     if (!step4) {
         cout << "Could not find primitive for step 4!! " << endl;
-        step3 -> print();
+        //step3 -> print();
         
         return;
     }
@@ -149,7 +159,6 @@ void tryFindFullWheel7ClassByWaterfall() {
 	OddGCdegZero<8> W7_class =  step5 -> add_edge_differential();
 
 	MetaGraph metaGraph(W7_class.map_split_differential());
-	
 	
 	
 	cout << "W7 size before filtering: " << W7_class.size() << endl;
@@ -274,7 +283,6 @@ void tryFindFullWheel9ClassByWaterfall() {
     
     W9_class_filtered.print(out);
 }
-
 
 int main() {
     tryFindFullWheel9ClassByWaterfall();

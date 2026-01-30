@@ -191,6 +191,39 @@ public:
                 }
                 return count_map;
         }
+        
+        
+        
+       ThisGC filter_on_odd_pairs(signedInt n_pairs) {
+			vector<Base> filtered;
+			
+			for (const auto &be : data()) {
+					if (be.getValue().odd_pairs() > n_pairs) {
+							filtered.push_back(be);
+					}
+			}
+			
+			return ThisGC(filtered);		   
+		}
+        
+                
+        unordered_map<ContGraphType, bigInt> contractions_count_map_with_grading() const {
+                std::vector<BasisElement<ContGraphType, fieldType>> elems = d_contraction_without_sort();
+                
+              
+                ContGC dThis(std::move(elems), AssumeBasisOrderTag{});
+                
+                dThis.standardize_all();
+				unordered_map<ContGraphType, bigInt> count_map;
+				count_map.reserve(dThis.size());
+				
+                for (auto b : dThis.data()) {
+                        count_map[b.getValue()]++;
+
+                }
+                return count_map;
+        }
+        
 
         ContGC d_contraction_with_recording_seen_gaphs(unordered_set<ContGraphType>& seenGraphs) {
                 ContGC dThis = add_contractions_to_set(seenGraphs);
@@ -290,17 +323,172 @@ public:
 				 
 		}
         
-        
-        std::optional<ContGC> try_find_split_primitive() {
+       
+		static std::pair<L, L> split_L_by_n_odd_vertex_pairs(const L& x, signedInt n) {
+			L same;
+			L rest;
 
-                /*SplitGC expensie_sanity_check = this -> delta();
+			for (const auto& be : x) {
+				if (be.getValue().n_odd_pairs() == n) same.append_in_basis_order(be);
+				else rest.append_in_basis_order(be);
+			}
+			return {same, rest};
+		}
+			
+		
+		vector<L> graded_by_odd_vertex_pairs() const {
+				constexpr int max_pairs = static_cast<int>(N_VERTICES)/2 + 1;	
+				
+				vector<L> split(max_pairs);
+				
+				
+				for (const auto& be : data()) {
+						signedInt n = be.getValue().n_odd_pairs();
+						
+						
+						split[n].append_in_basis_order(be);
+					
+				}
+				
+				return split;
+		}
+			
+	std::optional<ContGC> try_find_split_primitive_graded() const
+	{
+		std::cout << "using graded solver\n";
 
-                if (expensie_sanity_check.size() != 0) {
-                        cout << "Trying to find split primitive of something that is not a coboundary!" << endl;
-                } else {
-                        cout << "good coboundary!" << endl;
-                }*/
+		auto contraction_counts = contractions_count_map();
+		std::cout << "created contraction counts. total size: " << contraction_counts.size() << "\n";
+
+		std::size_t map_size = 0;
+		for (const auto& gamma : contraction_counts) {
+			if (gamma.second > 1) ++map_size;
+		}
+
+		std::unordered_map<ContGraphType, L> full_coboundary_map;
+		full_coboundary_map.reserve(map_size);
+
+		for (const auto& gamma : contraction_counts) {
+			if (gamma.second < 2) continue;
+			full_coboundary_map.emplace(
+				gamma.first,
+				gamma.first.split_vertex_differential(fieldType{1})
+			);
+		}
+		std::cout << "created full coboundary map!\n";
+
+		// RHS split by grade
+		std::vector<L> ass_graded = graded_by_odd_vertex_pairs();
+
+		constexpr std::size_t max_pairs = static_cast<std::size_t>(N_VERTICES) / 2 + 1;
+
+		// δ0 columns (grade i -> i)
+		std::vector<std::unordered_map<ContGraphType, L>> same_to_same(max_pairs);
+
+		// δ1 columns (grade i -> i+1), used only for propagation
+		std::vector<std::unordered_map<ContGraphType, L>> up_maps(max_pairs);
+
+		// full δ columns from grade i-1, available as auxiliary variables in grade i solve
+		// constraint_maps[0] intentionally empty
+		std::vector<std::unordered_map<ContGraphType, L>> constraint_maps(max_pairs);
+
+		auto split_n_and_nplus1 = [](const L& x, signedInt n) -> std::pair<L, L> {
+			L diag;
+			L up;
+			for (const auto& be : x) {
+				const signedInt m = be.getValue().n_odd_pairs();
+				if (m == n) {
+					diag.append_in_basis_order(be);
+				} else if (m == n + 1) {
+					up.append_in_basis_order(be);
+				} else {
+					std::cout << "WARNING: δ produced grade " << m
+							  << " from grade " << n << "\n";
+				}
+			}
+			return {diag, up};
+		};
+
+		// Build the three maps
+		for (const auto& [g, d_g] : full_coboundary_map) {
+			const signedInt n = g.n_odd_pairs();
+			if (n < 0 || static_cast<std::size_t>(n) >= max_pairs) {
+				std::cout << "warning: n_odd_pairs() out of range: " << n << "\n";
+				continue;
+			}
+
+			auto [diag, up] = split_n_and_nplus1(d_g, n);
+
+			same_to_same[static_cast<std::size_t>(n)].emplace(g, std::move(diag));
+
+			if (static_cast<std::size_t>(n + 1) < max_pairs) {
+				up_maps[static_cast<std::size_t>(n)].emplace(g, std::move(up));
+
+				// Constraint columns for the NEXT grade solve (i = n+1): store FULL δ(g)
+				// Copy is intended (do not move).
+				constraint_maps[static_cast<std::size_t>(n + 1)].emplace(g, d_g);
+			}
+		}
+
+		std::cout << "built same_to_same / up_maps / constraint_maps\n";
+
+		std::vector<ContL> primitive_by_grade(max_pairs);
+
+		for (std::size_t i = 0; i < max_pairs; ++i) {
+			std::cout << "-------------------------------------------------------------------\n";
+			std::cout << "Trying to find primitive for " << i << "\n";
+
+			// Constrained solve at grade i:
+			// variables from V_i via same_to_same[i] (δ0),
+			// plus auxiliary vars from V_{i-1} via constraint_maps[i] (full δ columns).
+			VectorSpace::wiedemann_primitive_finder solver(same_to_same[i], constraint_maps[i]);
+
+			auto prim_opt = solver.find_primitive_or_empty(ass_graded[i]);
+			if (!prim_opt) {
+				std::cout << "failed to find primitive\n";
+				
+				
+				// try with full matrix
+				
+				std::cout<< "trying with full matrix" << endl;
+				
+				VectorSpace::wiedemann_primitive_finder full_solver(full_coboundary_map);
+				
+				
+				auto primitive = full_solver.find_primitive_or_empty(data());
+				
+				if (!primitive) {
+					std::cout << "Also failed with full matrix. " << std::endl;	
+					return std::nullopt;
+				}
+				std::cout << "Worked with full solver. Must be a bug in the decomposition" << std::endl;
+				
+				return ContGC(*primitive);
+				
+			}
+
+			primitive_by_grade[i] = std::move(*prim_opt);
+
+			// Propagate upward using ONLY the +1 block: y_{i+1} <- y_{i+1} - δ1(x_i)
+			if (i + 1 >= max_pairs) continue;
+
+			L rest;
+			for (const auto& be : primitive_by_grade[i]) {
+				auto it = up_maps[i].find(be.getValue());
+				if (it == up_maps[i].end()) continue;
+				rest = rest.add_scaled(it->second, -be.getCoefficient());
+			}
+			ass_graded[i + 1] += rest;
+		}
+
+		ContL final_primitive;
+		for (const auto& p : primitive_by_grade) final_primitive += p;
+
+		return ContGC(final_primitive);
+	}
+
                 
+        std::optional<ContGC> try_find_split_primitive() const {        
                 unordered_map<ContGraphType, bigInt> contraction_counts = contractions_count_map();
                 cout << "created contraction counts. total size: " << contraction_counts.size() <<endl;
                 unordered_map<ContGraphType, L> coboundary_map;
@@ -309,6 +497,7 @@ public:
 				for (const auto& gamma : contraction_counts) {
 						if (gamma.second > 1) map_size++;
 				} 
+				
 				
 				cout << "map_size = " << map_size <<  endl;
 				coboundary_map.reserve(map_size);

@@ -57,6 +57,7 @@ public:
 
 private:
 	ImageVec M_MT(const ImageVec& y) const {
+		
 		DomainVec v;
 		{
 			timer_accum::guard g(timing.eval_MT);
@@ -112,13 +113,17 @@ private:
 				  << C.size() << std::endl;
 
 		// C = [1, c1, ..., cL]
-		if (C.size() < 2 || C[0] == k{0})
+		if (C.size() < 2 || C[0] == k{0}){
+			std::cout << "Figure out why we are here" << std::endl;
 			return std::nullopt;
+		}
 
 		const std::size_t L = C.size() - 1;
 		const k cL = C.back();              // constant term of operator polynomial
-		if (cL == k{0})
-			return std::nullopt;            // singular (your policy)
+		if (cL == k{0}) {
+			std::cout << "singular" << std::endl;
+			return std::nullopt;            // singular
+		}
 
 		const k scale = -(cL.inv());        // -1/cL
 
@@ -135,11 +140,11 @@ private:
 
 		DomainVec result = M.evaluate_transpose_dense(y_minus_1);
 
-		bool verified = verify_result(y0, result);
+		k lambda = find_scaling_and_verify(y0, result);
 
 		print_timing();
 
-		if (!verified) {
+		if (lambda == k{0}) {
 			ImageVec y_found = compressed_transpose_M.evaluate_transpose(result);
 
 			std::cout << "False solution. connection_poly =" << std::endl;
@@ -154,10 +159,10 @@ private:
 			return std::nullopt;
 		}
 
-		return result;
+		return scaled_copy(result, domain_dim(), lambda);
 	}
 
-    bool verify_result(const ImageVec& y0, const DomainVec& X) const {
+    k find_scaling_and_verify(const ImageVec& y0, const DomainVec& X) const {
 			ImageVec y_found = M.evaluate_from_dense(X);
 			
 			k lambda = 0;
@@ -170,7 +175,7 @@ private:
 						break;
 					} else if (y0[i] != 0 || y_found[i] != 0) {
 						std::cout << "false solution type 1!" << std::endl;
-						return false;
+						return k{0};
 					}
 			}
 			
@@ -179,19 +184,42 @@ private:
 					if (y0[i] != lambda* y_found[i]) {
 						std::cout << "false solution type 2!" << std::endl;
 					
-						return false;
+						return k{0};
 					}
 			}
 			
-			std::cout << "Solution validated!" << std::endl;
-			return true;
-		
+			std::cout << "Solution validated! with lambda " << lambda << std::endl;
+			
+			
+			return lambda;	
 	} 
 
 
 public:
     std::optional<DomainVec> solve_MX_equals_y(const ImageVec& y0) {
         // Build scalar sequence s_i = <r, y_i>, y_{i+1} = (M M^T) y_i
+        if (image_dim() == 0) {
+				return std::optional(M.make_dense_domain_vec_zero());
+		}
+		
+	
+		
+		std::cout << "using solve_MX_equals_y. ";
+		std::cout << "image dim = " << image_dim();
+		std::cout << " domain dim = " << domain_dim() << std::endl;
+		
+		bool is_zero = true;
+		
+		for (std::size_t i = 0; i< image_dim(); i++) {
+				if (y0[i] != 0) {
+					is_zero = false;
+					break;
+				} 
+		}
+		
+		if (is_zero) return std::optional(M.make_dense_domain_vec_zero());
+		
+		std::cout << std::endl;
         std::vector<k> signatures;
         
         std::size_t slack = 8;
@@ -213,7 +241,7 @@ public:
         while (more_needed > 0) {
             for (std::size_t i = 0; i < more_needed; ++i) {
                 yi = M_MT(yi);
-                signatures.emplace_back(get_signature(yi));
+                signatures.emplace_back(get_signature(yi));       
             }
 			{
 				timer_accum::guard g(timing.bm);

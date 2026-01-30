@@ -55,8 +55,14 @@ public:
     explicit Graph(const array<Int, SIZE>& arr) : half_edges(arr) {}
 
     inline signedInt custom_filter() const {
-        return std::ranges::count_if(valence_array(), [](Int v){ return v % 2 != 0; });
+        return n_odd_pairs();
     }
+
+	inline signedInt n_odd_pairs() const {
+        return std::ranges::count_if(valence_array(), [](Int v){ return v % 2 != 0; }) / 2;
+    }
+
+
 
     inline signedInt total_order_comp(const ThisGraph& other) const {
        return combutils::compareHalfEdges(half_edges, other.half_edges);

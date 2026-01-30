@@ -58,7 +58,7 @@ private:
 			
 			for (const auto& be : input ) {
 				result[image_space_enumeration[be.getValue()]] += be.getCoefficient();	
-				result[image_space_enumeration[be.getValue()]] += be.getCoefficient();	
+		
 			}
 			return result;
 	}
@@ -72,7 +72,7 @@ private:
 				result.append_in_basis_order(BasisElement(domain_space_enumeration[i], input[i]));
 			}
 				
-			//result.sort_without_deduplicate(); //this does not have to be sorted for current applications
+			result.sort_without_deduplicate(); //this does not have to be sorted for current applications
 			return result;
 	}
 	
@@ -102,9 +102,47 @@ public:
 				<< "number of matrix entries =" <<  n_matrix_entries << endl;
 	
     }
+    
+    
+    //delta_0 and delta_1 must have non intersected domains.
+    wiedemann_primitive_finder(std::unordered_map<B, LinComb<A,k>>& delta_0, std::unordered_map<B, LinComb<A,k>>& delta_1) {
+			domain_space_enumeration.reserve(delta_0.size() + delta_1.size());
+			size_t n_matrix_entries = 0;
+	   
+			for (const auto& entry : delta_0) {
+		
+				domain_space_enumeration.push_back(entry.first);   // each B becomes a row
+				
+				auto col = map_to_enumeration_basis(entry.second);
+				
+				n_matrix_entries += col.size();
+				map_representative.add_col(std::move(col));	
+				
+			}
+				   
+			for (const auto& entry : delta_1) {
+		
+				domain_space_enumeration.push_back(entry.first);   // each B becomes a row
+				
+				auto col = map_to_enumeration_basis(entry.second);
+				
+				n_matrix_entries += col.size();
+				map_representative.add_col(std::move(col));	
+				
+			}
+			
+			cout << "created sparse solver: domain_dim = " << domain_space_enumeration.size() << endl
+					<< "image_space_dim = " <<  image_space_enumeration.size() << endl
+					<< "number of matrix entries =" <<  n_matrix_entries << endl;
+		
+	}
+    
+    
+    
+    
 
 	std::optional<LinComb<B,k>> find_primitive_or_empty(LinComb<A,k> y) {
-		cout << "using sparse_primitive_finder for LinComb:" << endl;
+		cout << "using wierdemann_primitive_finder for LinComb:" << endl;
 		
 		auto y_enumerated = map_to_enumeration_basis_dense(y);
 		
@@ -113,6 +151,8 @@ public:
 		//we do not need this anymore, but we do need heap space.
 		image_space_enumeration.clear();
 		wiedemann_solver<k> solver(map_representative);
+		
+		cout << "created solver!" <<  std::endl;
 
 		std::optional<DenseImageVec> X_enumerated = solver.solve_MX_equals_y(y_enumerated);
 		
