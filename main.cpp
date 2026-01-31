@@ -7,38 +7,52 @@
 using namespace std;
 
 
-const Int wheelSize = 11;
+const Int wheelSize = 9;
 
-void tryFindQuadraticRepresentativeForWheel11() {
+void tryFindQuadraticRepresentativeForWheel() {
     OddGraphdegZero<wheelSize + 1> W = wheel_graph<wheelSize>();
     BasisElement<OddGraphdegZero<wheelSize + 1>, fieldType> res = BasisElement<OddGraphdegZero<wheelSize + 1>, fieldType>(W);
 
     res.getValue().print();
     cout << res.getCoefficient() << endl;
 
-    VectorSpace::LinComb<OddGraphdegZero<wheelSize + 1>, fieldType> dglin(res);
-
-    dglin.standardize_all();
-
-
-    GC wheel = GC(W);
+    GC wheel_class = GC(W);
 
     cout << "wheel = ";
-    wheel.print();
+    wheel_class.print();
     int i = 0;
-    while (wheel.frontValence() > 4 && i < 4) {
-        cout << "attempt" <<  i << endl;
-        wheel = wheel.reduce2();
-
+    while (wheel_class.frontValence() > 4) {
+        
+        
+        cout << "___________________________________" << std::endl; 
+        cout << "Trying to reduce odd vertex pairs. depth " << i  << std::endl; 
+        
+        cout << "___________________________________" << std::endl; 
+        
+        auto primitive_optional = wheel_class.try_find_even_cont_primitive();
+        
+        
+        if (!primitive_optional.has_value()) {
+				cout << "FAILURE" << std::endl;
+				return;
+		}
+        
+        
+        auto primitive = GC(*primitive_optional);
+        
+        
+        GC full_diff = primitive.d_contraction();
+        
+        wheel_class += full_diff.scalar_multiply(-1);
+        
         i++;
-        wheel.printFront();        
-        cout << "wheel.size() = " << wheel.size() << endl; 
-        cout << "grade front =" << wheel.data().raw_elements().front().getValue().custom_filter() << endl;
-        cout << "grade back =" << wheel.data().raw_elements().back().getValue().custom_filter() << endl;
+        
     }
 
     cout << "final representation: " << endl;
-    wheel.print();
+    wheel_class.print();
+    
+    cout << "size = " << wheel_class.size() << std::endl;
 
 }
 
@@ -285,7 +299,7 @@ void tryFindFullWheel9ClassByWaterfall() {
 }
 
 int main() {
-    tryFindFullWheel9ClassByWaterfall();
+    tryFindQuadraticRepresentativeForWheel();
     return 0;
 }
 

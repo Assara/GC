@@ -678,6 +678,86 @@ public:
                 
                 boundary_map.emplace(G, SplitGC(G, AssumeBasisOrderTag{}).d_even_contraction().data());
         }
+        
+        
+        
+        static void add_to_even_splits_map(const GraphType& graph, unordered_map<SplitGraphType, L>& boundary_map,
+											unordered_set<GraphType>& next_to_add) {
+				
+				SplitL delta_graph = graph.split_vertex_differential_even(fieldType{1});
+				
+				
+				for (const auto& be : delta_graph) {
+						if (!boundary_map.contains(be.getValue())) {
+								auto contracted = SplitGC(be.getValue(), AssumeBasisOrderTag{})
+                                                        .d_even_contraction_with_recording_seen_gaphs(next_to_add)
+                                                        .data();
+								
+								boundary_map.emplace(be.getValue(), std::move(contracted));
+								
+						} 
+						
+				}
+			
+		}
+        
+        std::optional<SplitGC> try_find_even_cont_primitive() const {
+			
+				unordered_map<SplitGraphType, L> boundary_map;
+				unordered_set<GraphType> recently_added[2];
+				unordered_set<GraphType> already_added;
+				
+						
+				size_t max_depth = 4;
+			
+			
+				for (const auto& be : data()) {
+						recently_added[0].insert(be.getValue());
+				}
+				
+				
+				for (size_t i= 0; i< max_depth; ++i) {
+						std::cout << "------------- depth: " << i << " ------------------"<<  std::endl;
+					
+						size_t i_mod2 = i%2;
+						size_t i_plus_mod2 = (i+1)%2;
+						
+						
+						for (const auto& graph : recently_added[i_mod2]) {
+								if (already_added.contains(graph)) continue;
+							
+								add_to_even_splits_map(graph, boundary_map, recently_added[i_plus_mod2]);
+								
+						}
+				
+						
+						already_added.insert(std::make_move_iterator(recently_added[i_mod2].begin()),
+											 std::make_move_iterator(recently_added[i_mod2].end()));
+											 
+											 
+						recently_added[i_mod2].clear();
+						
+						
+						VectorSpace::wiedemann_primitive_finder solver(boundary_map);
+						
+						
+						auto primitive = solver.find_primitive_or_empty(data());
+						
+						
+						if (primitive.has_value()) {
+								return std::optional(SplitGC(*primitive));
+						}
+					
+				}
+				
+				std::cout << "reach max depth " << max_depth << " did not find solution" << std::endl;
+				
+				return std::nullopt;
+				
+				
+				
+				
+		}
 
 
         ThisGC reduce2() {
@@ -732,7 +812,7 @@ public:
                         top_grade_comb.print();
 
 
-                        expand_map2(boundary_map, top_grade_comb);
+                        expand_map(boundary_map, top_grade_comb);
 
                         bool exists = true;
 

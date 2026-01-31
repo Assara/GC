@@ -208,6 +208,8 @@ public:
     }
 
 
+
+
      VectorSpace::LinComb<SplitGraph, fieldType> unsorted_even_splits(fieldType coef) const {
             vector<vector<Int>> adjRepresentation;
             adjRepresentation.reserve(N_VERTICES);
@@ -226,6 +228,16 @@ public:
             }
             return result;
     }
+    
+    
+    VectorSpace::LinComb<SplitGraph, fieldType> split_vertex_differential_even(fieldType coef) const {
+            VectorSpace::LinComb<SplitGraph, fieldType> splits = unsorted_even_splits(coef);
+            splits.standardize_and_sort();
+            return splits;
+    }
+
+    
+    
 
     void split_vertex_even(Int vertex_to_split, const vector<Int>& adjacent, VectorSpace::LinComb<SplitGraph,fieldType>& result, fieldType coef) const {
         //odd vertices and bivalent vertices are handled the same way
@@ -261,6 +273,26 @@ public:
                 }
             }
     }
+    
+    
+     vector<SplitGraph> even_splits_vector() const {
+            VectorSpace::LinComb<SplitGraph, fieldType> splits = unsorted_even_splits(fieldType{1});
+            splits.standardize_all();
+
+			splits.sort_without_deduplicate();
+			vector<SplitGraph> result;
+			result.reserve(splits.size());
+			
+			for (const auto& be : splits) {
+				if (be.getCoefficient() == fieldType{0}) continue;
+				if (!result.empty() && be.getValue() == result.back()) continue;
+				result.push_back(be.getValue);
+					
+			}
+			
+			return result;
+	}
+
 
     VectorSpace::LinComb<ExtraEdgeGraph, fieldType> add_edge_differential(fieldType coef) const {
             VectorSpace::LinComb<ExtraEdgeGraph, fieldType> result;
