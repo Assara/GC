@@ -17,16 +17,17 @@ void tryFindQuadraticRepresentativeForWheel() {
     cout << res.getCoefficient() << endl;
 
     GC wheel_class = GC(W);
-
     cout << "wheel = ";
     wheel_class.print();
+    
+    
+    
     int i = 0;
     while (wheel_class.frontValence() > 4) {
         
         
         cout << "___________________________________" << std::endl; 
         cout << "Trying to reduce odd vertex pairs. depth " << i  << std::endl; 
-        
         cout << "___________________________________" << std::endl; 
         
         auto primitive_optional = wheel_class.try_find_even_cont_primitive();
@@ -50,9 +51,10 @@ void tryFindQuadraticRepresentativeForWheel() {
     }
 
     cout << "final representation: " << endl;
-    wheel_class.print();
+    //wheel_class.print();
     
     cout << "size = " << wheel_class.size() << std::endl;
+    
 
 }
 
