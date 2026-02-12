@@ -67,6 +67,11 @@ public:
         const VectorSpace::LinComb<GraphType, fieldType>& data() const {
                 return vec;
         }
+        
+        VectorSpace::LinComb<GraphType, fieldType>& data_mutable() const {
+                return vec;
+        }
+
 
         void standatdize_all() {
                 vec.standardize_all();
@@ -174,6 +179,7 @@ public:
                 for (auto b : dThis.data()) {	
 						if (b.getCoefficient != fieldType{}) seenGraphs.insert(b.getValue());
                 }
+                return dThis;
         }
         
         
@@ -226,8 +232,13 @@ public:
         
 
         ContGC d_contraction_with_recording_seen_gaphs(unordered_set<ContGraphType>& seenGraphs) {
-                ContGC dThis = add_contractions_to_set(seenGraphs);
-                dThis.sort_elements();
+				ContGC dThis = d_contraction();
+			
+				for (const auto& be :dThis.data()) {
+					seenGraphs.emplace(be.getValue());
+					
+				}
+				
                 return dThis;
         }
 
@@ -695,6 +706,25 @@ public:
 								
 								boundary_map.emplace(be.getValue(), std::move(contracted));
 								
+						} 		
+				}
+		}
+		
+		        
+        static void add_to_splits_map(const GraphType& graph, unordered_map<SplitGraphType, L>& boundary_map,
+											unordered_set<GraphType>& next_to_add) {
+				
+				SplitL delta_graph = graph.split_vertex_differential(fieldType{1});
+				
+				
+				for (const auto& be : delta_graph) {
+						if (!boundary_map.contains(be.getValue())) {
+								auto contracted = SplitGC(be.getValue(), AssumeBasisOrderTag{})
+                                                        .d_contraction_with_recording_seen_gaphs(next_to_add)
+                                                        .data();
+								
+								boundary_map.emplace(be.getValue(), std::move(contracted));
+								
 						} 
 						
 				}
@@ -702,19 +732,15 @@ public:
 		}
         
         std::optional<SplitGC> try_find_even_cont_primitive() const {
-			
 				unordered_map<SplitGraphType, L> boundary_map;
 				unordered_set<GraphType> recently_added[2];
 				unordered_set<GraphType> already_added;
-				
 						
 				size_t max_depth = 4;
-			
 			
 				for (const auto& be : data()) {
 						recently_added[0].insert(be.getValue());
 				}
-				
 				
 				for (size_t i= 0; i< max_depth; ++i) {
 						std::cout << "------------- depth: " << i << " ------------------"<<  std::endl;
@@ -729,14 +755,11 @@ public:
 								add_to_even_splits_map(graph, boundary_map, recently_added[i_plus_mod2]);
 								
 						}
-				
 						
 						already_added.insert(std::make_move_iterator(recently_added[i_mod2].begin()),
 											 std::make_move_iterator(recently_added[i_mod2].end()));
-											 
-											 
+											 							 
 						recently_added[i_mod2].clear();
-						
 						
 						VectorSpace::wiedemann_primitive_finder solver(boundary_map);
 						
@@ -751,235 +774,75 @@ public:
 				}
 				
 				std::cout << "reach max depth " << max_depth << " did not find solution" << std::endl;
+				return std::nullopt;
+		}
+		
+		
+		std::optional<SplitGC> try_find_cont_primitive() const {
+			vector<SplitGraphType> empty;
+			
+			return try_find_cont_primitive(empty);
+		
+		}
+		
+		
+		
+		
+		
+	
+		std::optional<SplitGC> try_find_cont_primitive(vector<SplitGraphType>& graps_to_excluce) const {
+		
+				unordered_map<SplitGraphType, L> boundary_map;
+				
+				for (const auto& g : graps_to_excluce) {
+						boundary_map[g] = L{};
+				}
+	
+				
+				unordered_set<GraphType> recently_added[2];
+				unordered_set<GraphType> already_added;
+			
+				size_t max_depth = 4;
+			
+				for (const auto& be : data()) {
+						recently_added[0].insert(be.getValue());
+				}
+				
+				for (size_t i= 0; i< max_depth; ++i) {
+						std::cout << "------------- depth: " << i << " ------------------"<<  std::endl;
+					
+						size_t i_mod2 = i%2;
+						size_t i_plus_mod2 = (i+1)%2;
+						
+						
+						for (const auto& graph : recently_added[i_mod2]) {
+								if (already_added.contains(graph)) continue;
+							
+								add_to_splits_map(graph, boundary_map, recently_added[i_plus_mod2]);
+								
+						}
+						
+						already_added.insert(std::make_move_iterator(recently_added[i_mod2].begin()),
+											 std::make_move_iterator(recently_added[i_mod2].end()));
+											 							 
+						recently_added[i_mod2].clear();
+						
+						VectorSpace::wiedemann_primitive_finder solver(boundary_map);
+						auto primitive = solver.find_primitive_or_empty(data());
+						
+						if (primitive.has_value()) {
+								return std::optional(SplitGC(*primitive));
+						}
+					
+				}
+				
+				std::cout << "reach max depth " << max_depth << " did not find solution" << std::endl;
 				
 				return std::nullopt;
 				
-				
-				
-				
 		}
 
-
-        ThisGC reduce2() {
-                unordered_map<SplitGraphType, L> boundary_map;
-                unordered_set<GraphType> seen_graphs;
-
-        
-                signedInt grade = vec.front().getValue().custom_filter();
-
-   
-                size_t max_depth = 10;
-
-                ThisGC boundary;
-                for (size_t i = 0; i < max_depth ; i++) {
-                        cout << "depth = " <<  i << endl;
-          
-
-                        auto it = std::find_if(
-                                vec.begin(), vec.end(),
-                                [grade](auto const& elem) {
-                                        return elem.getValue().custom_filter() < grade;
-                                });
-
-
-                        L top_grade_comb(vec.begin(), it);
-
-                                
-                        cout << "top_grade_comb.front() grade : " << top_grade_comb.front().getValue().custom_filter() << endl;
-
-                        cout << "top_grade_comb.back() grade : " << top_grade_comb.back().getValue().custom_filter() << endl;
-
-
-                        ContGC shouldBe0 = ThisGC(top_grade_comb).d_even_contraction();
-
-                        
-
-                        if(shouldBe0.size() > 0) {
-
-                                cout << endl << endl;
-                                cout << "WARNING the top grad combination does not satisfy requierments, something is wrong!" << endl;
-                                shouldBe0.print();
-
-                                cout << "see graph above" << endl;
-                                
-
-
-                        } else {
-                                cout << "Top grade comb is good!" << endl;
-                        }
-
-                        cout << "top_grade_comb.size() = " << top_grade_comb.size() << endl;
-                        top_grade_comb.print();
-
-
-                        expand_map(boundary_map, top_grade_comb);
-
-                        bool exists = true;
-
-                        for (const auto& be : top_grade_comb) {
-                                exists = false;
-                                for (const auto& entry : boundary_map) {
-                                        exists = std::binary_search(entry.second.begin(), entry.second.end(), be);
-                                        if (exists) break;
-                                }
-                                if (!exists) {
-                                         cout << "insufficient map!!!!!! " << endl;
-                                         cout << "missing graph: " << endl;
-                                         be.getValue().print();
-                                }
-                        }
-
-                        
-                        cout << "boundary_map.size() = " << boundary_map.size() <<  endl;
-                        VectorSpace::BoundaryFinder solver(boundary_map);
-                  
-                        auto primitive = solver.find_primitive_or_empty(top_grade_comb);
-                       
-                        if (primitive.has_value()) {
-                                primitive -> print();
-                
-                                SplitGC primitive_as_GC = SplitGC(*primitive);
-                            
-                                
-                                primitive_as_GC.print();
-                    
-                                boundary += primitive_as_GC.d_contraction();
-                                boundary.print();
-                        
-                                return *this += boundary;
-                        } 
-
-
-                        while (true) {
-                                //Find a boundary that covers the seen graphs
-                                for (auto& be : top_grade_comb) {
-                                        seen_graphs.insert(be.getValue());
-                                }
-                                VectorSpace::BoundaryFinder filtered_solver(boundary_map, seen_graphs);
-                                primitive = filtered_solver.find_primitive_or_empty(top_grade_comb);
-                                
-                                
-                                if (!primitive.has_value()) {
-                                      break;
-                                }
-                                
-                                SplitGC primitive_as_GC = SplitGC(*primitive);
-                                boundary = primitive_as_GC.d_contraction();
-
-                                if(boundary.d_contraction().size() > 0) {
-
-                                        cout << endl << endl;
-                                        cout << "WARNING boundary is not a cycle!" << endl;
-                                        boundary.d_contraction().print();
-
-                                        cout << "see graph above" << endl;
-                                        
-
-                                } else {
-                                        cout << "Boundary comb is good!" << endl;
-                                }
-
-
-                                *this += boundary; 
-                                for (const auto& be : this -> data()) {
-                                        if (seen_graphs.contains(be.getValue())) {
-                                                be.getValue().print();
-                                                cout << "coefficient = " << be.getCoefficient() << endl;
-                                                cout << "MATH ERROR" << endl;
-                                        } 
-                                }
-
-                                auto it = std::find_if(
-                                        vec.begin(), vec.end(),
-                                        [grade](auto const& elem) {
-                                                return elem.getValue().custom_filter() < grade;
-                                        });
-
-                                top_grade_comb = L(vec.begin(), it);
-                        }
-                         
-                }
-
-                return *this;
-        
-                
-        }
-
-        ThisGC reduce() {
-                if (vec.raw_elements().empty()) {
-                        return ThisGC{};
-                }
-         
-                ThisGC yhat = ThisGC{};
-                unordered_set<SplitGraphType> split_set;
-                unordered_set<SplitGraphType> has_added_boundary;
-                unordered_set<GraphType> to_split;
-                unordered_set<GraphType> has_split;
-                
-                vector<VectorSpace::LinComb<GraphType, fieldType>> boundaries;
-
-
-                signedInt grade = vec.front().getValue().custom_filter();
-
-
-                for (auto b : vec) {
-                        if (b.getValue().custom_filter() != grade) {
-                                break;
-                        }
-                
-                        to_split.insert(b.getValue());
-                }
-                
-                const Int maxDepth = 2;
-                int depth = 0;
-
-                while (++depth <= maxDepth) {
-                        /*for (VectorSpace::LinComb<GraphType, fieldType> boundary : boundaries) {
-                                for (BasisElement<GraphType, fieldType> be : boundary) {
-                                        if (vec.front().getValue() < be.getValue() && !has_split.contains(be.getValue())) {
-                                                to_split.insert(be.getValue());
-                                        }
-                                }
-                        }*/
-                        cout << "to_split.size() = " << to_split.size() << endl;
-                        cout << "depth = " << depth << endl << endl;
-                        for (GraphType graph : to_split) {
-                                if (!has_split.contains(graph) && graph.custom_filter() == grade) {
-                                        graph.add_even_splits_to_set(split_set);
-                                        has_split.insert(graph);
-                                }
-                        }
-
-                        to_split.clear();
-                
-
-
-                        boundaries.reserve(split_set.size());
-
-                        for (auto& split : split_set) {
-                                 if(!has_added_boundary.contains(split)) {
-                                        has_added_boundary.insert(split);
-                                        SplitGC singleSplit = ThisGC::SplitGC(std::move(split));
-                                        boundaries.emplace_back(singleSplit.d_contraction_with_recording_seen_gaphs(to_split).data());
-                                        
-                                }
-                                // split_set.erase(split);
-                        }
-                        split_set.clear();
-    
-                        VectorSpace::FiniteSubSpace<GraphType, fieldType> subSpace(boundaries);
-                        yhat = ThisGC(subSpace.project_solve_then_map(vec));
-                        cout << endl << "yhat.size() = " << yhat.vec.size() <<endl;
-                        
-                        *this += yhat;
-
-                        if (vec.front().getValue().custom_filter() < grade) {
-                                break;
-                        }
-                }
-                return *this;
-              
-        }
+		
 
         GC& scalar_multiply(fieldType scalar) {
                 vec.scalar_multiply(scalar);

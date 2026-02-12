@@ -43,18 +43,40 @@ OddGraphdegZero<N+1> wheel_graph() {
 }
 
 
+
+template<Int N> 
+OddGraphdegZero<N + 1> truss_graph() {
+    array<Int, 4*N > arr{};
+
+    OddGraphdegZero<N+1>  T(arr);
+	// N + 1 vertices,
+	// 2 *N edges
+	Int edge_it = 0;
+	for (Int vertex_it = 0; vertex_it < N-1; vertex_it++) {
+		T.setEdge(edge_it++, vertex_it, vertex_it+1);
+		T.setEdge(edge_it++, vertex_it, vertex_it+2);
+	}
+	
+	T.setEdge(edge_it++, N-1, N);
+	T.setEdge(edge_it, 0, N);
+	
+    return T;
+}
+
+
+
+
+
 template<Int N> 
 OddLoopGraphType<N> loop_graph() {
     array<Int, 2*N> arr{};
-
     OddLoopGraphType<N>  loop(arr);
 
     for (Int i = 0; i < N-1; ++i) {
         loop.setEdge(i, i, i+1); 
-
     }
+    
     loop.setEdge(N-1, N-1, 0); 
-
     return loop;
 
 }

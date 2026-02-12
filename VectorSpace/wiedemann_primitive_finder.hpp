@@ -69,6 +69,7 @@ private:
 			
 			
 			for (size_t i = 0; i< map_representative.domain_dim(); i++) {
+				if (input[i] == k{0}) continue;
 				result.append_in_basis_order(BasisElement(domain_space_enumeration[i], input[i]));
 			}
 				

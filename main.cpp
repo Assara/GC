@@ -7,9 +7,9 @@
 using namespace std;
 
 
-const Int wheelSize = 9;
+constexpr Int wheelSize = 11;
 
-void tryFindQuadraticRepresentativeForWheel() {
+OddGCdegZero<wheelSize + 1> tryFindQuadraticRepresentativeForWheel() {
     OddGraphdegZero<wheelSize + 1> W = wheel_graph<wheelSize>();
     BasisElement<OddGraphdegZero<wheelSize + 1>, fieldType> res = BasisElement<OddGraphdegZero<wheelSize + 1>, fieldType>(W);
 
@@ -35,7 +35,7 @@ void tryFindQuadraticRepresentativeForWheel() {
         
         if (!primitive_optional.has_value()) {
 				cout << "FAILURE" << std::endl;
-				return;
+				return OddGCdegZero<wheelSize + 1>{};
 		}
         
         
@@ -55,6 +55,8 @@ void tryFindQuadraticRepresentativeForWheel() {
     
     cout << "size = " << wheel_class.size() << std::endl;
     
+    
+    return wheel_class;
 
 }
 
@@ -300,9 +302,59 @@ void tryFindFullWheel9ClassByWaterfall() {
     W9_class_filtered.print(out);
 }
 
+	void some_truss_graph_exploration () {
+			const Int size = 17;
+		
+		OddGraphdegZero<size + 1> T = truss_graph<size>();
+	
+		T.print();
+		
+		cout << "-------------------" << endl;
+		GC truss = GC(T);
+		
+		auto d_truss = truss.d_contraction();
+		
+
+		vector< OddGraphdegZero<size + 1>> graphs_to_exclude;
+		
+	   
+		auto canon_T = T.canonical_represesentation();
+		
+		graphs_to_exclude.push_back(T.canonical_represesentation());
+
+		auto other_primitive_optional = d_truss.try_find_cont_primitive(graphs_to_exclude); 
+	   
+		auto other_primitive = *other_primitive_optional;
+		
+		
+		bool found_truss_graph = false;
+		for (const auto& be: other_primitive.data()) {
+				if (be.getValue() == canon_T) {
+						cout << "found truss in other primitive. Something is wrong" << endl;
+						found_truss_graph= true;
+				}
+		}
+		
+		if (!found_truss_graph) {
+				cout << "truss graph is not present in other primitive. All good" << endl;
+		}
+	   
+		truss.scalar_multiply(fieldType{-1}); 
+		truss += other_primitive;
+		
+		cout << "truss_class size = " << truss.size() << std::endl;
+		
+		auto d_truss_class = truss.d_contraction();
+		cout << "d_truss_class size = " << d_truss_class.size() << std::endl;
+		
+		
+		truss.try_find_cont_primitive();
+		
+	}
+
 int main() {
-    tryFindQuadraticRepresentativeForWheel();
-    return 0;
+	tryFindQuadraticRepresentativeForWheel();
+	return 0;
 }
 
 

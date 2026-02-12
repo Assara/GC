@@ -112,8 +112,27 @@ public:
             rv[i] = k(dist(rng));
         }
         return rv;
-
 	}
+	
+	std::vector<DenseImageVec> make_dense_image_vectors_random(std::size_t n, std::uint64_t seed = 0xC0FFEEULL) const {		     
+		std::vector<DenseImageVec> random_vecs;
+		
+		for (std::size_t i =0; i < n; i++) {
+			   random_vecs.emplace_back(reserve_dense_image_vec());
+		}
+
+        std::mt19937_64 rng(seed);
+        std::uniform_int_distribution<std::uint64_t> dist(0, k::modulus() - 1);
+
+		for (auto& rv : random_vecs) {			
+			for (std::size_t i = 0; i < image_dim(); ++i) {
+				rv[i] = k(dist(rng));
+			}
+		}
+        
+        return random_vecs;
+	}
+	
 	
 	void sort_cols() {
         for (auto& col : cols_) {

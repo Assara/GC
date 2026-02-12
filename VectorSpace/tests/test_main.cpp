@@ -1,4 +1,5 @@
 #include "../wiedemann_helper.hpp"
+#include "../block_wiedemann.hpp"
 #include "../types.hpp"
 #include <iostream>
 #include <random>
@@ -158,6 +159,38 @@ bool performance_test_wiedemann_solver(size_t image_dim, size_t domain_dim, size
 	return false;
 }
 
+
+bool performance_test_block_wiedemann_solver(size_t image_dim, size_t domain_dim, size_t n_entries) {
+	
+	lil_matrix<fieldType> M = generate_random_matrix<fieldType>(image_dim, domain_dim, n_entries);
+	
+	std::unique_ptr<fieldType[]> pre_x = M.make_dense_domain_vec_random(domain_dim);
+	std::unique_ptr<fieldType[]> y = M.evaluate_from_dense(pre_x);
+	
+	
+	
+	VectorSpace::block_wiedemann_solver<fieldType> solver(M, 16);
+	
+		
+    using clock = std::chrono::steady_clock;
+	
+	const auto t0 = clock::now();
+	std::vector<std::unique_ptr<fieldType[]>> X = solver.solve_MX_equals_y(y);
+	const auto t1 = clock::now();
+	
+
+    const std::chrono::duration<double> elapsed = t1 - t0;
+
+    std::cout << "Wiedemann solve time: "
+              << elapsed.count() << " s\n";
+	
+	cout << "found " << X.size() << "solutions" << std::endl;
+	
+	return true;
+}
+
+
+
 int main() {
-		performance_test_wiedemann_solver(600, 1800, 18000);
+		performance_test_block_wiedemann_solver(100, 200, 1000);
 }

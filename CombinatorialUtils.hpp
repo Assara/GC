@@ -63,7 +63,7 @@ namespace combutils {
 
     template<typename T>
     vector<T> intersection(unordered_set<T> const& a,
-                                unordered_set<T> const& b){
+                           unordered_set<T> const& b) {
         vector<T> result;
 
         // iterate over the smaller set for efficiency
@@ -76,5 +76,31 @@ namespace combutils {
 
         return result;
     }
+    
+    
+  template<typename T>
+	std::vector<T> ordered_intersection(std::vector<T> const& a,
+										std::vector<T> const& b) {
+			std::vector<T> result;
+			result.reserve(std::min(a.size(), b.size()));
+
+			auto it_a = a.begin();
+			auto it_b = b.begin();
+
+			while (it_a != a.end() && it_b != b.end()) {
+					if (*it_a < *it_b) {
+							++it_a;
+					} else if (*it_b < *it_a) {
+							++it_b;
+					} else {
+						// *it_a == *it_b
+							result.push_back(*it_a);
+							++it_a;
+							++it_b;
+					}
+			}
+
+			return result;
+	}
     
 }
