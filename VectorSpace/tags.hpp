@@ -1,2 +1,2 @@
 
-     struct AssumeBasisOrderTag {};
+struct AssumeBasisOrderTag {};

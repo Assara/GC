@@ -12,17 +12,17 @@ using fieldType = Z32783;
 
 template<typename T>
 struct TypeName {
-    static std::string name() { return "unknown"; }
+	static std::string name() { return "unknown"; }
 };
 
 template<>
 struct TypeName<double> {
-    static std::string name() { return "double"; }
+	static std::string name() { return "double"; }
 };
 
 #include "Z32783.hpp"
 
 template<>
 struct TypeName<Z32783> {
-    static std::string name() { return "Z32783"; }
+	static std::string name() { return "Z32783"; }
 };

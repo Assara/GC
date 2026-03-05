@@ -15,9 +15,9 @@
 
 namespace VectorSpace {
 
-template<typename A, typename B, typename k>
-class graded_wiedemann_primitive_finder {
+	template<typename A, typename B, typename k>
+		class graded_wiedemann_primitive_finder {
 
 
-public:
-}
+			public:
+		}
