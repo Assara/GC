@@ -17,11 +17,6 @@ namespace VectorSpace {
 
 	template<typename A, typename B, typename k>
 		class wiedemann_primitive_finder {
-
-
-			public:
-
-
 			private:
 				std::vector<B> domain_space_enumeration;               // row index -> B basis element  
 				lil_matrix<k> map_representative;
@@ -52,12 +47,32 @@ namespace VectorSpace {
 					return result;
 				}
 
+				template<typename Pred>
+				LinComb<size_t, k> map_to_enumeration_basis_filtered(const LinComb<A,k>& input, const Pred& predicate) {
+					LinComb<size_t, k> result;
+
+					for (const auto& be : input ) {
+						if (!predicate(be.getValue())) {
+							continue;
+						}
+						result.append_in_basis_order(BasisElement(image_space_to_number(be.getValue()), be.getCoefficient()));
+					}
+
+					result.sort_without_deduplicate();
+					return result;
+				}
+
 
 				DenseImageVec map_to_enumeration_basis_dense(const LinComb<A,k>& input) {
 					DenseImageVec result = map_representative.make_dense_image_vec_zero();
 
 					for (const auto& be : input ) {
-						result[image_space_enumeration[be.getValue()]] += be.getCoefficient();	
+						auto it = image_space_enumeration.find(be.getValue());
+						if (it == image_space_enumeration.end()) {
+							// Project away terms outside the currently enumerated image basis.
+							continue;
+						}
+						result[it->second] += be.getCoefficient();	
 
 					}
 					return result;
@@ -83,7 +98,7 @@ namespace VectorSpace {
 				// -----------------------------------------------------
 				// Constructor: build sparse matrix for δ : B → LinComb<A,k>
 				// -----------------------------------------------------
-				wiedemann_primitive_finder(std::unordered_map<B, LinComb<A,k>>& delta) {
+				wiedemann_primitive_finder(const std::unordered_map<B, LinComb<A,k>>& delta) {
 					domain_space_enumeration.reserve(delta.size());
 					size_t n_matrix_entries = 0;
 
@@ -101,12 +116,34 @@ namespace VectorSpace {
 					cout << "created sparse solver: domain_dim = " << domain_space_enumeration.size() << endl
 						<< "image_space_dim = " <<  image_space_enumeration.size() << endl
 						<< "number of matrix entries =" <<  n_matrix_entries << endl;
+				}
 
+				template<typename Pred>
+				static wiedemann_primitive_finder create_filtered(const std::unordered_map<B, LinComb<A,k>>& delta, const Pred& predicate) {
+					return wiedemann_primitive_finder(delta, predicate);
+				}
+
+				template<typename Pred>
+				wiedemann_primitive_finder(const std::unordered_map<B, LinComb<A,k>>& delta, const Pred& predicate) {
+					domain_space_enumeration.reserve(delta.size());
+					size_t n_matrix_entries = 0;
+
+					for (const auto& entry : delta) {
+						domain_space_enumeration.push_back(entry.first);
+
+						auto col = map_to_enumeration_basis_filtered(entry.second, predicate);
+						n_matrix_entries += col.size();
+						map_representative.add_col(std::move(col));
+					}
+
+					cout << "created filtered sparse solver: domain_dim = " << domain_space_enumeration.size() << endl
+						<< "image_space_dim = " <<  image_space_enumeration.size() << endl
+						<< "number of matrix entries =" <<  n_matrix_entries << endl;
 				}
 
 
 				//delta_0 and delta_1 must have non intersected domains.
-				wiedemann_primitive_finder(std::unordered_map<B, LinComb<A,k>>& delta_0, std::unordered_map<B, LinComb<A,k>>& delta_1) {
+				wiedemann_primitive_finder(const std::unordered_map<B, LinComb<A,k>>& delta_0, const std::unordered_map<B, LinComb<A,k>>& delta_1) {
 					domain_space_enumeration.reserve(delta_0.size() + delta_1.size());
 					size_t n_matrix_entries = 0;
 
@@ -137,9 +174,6 @@ namespace VectorSpace {
 						<< "number of matrix entries =" <<  n_matrix_entries << endl;
 
 				}
-
-
-
 
 
 				std::optional<LinComb<B,k>> find_primitive_or_empty(LinComb<A,k> y) {

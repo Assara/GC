@@ -215,6 +215,20 @@ namespace VectorSpace {
 					return result;
 				}
 
+				template<typename Pred>
+				LinComb filtered(const Pred& predicate) const {
+					LinComb result;
+					result.reserve(elements.size());
+
+					for (const auto& elem : elements) {
+						if (predicate(elem.getValue())) {
+							result.append_in_basis_order(elem);
+						}
+					}
+
+					return result;
+				}
+
 
 				bigInt size() const {
 					return elements.size();

@@ -7,54 +7,21 @@
 using namespace std;
 
 
-constexpr Int wheelSize = 9;
+constexpr Int wheelSize = 11;
 
 OddGCdegZero<wheelSize + 1> tryFindQuadraticRepresentativeForWheel() {
 	OddGraphdegZero<wheelSize + 1> W = wheel_graph<wheelSize>();
-	BasisElement<OddGraphdegZero<wheelSize + 1>, fieldType> res = BasisElement<OddGraphdegZero<wheelSize + 1>, fieldType>(W);
+	OddGCdegZero<wheelSize + 1> wheel_class(W);
+	auto representative_opt =
+		OddGCdegZero<wheelSize + 1>::try_find_quadratic_cont_representative(wheel_class);
 
-	res.getValue().print();
-	cout << res.getCoefficient() << endl;
-
-	GC wheel_class = GC(W);
-	cout << "wheel = ";
-	wheel_class.print();
-
-
-
-	int i = 0;
-	while (wheel_class.frontValence() > 4) {
-		cout << "___________________________________" << std::endl; 
-		cout << "Trying to reduce odd vertex pairs. depth " << i  << std::endl; 
-		cout << "___________________________________" << std::endl; 
-
-		auto primitive_optional = wheel_class.try_find_even_cont_primitive();
-
-
-		if (!primitive_optional.has_value()) {
-			cout << "FAILURE" << std::endl;
-			return OddGCdegZero<wheelSize + 1>{};
-		}
-
-
-		auto primitive = GC(*primitive_optional);
-
-
-		GC full_diff = primitive.d_contraction();
-
-		wheel_class += full_diff.scalar_multiply(-1);
-
-		i++;
-
+	if (!representative_opt.has_value()) {
+		cout << "FAILURE: could not find quadratic contraction representative" << std::endl;
+		return OddGCdegZero<wheelSize + 1>{};
 	}
 
-	cout << "final representation: " << endl;
-	//wheel_class.print();
-
-	cout << "size = " << wheel_class.size() << std::endl;
-
-
-	return wheel_class;
+	cout << "quadratic representative size = " << representative_opt->size() << std::endl;
+	return *representative_opt;
 
 }
 
@@ -350,9 +317,28 @@ void some_truss_graph_exploration () {
 }
 
 int main() {
-	tryFindQuadraticRepresentativeForWheel();
+	OddGraphdegZero<wheelSize + 1> wheel = wheel_graph<wheelSize>();
+	auto representative_opt =
+		OddGCdegZero<wheelSize + 1>::try_find_quadratic_cont_representative(
+			OddGCdegZero<wheelSize + 1>(wheel)
+		);
+
+	if (!representative_opt.has_value()) {
+		cout << "FAILURE: could not find quadratic contraction representative for wheel graph" << endl;
+		return 1;
+	}
+
+	const string output_filename =
+		"quadratic_cont_rep_" + std::to_string(wheelSize) + ".txt";
+	ofstream out(output_filename);
+	if (!out) {
+		cerr << "FAILURE: could not open output file " << output_filename << endl;
+		return 1;
+	}
+
+	representative_opt->print(out);
+	cout << "SUCCESS: quadratic representative size = " << representative_opt->size()
+		 << ", written to " << output_filename << endl;
 	return 0;
 }
-
-
 
