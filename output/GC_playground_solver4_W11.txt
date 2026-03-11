@@ -1,0 +1,61 @@
+created filtered sparse solver: domain_dim = 165
+image_space_dim = 17
+number of matrix entries =440
+using wierdemann_primitive_finder for LinComb:
+mapped to enumeration!!!
+created solver!
+using solve_MX_equals_y. image dim = 17 domain dim = 165
+
+OMP: Warning #179: Function Can't set size of SHM failed:
+recomputing solution connection_poly.size() = 6
+Solution validated! with lambda 1
+M * x: 0.00118459 s (21 calls, avg 5.64089e-05 s)
+M^T * y: 0.00269877 s (21 calls, avg 0.000128513 s)
+berlekamp massey computations:: 1.516e-06 s (2 calls, avg 7.58e-07 s)
+solved!!!
+created filtered sparse solver: domain_dim = 249
+image_space_dim = 210
+number of matrix entries =1395
+using wierdemann_primitive_finder for LinComb:
+mapped to enumeration!!!
+created solver!
+using solve_MX_equals_y. image dim = 210 domain dim = 249
+
+recomputing solution connection_poly.size() = 39
+Solution validated! with lambda 1
+M * x: 0.00896931 s (120 calls, avg 7.47442e-05 s)
+M^T * y: 0.00823033 s (120 calls, avg 6.85861e-05 s)
+berlekamp massey computations:: 1.865e-05 s (11 calls, avg 1.69545e-06 s)
+solved!!!
+created filtered sparse solver: domain_dim = 655
+image_space_dim = 1160
+number of matrix entries =3550
+using wierdemann_primitive_finder for LinComb:
+mapped to enumeration!!!
+created solver!
+using solve_MX_equals_y. image dim = 1160 domain dim = 655
+
+recomputing solution connection_poly.size() = 383
+Solution validated! with lambda 1
+M * x: 0.084274 s (1152 calls, avg 7.31545e-05 s)
+M^T * y: 0.0637839 s (1152 calls, avg 5.53679e-05 s)
+berlekamp massey computations:: 0.000570571 s (97 calls, avg 5.88218e-06 s)
+solved!!!
+created filtered sparse solver: domain_dim = 1065
+image_space_dim = 2308
+number of matrix entries =6616
+using wierdemann_primitive_finder for LinComb:
+mapped to enumeration!!!
+created solver!
+using solve_MX_equals_y. image dim = 2308 domain dim = 1065
+
+recomputing solution connection_poly.size() = 693
+Solution validated! with lambda 1
+M * x: 0.0323398 s (2082 calls, avg 1.55331e-05 s)
+M^T * y: 0.0260796 s (2082 calls, avg 1.25262e-05 s)
+berlekamp massey computations:: 0.001636 s (174 calls, avg 9.40232e-06 s)
+solved!!!
+representative size = 21
+val3_weight = 0
+odd_weight = 0
+d_contraction size = 0

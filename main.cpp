@@ -6,25 +6,6 @@
 
 using namespace std;
 
-
-constexpr Int wheelSize = 11;
-
-OddGCdegZero<wheelSize + 1> tryFindQuadraticRepresentativeForWheel() {
-	OddGraphdegZero<wheelSize + 1> W = wheel_graph<wheelSize>();
-	OddGCdegZero<wheelSize + 1> wheel_class(W);
-	auto representative_opt =
-		OddGCdegZero<wheelSize + 1>::try_find_quadratic_cont_representative(wheel_class);
-
-	if (!representative_opt.has_value()) {
-		cout << "FAILURE: could not find quadratic contraction representative" << std::endl;
-		return OddGCdegZero<wheelSize + 1>{};
-	}
-
-	cout << "quadratic representative size = " << representative_opt->size() << std::endl;
-	return *representative_opt;
-
-}
-
 template<Int N>
 void tryFindFullWheelClassesByWaterfall() {
 	GC loop(loop_graph<4*N+1>());
@@ -317,28 +298,17 @@ void some_truss_graph_exploration () {
 }
 
 int main() {
-	OddGraphdegZero<wheelSize + 1> wheel = wheel_graph<wheelSize>();
-	auto representative_opt =
-		OddGCdegZero<wheelSize + 1>::try_find_quadratic_cont_representative(
-			OddGCdegZero<wheelSize + 1>(wheel)
-		);
+	auto g9_class = python_G9_class();
+	cout << "input GC size = " << g9_class.size() << endl;
+	g9_class.standardize_all();
+	cout << "size after standardize_all = " << g9_class.size() << endl;
+	g9_class.print();
 
-	if (!representative_opt.has_value()) {
-		cout << "FAILURE: could not find quadratic contraction representative for wheel graph" << endl;
-		return 1;
+	auto d_g9_class = g9_class.d_contraction();
+	cout << "d_contraction size = " << d_g9_class.size() << endl;
+	if (d_g9_class.size() != 0) {
+		d_g9_class.print();
 	}
 
-	const string output_filename =
-		"quadratic_cont_rep_" + std::to_string(wheelSize) + ".txt";
-	ofstream out(output_filename);
-	if (!out) {
-		cerr << "FAILURE: could not open output file " << output_filename << endl;
-		return 1;
-	}
-
-	representative_opt->print(out);
-	cout << "SUCCESS: quadratic representative size = " << representative_opt->size()
-		 << ", written to " << output_filename << endl;
 	return 0;
 }
-

@@ -124,6 +124,15 @@ namespace VectorSpace {
 				}
 
 				template<typename Pred>
+				static wiedemann_primitive_finder create_filtered(
+					const std::unordered_map<B, LinComb<A,k>>& delta,
+					const Pred& predicate,
+					std::size_t max_non_zero_items
+				) {
+					return wiedemann_primitive_finder(delta, predicate, max_non_zero_items);
+				}
+
+				template<typename Pred>
 				wiedemann_primitive_finder(const std::unordered_map<B, LinComb<A,k>>& delta, const Pred& predicate) {
 					domain_space_enumeration.reserve(delta.size());
 					size_t n_matrix_entries = 0;
@@ -139,6 +148,34 @@ namespace VectorSpace {
 					cout << "created filtered sparse solver: domain_dim = " << domain_space_enumeration.size() << endl
 						<< "image_space_dim = " <<  image_space_enumeration.size() << endl
 						<< "number of matrix entries =" <<  n_matrix_entries << endl;
+				}
+
+				template<typename Pred>
+				wiedemann_primitive_finder(
+					const std::unordered_map<B, LinComb<A,k>>& delta,
+					const Pred& predicate,
+					std::size_t max_non_zero_items
+				) {
+					domain_space_enumeration.reserve(delta.size());
+					size_t n_matrix_entries = 0;
+					size_t skipped_dense_columns = 0;
+
+					for (const auto& entry : delta) {
+						auto col = map_to_enumeration_basis_filtered(entry.second, predicate);
+						if (col.size() > max_non_zero_items) {
+							++skipped_dense_columns;
+							continue;
+						}
+
+						domain_space_enumeration.push_back(entry.first);
+						n_matrix_entries += col.size();
+						map_representative.add_col(std::move(col));
+					}
+
+					cout << "created filtered sparse solver: domain_dim = " << domain_space_enumeration.size() << endl
+						<< "image_space_dim = " <<  image_space_enumeration.size() << endl
+						<< "number of matrix entries =" <<  n_matrix_entries << endl
+						<< "skipped dense columns = " << skipped_dense_columns << endl;
 				}
 
 

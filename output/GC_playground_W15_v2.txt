@@ -1,0 +1,5 @@
+depth 1 global_beam_size=8 best=(9, 10, 1)
+depth 2 global_beam_size=32 best=(9, 10, 1)
+depth 3 global_beam_size=32 best=(9, 10, 1)
+depth 4 global_beam_size=32 best=(9, 10, 1)
+depth 5 global_beam_size=32 best=(9, 10, 1)

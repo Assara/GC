@@ -1,0 +1,89 @@
+created filtered sparse solver: domain_dim = 455
+image_space_dim = 37
+number of matrix entries =1375
+using wierdemann_primitive_finder for LinComb:
+mapped to enumeration!!!
+created solver!
+using solve_MX_equals_y. image dim = 37 domain dim = 455
+
+OMP: Warning #179: Function Can't set size of SHM failed:
+recomputing solution connection_poly.size() = 7
+Solution validated! with lambda 1
+M * x: 0.000734198 s (24 calls, avg 3.05916e-05 s)
+M^T * y: 0.00423173 s (24 calls, avg 0.000176322 s)
+berlekamp massey computations:: 2.257e-06 s (3 calls, avg 7.52333e-07 s)
+solved!!!
+created filtered sparse solver: domain_dim = 741
+image_space_dim = 748
+number of matrix entries =4509
+using wierdemann_primitive_finder for LinComb:
+mapped to enumeration!!!
+created solver!
+using solve_MX_equals_y. image dim = 748 domain dim = 741
+
+recomputing solution connection_poly.size() = 78
+Solution validated! with lambda 1
+M * x: 0.00143321 s (237 calls, avg 6.04732e-06 s)
+M^T * y: 0.00107928 s (237 calls, avg 4.55394e-06 s)
+berlekamp massey computations:: 3.6335e-05 s (20 calls, avg 1.81675e-06 s)
+solved!!!
+created filtered sparse solver: domain_dim = 3601
+image_space_dim = 7308
+number of matrix entries =18810
+using wierdemann_primitive_finder for LinComb:
+mapped to enumeration!!!
+created solver!
+using solve_MX_equals_y. image dim = 7308 domain dim = 3601
+
+recomputing solution connection_poly.size() = 1657
+Solution validated! with lambda 1
+M * x: 0.063187 s (4974 calls, avg 1.27035e-05 s)
+M^T * y: 0.0552206 s (4974 calls, avg 1.11018e-05 s)
+berlekamp massey computations:: 0.00845053 s (415 calls, avg 2.03627e-05 s)
+solved!!!
+created filtered sparse solver: domain_dim = 13861
+image_space_dim = 42469
+number of matrix entries =87632
+using wierdemann_primitive_finder for LinComb:
+mapped to enumeration!!!
+created solver!
+using solve_MX_equals_y. image dim = 42469 domain dim = 13861
+
+recomputing solution connection_poly.size() = 10388
+Solution validated! with lambda 1
+M * x: 5.16728 s (31167 calls, avg 0.000165793 s)
+M^T * y: 4.96327 s (31167 calls, avg 0.000159247 s)
+berlekamp massey computations:: 0.468738 s (2598 calls, avg 0.000180423 s)
+solved!!!
+created filtered sparse solver: domain_dim = 28561
+image_space_dim = 102084
+number of matrix entries =210716
+using wierdemann_primitive_finder for LinComb:
+mapped to enumeration!!!
+created solver!
+using solve_MX_equals_y. image dim = 102084 domain dim = 28561
+
+recomputing solution connection_poly.size() = 25837
+Solution validated! with lambda 1
+M * x: 31.6989 s (77514 calls, avg 0.000408944 s)
+M^T * y: 28.8817 s (77514 calls, avg 0.000372599 s)
+berlekamp massey computations:: 3.17604 s (6460 calls, avg 0.000491647 s)
+solved!!!
+created filtered sparse solver: domain_dim = 34561
+image_space_dim = 124901
+number of matrix entries =274585
+using wierdemann_primitive_finder for LinComb:
+mapped to enumeration!!!
+created solver!
+using solve_MX_equals_y. image dim = 124901 domain dim = 34561
+
+recomputing solution connection_poly.size() = 30068
+Solution validated! with lambda 1
+M * x: 39.5558 s (90207 calls, avg 0.000438501 s)
+M^T * y: 31.5699 s (90207 calls, avg 0.000349972 s)
+berlekamp massey computations:: 4.08038 s (7518 calls, avg 0.000542748 s)
+solved!!!
+representative size = 142
+val3_weight = 0
+odd_weight = 0
+d_contraction size = 0

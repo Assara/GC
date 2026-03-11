@@ -1,0 +1,8 @@
+depth 1 branch=8 class_beam=16 level_beam=32 global_beam_size=8 best=(9, 10, 1)
+depth 2 branch=8 class_beam=16 level_beam=32 global_beam_size=32 best=(9, 10, 1)
+depth 2 stalled on weights, widening search
+depth 2 branch=16 class_beam=32 level_beam=64 global_beam_size=64 best=(9, 10, 1)
+depth 2 stalled on weights, widening search
+depth 2 branch=32 class_beam=64 level_beam=128 global_beam_size=128 best=(9, 10, 1)
+depth 2 stalled on weights, widening search
+depth 2 branch=32 class_beam=128 level_beam=256 global_beam_size=256 best=(9, 10, 1)

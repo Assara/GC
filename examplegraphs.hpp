@@ -80,3 +80,107 @@ OddLoopGraphType<N> loop_graph() {
 	return loop;
 
 }
+
+inline OddGraphdegZero<10> python_G9_1_graph() {
+	OddGraphdegZero<10> g;
+	g.setEdge(0, 4, 5);
+	g.setEdge(1, 3, 4);
+	g.setEdge(2, 2, 3);
+	g.setEdge(3, 1, 2);
+	g.setEdge(4, 0, 1);
+	g.setEdge(5, 0, 5);
+	g.setEdge(6, 5, 7);
+	g.setEdge(7, 4, 7);
+	g.setEdge(8, 3, 7);
+	g.setEdge(9, 3, 8);
+	g.setEdge(10, 2, 8);
+	g.setEdge(11, 2, 9);
+	g.setEdge(12, 1, 9);
+	g.setEdge(13, 1, 6);
+	g.setEdge(14, 0, 6);
+	g.setEdge(15, 7, 8);
+	g.setEdge(16, 8, 9);
+	g.setEdge(17, 6, 9);
+	return g;
+}
+
+inline OddGraphdegZero<10> python_G9_2_graph() {
+	OddGraphdegZero<10> g;
+	g.setEdge(0, 0, 5);
+	g.setEdge(1, 4, 5);
+	g.setEdge(2, 3, 4);
+	g.setEdge(3, 2, 3);
+	g.setEdge(4, 1, 2);
+	g.setEdge(5, 0, 1);
+	g.setEdge(6, 0, 7);
+	g.setEdge(7, 5, 7);
+	g.setEdge(8, 4, 7);
+	g.setEdge(9, 4, 8);
+	g.setEdge(10, 3, 8);
+	g.setEdge(11, 3, 9);
+	g.setEdge(12, 2, 9);
+	g.setEdge(13, 1, 6);
+	g.setEdge(14, 0, 6);
+	g.setEdge(15, 7, 8);
+	g.setEdge(16, 8, 9);
+	g.setEdge(17, 6, 9);
+	return g;
+}
+
+inline OddGraphdegZero<10> python_G9_3_graph() {
+	OddGraphdegZero<10> g;
+	g.setEdge(0, 0, 5);
+	g.setEdge(1, 4, 5);
+	g.setEdge(2, 3, 4);
+	g.setEdge(3, 2, 3);
+	g.setEdge(4, 1, 2);
+	g.setEdge(5, 0, 1);
+	g.setEdge(6, 0, 7);
+	g.setEdge(7, 5, 7);
+	g.setEdge(8, 4, 7);
+	g.setEdge(9, 4, 8);
+	g.setEdge(10, 3, 8);
+	g.setEdge(11, 3, 6);
+	g.setEdge(12, 2, 6);
+	g.setEdge(13, 1, 9);
+	g.setEdge(14, 0, 9);
+	g.setEdge(15, 7, 8);
+	g.setEdge(16, 8, 9);
+	g.setEdge(17, 6, 9);
+	return g;
+}
+
+inline OddGraphdegZero<10> python_G9_4_graph() {
+	OddGraphdegZero<10> g;
+	g.setEdge(0, 0, 5);
+	g.setEdge(1, 4, 5);
+	g.setEdge(2, 3, 4);
+	g.setEdge(3, 2, 3);
+	g.setEdge(4, 1, 2);
+	g.setEdge(5, 0, 1);
+	g.setEdge(6, 0, 7);
+	g.setEdge(7, 5, 7);
+	g.setEdge(8, 4, 7);
+	g.setEdge(9, 4, 8);
+	g.setEdge(10, 3, 8);
+	g.setEdge(11, 2, 6);
+	g.setEdge(12, 1, 6);
+	g.setEdge(13, 1, 9);
+	g.setEdge(14, 0, 9);
+	g.setEdge(15, 7, 8);
+	g.setEdge(16, 8, 9);
+	g.setEdge(17, 6, 9);
+	return g;
+}
+
+inline OddGCdegZero<10> python_G9_class() {
+	using G = OddGraphdegZero<10>;
+	using B = BasisElement<G, fieldType>;
+	std::vector<B> elems;
+	elems.reserve(4);
+	elems.emplace_back(python_G9_1_graph(), fieldType{-2});
+	elems.emplace_back(python_G9_2_graph(), fieldType{-2});
+	elems.emplace_back(python_G9_3_graph(), fieldType{2});
+	elems.emplace_back(python_G9_4_graph(), fieldType{2});
+	return OddGCdegZero<10>(std::move(elems));
+}

@@ -850,43 +850,6 @@ class GC {
 
 		}
 
-		static std::optional<ThisGC> try_find_quadratic_cont_representative(ThisGC cycle) {
-			unordered_map<SplitGraphType, L> boundary_map;
-			SplitGC splits = cycle.delta();
-
-			for (signedInt i = cycle.find_max_odd_pairs(); cycle.frontValence() > 4; --i) {
-				for (const auto& split_be : splits.data()) {
-					const SplitGraphType& split_graph = split_be.getValue();
-					if (boundary_map.contains(split_graph)) {
-						continue;
-					}
-					boundary_map.emplace(
-							split_graph,
-							SplitGC(split_graph, AssumeBasisOrderTag{}).d_contraction().data()
-					);
-				}
-
-				auto solver =
-					VectorSpace::wiedemann_primitive_finder<GraphType, SplitGraphType, fieldType>::create_filtered(
-							boundary_map,
-							[i](const GraphType& g) { return g.n_odd_pairs() >= i; }
-					);
-
-				auto primitive_opt = solver.find_primitive_or_empty(cycle.data());
-				if (!primitive_opt.has_value()) {
-					return std::nullopt;
-				}
-
-				SplitGC primitive(*primitive_opt);
-				ThisGC full_correction = primitive.d_contraction();
-				cycle += full_correction.scalar_multiply(fieldType{-1});
-				splits = cycle.delta();
-			}
-
-			return cycle;
-		}
-	
-
 		GC& scalar_multiply(fieldType scalar) {
 			vec.scalar_multiply(scalar);
 			return *this;
