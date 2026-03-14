@@ -1,0 +1,14 @@
+build/
+
+gc
+gc_contraction_playground
+gc_test
+
+output/
+
+docs/notice/*.aux
+docs/notice/*.fdb_latexmk
+docs/notice/*.fls
+docs/notice/*.log
+docs/notice/*.out
+docs/notice/main.pdf

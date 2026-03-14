@@ -2,23 +2,51 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "custom-g++-build-cpp20",
+      "label": "build main",
       "type": "shell",
-      "command": "C:/msys64/mingw64/bin/g++.exe",
+      "command": "clang++",
       "args": [
+        "-std=c++23",
+        "-O2",
+        "-g",
         "-Wall",
         "-Wextra",
-        "-std=c++23",
-        "-g3",
+        "-Wpedantic",
+        "-I.",
+        "-IVectorSpace",
         "${workspaceFolder}/main.cpp",
         "-o",
-        "${workspaceFolder}/output/main.exe"
+        "${workspaceFolder}/output/main"
       ],
       "group": {
         "kind": "build",
         "isDefault": true
       },
-      "problemMatcher": ["$gcc"]
+      "problemMatcher": [
+        "$gcc"
+      ]
+    },
+    {
+      "label": "build active cpp",
+      "type": "shell",
+      "command": "clang++",
+      "args": [
+        "-std=c++23",
+        "-O2",
+        "-g",
+        "-Wall",
+        "-Wextra",
+        "-Wpedantic",
+        "-I.",
+        "-IVectorSpace",
+        "${file}",
+        "-o",
+        "${workspaceFolder}/output/${fileBasenameNoExtension}"
+      ],
+      "group": "build",
+      "problemMatcher": [
+        "$gcc"
+      ]
     }
   ]
 }

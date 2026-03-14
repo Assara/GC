@@ -4,6 +4,8 @@ CXX       := clang++
 LD        := clang++
 
 TARGET    := gc
+PLAYGROUND_TARGET := gc_contraction_playground
+TEST_TARGET := gc_test
 BUILD_DIR := build
 
 # Include directories
@@ -20,21 +22,36 @@ LDFLAGS   := -flto -fuse-ld=lld $(OPENMP_LDFLAGS)
 
 # ======= SOURCE / BUILD SETUP =======
 
-# All .cpp files EXCEPT anything under VectorSpace/tests/
-SRCS := $(shell find . -type f -name "*.cpp" -not -path "./VectorSpace/tests/*")
+# Main binary sources
+MAIN_SRCS := main.cpp GC_split_playground.cpp
+MAIN_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(MAIN_SRCS))
 
-# Map sources to corresponding build objects
-OBJS := $(patsubst ./%.cpp,$(BUILD_DIR)/%.o,$(SRCS))
+# Standalone binaries
+PLAYGROUND_SRCS := GC_contraction_playground.cpp
+PLAYGROUND_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(PLAYGROUND_SRCS))
+
+TEST_SRCS := GC_test.cpp
+TEST_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(TEST_SRCS))
 
 # ======= RULES =======
 
-.PHONY: all clean run
+.PHONY: all clean run playground test
 
 all: $(TARGET)
 
-$(TARGET): $(OBJS)
+$(TARGET): $(MAIN_OBJS)
 	@echo "🚧 Linking $(TARGET) with Clang + LLD..."
-	$(LD) $(OBJS) $(LDFLAGS) -o $(TARGET)
+	$(LD) $(MAIN_OBJS) $(LDFLAGS) -o $(TARGET)
+	@echo "✅ Build complete."
+
+$(PLAYGROUND_TARGET): $(PLAYGROUND_OBJS)
+	@echo "🚧 Linking $(PLAYGROUND_TARGET) with Clang + LLD..."
+	$(LD) $(PLAYGROUND_OBJS) $(LDFLAGS) -o $(PLAYGROUND_TARGET)
+	@echo "✅ Build complete."
+
+$(TEST_TARGET): $(TEST_OBJS)
+	@echo "🚧 Linking $(TEST_TARGET) with Clang + LLD..."
+	$(LD) $(TEST_OBJS) $(LDFLAGS) -o $(TEST_TARGET)
 	@echo "✅ Build complete."
 
 $(BUILD_DIR)/%.o: %.cpp
@@ -44,7 +61,11 @@ $(BUILD_DIR)/%.o: %.cpp
 
 clean:
 	@echo "🧹 Cleaning build files..."
-	rm -rf $(BUILD_DIR) $(TARGET)
+	rm -rf $(BUILD_DIR) $(TARGET) $(PLAYGROUND_TARGET) $(TEST_TARGET)
 
 run: all
 	@./$(TARGET)
+
+playground: $(PLAYGROUND_TARGET)
+
+test: $(TEST_TARGET)
