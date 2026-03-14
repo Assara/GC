@@ -17,7 +17,13 @@ class berlekamp_massey_state {
 			m(1),
 			b(k{1}),
 			n_processed(0)
-			{}
+			{
+				// BM polynomials can grow with the processed prefix. Reserving once
+				// avoids repeated reallocations in long runs.
+				const std::size_t reserve_hint = S.size() + 1;
+				C.reserve(reserve_hint);
+				B.reserve(reserve_hint);
+			}
 
 		// Process all currently available elements in S
 		void process_all_new() {
@@ -33,8 +39,10 @@ class berlekamp_massey_state {
 				// discrepancy d at position n:
 				// d = S[n] + sum_{i=1}^L C[i] * S[n-i]
 				k d = S[n];
+				const k* c_ptr = C.data();
+				const k* s_ptr = S.data();
 				for (std::size_t i = 1; i <= L; ++i) {
-					d = d + C[i] * S[n - i];
+					d = d + c_ptr[i] * s_ptr[n - i];
 				}
 
 				if (d == k{}) {
@@ -43,8 +51,11 @@ class berlekamp_massey_state {
 					continue;
 				}
 
-				// Save current C
-				std::vector<k> T = C;
+				const bool big_update = (2 * L <= n);
+				std::vector<k> T;
+				if (big_update) {
+					T = C;
+				}
 
 				// Factor for update
 				k factor = d / b;
@@ -60,7 +71,7 @@ class berlekamp_massey_state {
 				}
 
 				// Decide whether to increase recurrence length
-				if (2 * L <= n) {
+				if (big_update) {
 					// Increase recurrence length
 					std::size_t L_new = n + 1 - L;
 					B = std::move(T);
