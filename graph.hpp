@@ -48,6 +48,9 @@ Int N_VERTICES,
 			using ExtraEdgeGraph = Graph<N_VERTICES, N_EDGES + 1, N_OUT_HAIR, N_IN_HAIR, c, d, fieldType>;
 
 			using Basis = BasisElement<ThisGraph, fieldType>;
+			
+			template <typename NewFieldType>
+			using RebindField = Graph<N_VERTICES, N_EDGES, N_OUT_HAIR, N_IN_HAIR, c, d, NewFieldType>;
 
 
 			Graph() = default;
@@ -60,6 +63,10 @@ Int N_VERTICES,
 
 			inline signedInt n_odd_pairs() const {
 				return std::ranges::count_if(valence_array(), [](Int v){ return v % 2 != 0; }) / 2;
+			}
+
+			inline signedInt n_4valent_vertices() const {
+				return std::ranges::count_if(valence_array(), [](Int v){ return v == 4; });
 			}
 
 
@@ -99,6 +106,13 @@ Int N_VERTICES,
 				return ThisGraph::canonized(be).getValue();
 			}
 
+			template <typename NewFieldType>
+			RebindField<NewFieldType> cast_field() const {
+				RebindField<NewFieldType> result;
+				result.half_edges = half_edges;
+				return result;
+			}
+
 
 			pair<Int, Int> getEdge(Int i) const {
 				return { half_edges[N_HAIR + 2 * i], half_edges[N_HAIR + 2 * i + 1] };
@@ -126,6 +140,32 @@ Int N_VERTICES,
 					++valence[v];
 				}
 				return valence;
+			}
+
+			bigInt count_triangles() const {
+				array<array<bool, N_VERTICES>, N_VERTICES> adjacency{};
+
+				for (Int e = 0; e < N_EDGES; ++e) {
+					auto [u, v] = getEdge(e);
+					adjacency[u][v] = true;
+					adjacency[v][u] = true;
+				}
+
+				bigInt count = 0;
+				for (Int u = 0; u < N_VERTICES; ++u) {
+					for (Int v = u + 1; v < N_VERTICES; ++v) {
+						if (!adjacency[u][v]) {
+							continue;
+						}
+						for (Int w = v + 1; w < N_VERTICES; ++w) {
+							if (adjacency[u][w] && adjacency[v][w]) {
+								++count;
+							}
+						}
+					}
+				}
+
+				return count;
 			}
 
 			VectorSpace::LinComb<SplitGraph, fieldType> split_vertex_differential(fieldType coef) const {

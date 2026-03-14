@@ -163,9 +163,41 @@ class GC {
 			return result;
 		}
 
+		vector<BasisElement<typename GraphType::ContGraph, fieldType>> d_odd_contraction_without_sort() const {
+			using ContGraph = typename GraphType::ContGraph;
+			vector<BasisElement<typename GraphType::ContGraph, fieldType>> result;
+			result.reserve(vec.raw_elements().size() * GraphType::N_EDGES_);
+
+			for (const auto& elem : vec.raw_elements()) {
+				const BasisElement<GraphType, fieldType>& be = elem;
+
+				auto valence_array = be.getValue().valence_array();
+				for (Int i = 0; i < GraphType::N_EDGES_; ++i) {
+					auto edge = be.getValue().getEdge(i);
+
+					if (!(valence_array[edge.first] % 2 == 1 && valence_array[edge.second] % 2 == 1)) {
+						continue;
+					}
+
+					BasisElement<ContGraph, fieldType> contracted = GraphType::contract_edge(be, i);
+
+					if (contracted.getCoefficient() != 0) {
+						result.push_back(std::move(contracted));
+					}
+				}
+			}
+			return result;
+		}
+
 
 		ContGC d_contraction() {
 			std::vector<BasisElement<typename GraphType::ContGraph, fieldType>> elems = d_contraction_without_sort();
+			ContGC dThis(std::move(elems));
+			return dThis;
+		}
+
+		ContGC d_odd_contraction() {
+			std::vector<BasisElement<typename GraphType::ContGraph, fieldType>> elems = d_odd_contraction_without_sort();
 			ContGC dThis(std::move(elems));
 			return dThis;
 		}
