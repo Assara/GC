@@ -98,10 +98,26 @@ class GC {
 			return delta_recursive(0, vec.raw_elements().size());
 		}
 
+		SplitGC delta_4valent() const {
+			std::vector<BasisElement<SplitGraphType, fieldType>> elems;
+			for (const auto& be : vec.raw_elements()) {
+				SplitL term = be.getValue().split_vertex_differential_4valent(be.getCoefficient());
+				for (auto&& split_be : term.raw_elements()) {
+					elems.push_back(std::move(split_be));
+				}
+			}
+			return SplitGC(std::move(elems));
+		}
+
 		// Static method to compute delta of a single basis element
 		static SplitGC delta(const BasisElement<GraphType, fieldType>& G) {
 			SplitL lin_comb = G.getValue().split_vertex_differential(G.getCoefficient());
 
+			return SplitGC(lin_comb);
+		}
+
+		static SplitGC delta_4valent(const BasisElement<GraphType, fieldType>& G) {
+			SplitL lin_comb = G.getValue().split_vertex_differential_4valent(G.getCoefficient());
 			return SplitGC(lin_comb);
 		}
 
@@ -130,6 +146,24 @@ class GC {
 
 					if (contracted.getCoefficient() != 0) {
 						result.push_back(std::move(contracted));;
+					}
+				}
+			}
+			return result;
+		}
+
+		vector<BasisElement<typename GraphType::ContGraph, fieldType>> d_contraction_preserve_order_without_sort() const {
+			using ContGraph = typename GraphType::ContGraph;
+			vector<BasisElement<typename GraphType::ContGraph, fieldType>> result;
+			result.reserve(vec.raw_elements().size() * GraphType::N_EDGES_);
+
+			for (const auto& elem : vec.raw_elements()) {
+				const auto& be = elem;
+				for (Int i = 0; i < GraphType::N_EDGES_; ++i) {
+					BasisElement<ContGraph, fieldType> contracted = GraphType::contract_preserve_order(be, i);
+
+					if (contracted.getCoefficient() != 0) {
+						result.push_back(std::move(contracted));
 					}
 				}
 			}
@@ -192,6 +226,12 @@ class GC {
 
 		ContGC d_contraction() {
 			std::vector<BasisElement<typename GraphType::ContGraph, fieldType>> elems = d_contraction_without_sort();
+			ContGC dThis(std::move(elems));
+			return dThis;
+		}
+
+		ContGC d_contraction_preserve_order() {
+			std::vector<BasisElement<typename GraphType::ContGraph, fieldType>> elems = d_contraction_preserve_order_without_sort();
 			ContGC dThis(std::move(elems));
 			return dThis;
 		}

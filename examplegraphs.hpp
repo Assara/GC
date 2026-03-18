@@ -1,3 +1,5 @@
+#pragma once
+
 #include "graph.hpp"
 #include "GC.hpp"
 
@@ -23,7 +25,7 @@ namespace graphaliases {
 using namespace graphaliases;
 
 template<Int N> 
-OddGraphdegZero<N+1> wheel_graph() {
+ OddGraphdegZero<N + 1> wheel_graph() {
 	array<Int, 4*N> arr{};
 
 	OddGraphdegZero<N+1>  W(arr);
@@ -63,10 +65,6 @@ OddGraphdegZero<N + 1> truss_graph() {
 	return T;
 }
 
-
-
-
-
 template<Int N> 
 OddLoopGraphType<N> loop_graph() {
 	array<Int, 2*N> arr{};
@@ -78,7 +76,217 @@ OddLoopGraphType<N> loop_graph() {
 
 	loop.setEdge(N-1, N-1, 0); 
 	return loop;
+}
 
+template<Int N> 
+OddGraphdegZero<N + 1> V_graph_failed(vector<bool>& left_right_sequence) {
+	Int k = N - 2 * left_right_sequence.size(); 
+
+	OddGraphdegZero<N+1> V;
+	Int e = 0;
+
+	for (Int i = 1; i < k; i++) {
+		V.setEdge(e++, 0, i);
+		if (i != k-1) {
+			V.setEdge(e++, i, i+1);
+		}
+	} 
+
+	V.setEdge(e++, 0, k);
+
+	Int root = k;
+	Int left_root = 1;
+	Int right_root = k-1;
+
+	for (auto d : left_right_sequence) {
+		V.setEdge(e++, root, root + 1);
+		V.setEdge(e++, root, root + 2);
+
+		if (d) {
+			V.setEdge(e++, root, right_root);
+			V.setEdge(e++, root+1 , right_root);
+			
+			right_root = root+ 1;
+			
+		} else {
+			V.setEdge(e++, root, left_root);
+			V.setEdge(e++, root+1, left_root);
+			
+			left_root = root+ 1;
+
+
+		}
+		root = root + 2; 
+	}
+	V.setEdge(e++, root , left_root);
+	V.setEdge(e++, root , right_root);
+
+	return V;
+}
+
+template<Int N> 
+OddGraphdegZero<N + 1> V_graph(vector<bool>& left_right_sequence) {
+	OddGraphdegZero<N+1> V; 
+	Int e = 0;
+
+	V.setEdge(e++, 0,1);
+	V.setEdge(e++, 0,2);
+	V.setEdge(e++, 0,3);
+	V.setEdge(e++, 1,2);
+	V.setEdge(e++, 2,3);
+
+
+	Int left = 1; 
+	Int center = 2;
+	Int right = 3;
+
+	Int next_vertex = 4;
+
+	for (auto d : left_right_sequence) {
+		V.setEdge(e++, center , next_vertex);
+		center = next_vertex;
+		next_vertex++;
+		if (d) {
+			V.setEdge(e++, center, right);
+			V.setEdge(e++, center, next_vertex);
+			V.setEdge(e++, right, next_vertex);
+			right = next_vertex;
+			next_vertex++;
+		} else {
+			V.setEdge(e++, center, left);
+			V.setEdge(e++, center, next_vertex);
+			V.setEdge(e++, left, next_vertex);
+			left = next_vertex;
+			next_vertex++;
+		}
+	}
+	
+	Int arc_pos = left;
+	Int arc_end = right;
+
+	while (next_vertex< N + 1) {
+		V.setEdge(e++, arc_pos, next_vertex);
+		V.setEdge(e++, center, next_vertex);
+
+		arc_pos = next_vertex;
+		next_vertex++;
+	}
+
+	V.setEdge(e++, arc_pos, right);
+	return V;
+}
+
+
+template<Int N> 
+typename OddGraphdegZero<N + 1>::ContGraph V_con_graph(vector<bool>& left_right_sequence, Int separation_point) {
+	typename OddGraphdegZero<N + 1>::ContGraph  V; 
+	Int e = 0;
+
+	V.setEdge(e++, 0,1);
+	V.setEdge(e++, 0,2);
+	V.setEdge(e++, 0,3);
+	V.setEdge(e++, 1,2);
+	V.setEdge(e++, 2,3);
+
+	Int left = 1; 
+	Int center = 2;
+	Int right = 3;
+
+	Int edge_to_contract;
+
+	Int next_vertex = 4;
+
+	for (Int i =0 ; i< left_right_sequence.size(); i++) {
+		if (i != separation_point) {
+			V.setEdge(e++, center , next_vertex);
+			center = next_vertex;
+			next_vertex++;
+		}
+		if (d) {
+			V.setEdge(e++, center, right);
+			V.setEdge(e++, center, next_vertex);
+			V.setEdge(e++, right, next_vertex);
+			right = next_vertex;
+			next_vertex++;
+		} else {
+			V.setEdge(e++, center, left);
+			V.setEdge(e++, center, next_vertex);
+			V.setEdge(e++, left, next_vertex);
+			left = next_vertex;
+			next_vertex++;
+		}
+	}
+	
+	Int arc_pos = left;
+	Int arc_end = right;
+
+	while (next_vertex< N + 1) {
+		V.setEdge(e++, arc_pos, next_vertex);
+		V.setEdge(e++, center, next_vertex);
+
+		arc_pos = next_vertex;
+		next_vertex++;
+	}
+
+	V.setEdge(e++, arc_pos, right);
+	return V;
+}
+
+
+
+template<Int N> 
+typename OddGraphdegZero<N + 1>::SplitGraph U_graph(vector<bool>& left_right_sequence) {
+	typename OddGraphdegZero<N + 1>::SplitGraph  U; 
+	Int e = 0;
+
+	U.setEdge(e++, 0,1);
+	U.setEdge(e++, 0,2);
+	U.setEdge(e++, 0,3);
+	U.setEdge(e++, 1,2);
+	U.setEdge(e++, 2,3);
+
+	Int left = 1; 
+	Int center = 2;
+	Int right = 3;
+
+	Int next_vertex = 4;
+
+	for (auto d : left_right_sequence) {
+		U.setEdge(e++, center , next_vertex);
+		center = next_vertex;
+		next_vertex++;
+		if (d) {
+			U.setEdge(e++, center, right);
+			U.setEdge(e++, center, next_vertex);
+			U.setEdge(e++, right, next_vertex);
+			right = next_vertex;
+			next_vertex++;
+		} else {
+			U.setEdge(e++, center, left);
+			U.setEdge(e++, center, next_vertex);
+			U.setEdge(e++, left, next_vertex);
+			left = next_vertex;
+			next_vertex++;
+		}
+	}
+
+	U.setEdge(e++, center, next_vertex);
+	center = next_vertex;
+	next_vertex++;
+	
+	Int arc_pos = left;
+	Int arc_end = right;
+
+	while (next_vertex< N + 2) {
+		U.setEdge(e++, arc_pos, next_vertex);
+		U.setEdge(e++, center, next_vertex);
+
+		arc_pos = next_vertex;
+		next_vertex++;
+	}
+
+	U.setEdge(e++, arc_pos, right);
+	return U;
 }
 
 inline OddGraphdegZero<10> python_G9_1_graph() {

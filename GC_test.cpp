@@ -3,6 +3,33 @@
 
 #include "examplegraphs.hpp"
 
+template <typename GraphType>
+bool check_contract_preserve_order_matches(const GraphType& graph, const char* label) {
+	typename GraphType::Basis standardized_input(graph, fieldType{1});
+	GraphType::std(standardized_input);
+	const GraphType standardized_graph = standardized_input.getValue();
+
+	bool ok = true;
+	for (Int i = 0; i < GraphType::N_EDGES_; ++i) {
+		auto standard = standardized_graph.contract_edge(i, fieldType{1});
+		auto preserve = standardized_graph.contract_preserve_order(i, fieldType{1});
+		using ContGraph = typename GraphType::ContGraph;
+		ContGraph::std(standard);
+		ContGraph::std(preserve);
+
+		const bool edge_ok =
+			standard.getCoefficient() == preserve.getCoefficient() &&
+			standard.getValue() == preserve.getValue();
+		if (!edge_ok) {
+			std::cout << label << ": contract_preserve_order mismatch at edge " << int(i) << '\n';
+			ok = false;
+		}
+	}
+
+	std::cout << label << ": preserve-order contraction -> " << (ok ? "ok" : "failed") << '\n';
+	return ok;
+}
+
 template <typename GCType>
 bool check_odd_even_contraction_split(const GCType& input, const char* label) {
 	GCType gc = input;
@@ -69,6 +96,10 @@ int main() {
 	ok &= check_odd_even_contraction_split(OddGCdegZero<10>(w9_term_2()), "w9_term_2");
 	ok &= check_odd_even_contraction_split(OddGCdegZero<10>(w9_term_3()), "w9_term_3");
 	ok &= check_odd_even_contraction_split(combined, "w9_sum");
+	ok &= check_contract_preserve_order_matches(w9_term_1(), "w9_term_1");
+	ok &= check_contract_preserve_order_matches(w9_term_2(), "w9_term_2");
+	ok &= check_contract_preserve_order_matches(w9_term_3(), "w9_term_3");
+	ok &= check_contract_preserve_order_matches(wheel_graph<5>(), "wheel_5");
 
 	if (!ok) {
 		return EXIT_FAILURE;

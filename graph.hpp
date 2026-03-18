@@ -69,6 +69,16 @@ Int N_VERTICES,
 				return std::ranges::count_if(valence_array(), [](Int v){ return v == 4; });
 			}
 
+			inline Int find_edge_index(Int u, Int v) const {
+				for (Int i = 0; i < N_EDGES_; ++i) {
+					auto [a, b] = getEdge(i);
+					if ((a == u && b == v) || (a == v && b == u)) {
+						return i;
+					}
+				}
+				return N_EDGES_;
+			}
+
 
 
 			inline signedInt total_order_comp(const ThisGraph& other) const {
@@ -168,10 +178,150 @@ Int N_VERTICES,
 				return count;
 			}
 
+			vector<vector<Int>> triangle_banks_at_vertex(Int center) const {
+				array<array<bool, N_VERTICES>, N_VERTICES> adjacency{};
+				for (Int e = 0; e < N_EDGES; ++e) {
+					auto [u, v] = getEdge(e);
+					adjacency[u][v] = true;
+					adjacency[v][u] = true;
+				}
+
+				vector<Int> neighbors;
+				neighbors.reserve(N_VERTICES);
+				for (Int v = 0; v < N_VERTICES; ++v) {
+					if (v != center && adjacency[center][v]) {
+						neighbors.push_back(v);
+					}
+				}
+
+				vector<vector<Int>> banks;
+				vector<bool> visited(neighbors.size(), false);
+				vector<bool> has_triangle(neighbors.size(), false);
+
+				for (size_t i = 0; i < neighbors.size(); ++i) {
+					for (size_t j = 0; j < neighbors.size(); ++j) {
+						if (i != j && adjacency[neighbors[i]][neighbors[j]]) {
+							has_triangle[i] = true;
+							break;
+						}
+					}
+				}
+
+				for (size_t start = 0; start < neighbors.size(); ++start) {
+					if (visited[start] || !has_triangle[start]) {
+						continue;
+					}
+
+					vector<Int> bank;
+					vector<size_t> stack{start};
+					visited[start] = true;
+
+					while (!stack.empty()) {
+						const size_t i = stack.back();
+						stack.pop_back();
+						const Int u = neighbors[i];
+						bank.push_back(u);
+
+						for (size_t j = 0; j < neighbors.size(); ++j) {
+							if (visited[j] || !has_triangle[j]) {
+								continue;
+							}
+							if (adjacency[u][neighbors[j]]) {
+								visited[j] = true;
+								stack.push_back(j);
+							}
+						}
+					}
+
+					banks.push_back(std::move(bank));
+				}
+
+				return banks;
+			}
+
+			vector<vector<Int>> triangle_banks_at_zero() const {
+				return triangle_banks_at_vertex(0);
+			}
+
 			VectorSpace::LinComb<SplitGraph, fieldType> split_vertex_differential(fieldType coef) const {
 				VectorSpace::LinComb<SplitGraph, fieldType> splits = unsorted_splits(coef);
 				splits.standardize_and_sort();
 				return splits;
+			}
+
+			VectorSpace::LinComb<SplitGraph, fieldType> split_vertex_differential_4valent(fieldType coef) const {
+				VectorSpace::LinComb<SplitGraph, fieldType> splits = unsorted_4valent_splits(coef);
+				splits.standardize_and_sort();
+				return splits;
+			}
+
+			VectorSpace::LinComb<SplitGraph, fieldType> split_vertex_differential_4valent_preserving_bank_at_zero(fieldType coef) const {
+				VectorSpace::LinComb<SplitGraph, fieldType> splits = unsorted_4valent_splits_preserving_bank_at_zero(coef);
+				splits.standardize_and_sort();
+				return splits;
+			}
+
+			bool staying_neighbors_form_single_bank_at_zero(const vector<Int>& staying_neighbors) const {
+				if (staying_neighbors.empty()) {
+					return false;
+				}
+
+				array<array<bool, N_VERTICES>, N_VERTICES> adjacency{};
+				for (Int e = 0; e < N_EDGES; ++e) {
+					auto [u, v] = getEdge(e);
+					adjacency[u][v] = true;
+					adjacency[v][u] = true;
+				}
+
+				vector<bool> in_bank(staying_neighbors.size(), false);
+				for (size_t i = 0; i < staying_neighbors.size(); ++i) {
+					for (size_t j = 0; j < staying_neighbors.size(); ++j) {
+						if (i != j && adjacency[staying_neighbors[i]][staying_neighbors[j]]) {
+							in_bank[i] = true;
+							break;
+						}
+					}
+				}
+
+				size_t bank_vertex_count = 0;
+				size_t extra_count = 0;
+				for (bool flag : in_bank) {
+					if (flag) {
+						++bank_vertex_count;
+					} else {
+						++extra_count;
+					}
+				}
+
+				if (bank_vertex_count < 2 || extra_count > 1) {
+					return false;
+				}
+
+				vector<bool> visited(staying_neighbors.size(), false);
+				size_t n_components = 0;
+				for (size_t start = 0; start < staying_neighbors.size(); ++start) {
+					if (visited[start] || !in_bank[start]) {
+						continue;
+					}
+					++n_components;
+					vector<size_t> stack{start};
+					visited[start] = true;
+					while (!stack.empty()) {
+						const size_t i = stack.back();
+						stack.pop_back();
+						for (size_t j = 0; j < staying_neighbors.size(); ++j) {
+							if (visited[j] || !in_bank[j]) {
+								continue;
+							}
+							if (adjacency[staying_neighbors[i]][staying_neighbors[j]]) {
+								visited[j] = true;
+								stack.push_back(j);
+							}
+						}
+					}
+				}
+
+				return n_components == 1;
 			}
 
 
@@ -192,6 +342,130 @@ Int N_VERTICES,
 				for (Int v = 0; v < N_VERTICES; v++) {
 					split_vertex(v, adjRepresentation[v], result, coef);
 				}
+				return result;
+			}
+
+			VectorSpace::LinComb<SplitGraph, fieldType> unsorted_4valent_splits(fieldType coef) const {
+				vector<vector<Int>> adjRepresentation;
+				adjRepresentation.reserve(N_VERTICES);
+
+				bigInt resultSize = 0;
+				for (Int v = 0; v < N_VERTICES; v++) {
+					adjRepresentation.push_back(adjacent(v));
+					if (adjRepresentation.back().size() > 4) {
+						const bigInt valence = adjRepresentation.back().size();
+						resultSize += (valence * (valence - 1) * (valence - 2)) / 6;
+					}
+				}
+
+				VectorSpace::LinComb<SplitGraph, fieldType> result;
+				result.reserve(resultSize);
+
+				for (Int v = 0; v < N_VERTICES; v++) {
+					if (adjRepresentation[v].size() <= 4) {
+						continue;
+					}
+
+					Int max_index = static_cast<Int>(adjRepresentation[v].size()) - 1;
+					vector<Int> moved_half_edges = combutils::firstSubset(0, 3);
+					do {
+						result.append_in_basis_order(splitGraph(v, adjRepresentation[v], moved_half_edges), coef);
+					} while (combutils::nextSubset(moved_half_edges, max_index));
+				}
+
+				return result;
+			}
+
+			VectorSpace::LinComb<SplitGraph, fieldType> unsorted_4valent_splits_preserving_bank_at_zero(fieldType coef) const {
+				VectorSpace::LinComb<SplitGraph, fieldType> result;
+
+				const Int split_vertex = 0;
+				const vector<Int> adjacent_zero = adjacent(split_vertex);
+				if (adjacent_zero.size() <= 4) {
+					return result;
+				}
+
+				const auto banks = triangle_banks_at_zero();
+				if (banks.empty()) {
+					return result;
+				}
+
+				const auto opposite_vertex = [&](Int half_edge_index) -> Int {
+					const Int mate =
+						((half_edge_index - N_HAIR) % 2 == 0) ? half_edge_index + 1 : half_edge_index - 1;
+					return half_edges[mate];
+				};
+
+				std::unordered_map<Int, Int> neighbor_to_adjacent_index;
+				neighbor_to_adjacent_index.reserve(adjacent_zero.size());
+				for (Int i = 0; i < static_cast<Int>(adjacent_zero.size()); ++i) {
+					neighbor_to_adjacent_index.emplace(opposite_vertex(adjacent_zero[i]), i);
+				}
+
+				if (banks.size() == 1) {
+					const auto& bank = banks.front();
+					vector<Int> outsiders;
+					for (const auto& [neighbor, idx] : neighbor_to_adjacent_index) {
+						(void)idx;
+						if (std::find(bank.begin(), bank.end(), neighbor) == bank.end()) {
+							outsiders.push_back(neighbor);
+						}
+					}
+
+					if (outsiders.size() == 1) {
+						array<array<bool, N_VERTICES>, N_VERTICES> adjacency{};
+						for (Int e = 0; e < N_EDGES; ++e) {
+							auto [u, v] = getEdge(e);
+							adjacency[u][v] = true;
+							adjacency[v][u] = true;
+						}
+
+						std::unordered_map<Int, vector<Int>> bank_neighbors;
+						vector<Int> endpoints;
+						for (Int u : bank) {
+							auto& nbrs = bank_neighbors[u];
+							for (Int v : bank) {
+								if (u != v && adjacency[u][v]) {
+									nbrs.push_back(v);
+								}
+							}
+							if (nbrs.size() == 1) {
+								endpoints.push_back(u);
+							}
+						}
+
+						if (endpoints.size() == 2) {
+							const Int outsider = outsiders.front();
+							for (Int endpoint : endpoints) {
+								const Int next_in_bank = bank_neighbors[endpoint].front();
+								vector<Int> moved_half_edges{
+									neighbor_to_adjacent_index[outsider],
+									neighbor_to_adjacent_index[endpoint],
+									neighbor_to_adjacent_index[next_in_bank]
+								};
+								std::sort(moved_half_edges.begin(), moved_half_edges.end());
+								result.append_in_basis_order(splitGraph(split_vertex, adjacent_zero, moved_half_edges), coef);
+							}
+							return result;
+						}
+					}
+
+					if (outsiders.empty() && static_cast<Int>(bank.size()) == static_cast<Int>(adjacent_zero.size())) {
+						vector<Int> moved_left{0, 1, 2};
+						vector<Int> moved_right;
+						moved_right.push_back(0);
+						moved_right.push_back(static_cast<Int>(adjacent_zero.size() - 1));
+						moved_right.push_back(static_cast<Int>(adjacent_zero.size() - 2));
+						std::sort(moved_left.begin(), moved_left.end());
+						std::sort(moved_right.begin(), moved_right.end());
+						result.append_in_basis_order(splitGraph(split_vertex, adjacent_zero, moved_left), coef);
+						if (moved_right != moved_left) {
+							result.append_in_basis_order(splitGraph(split_vertex, adjacent_zero, moved_right), coef);
+						}
+						return result;
+					}
+				}
+
 				return result;
 			}
 
@@ -432,9 +706,57 @@ Int N_VERTICES,
 				return contracted;
 			}
 
+			BasisElement<ContGraph, fieldType> contract_preserve_order(Int i, fieldType k) const {
+				const Int edge_index = N_HAIR + 2 * i;
+				const Int u = half_edges[edge_index];
+				const Int w = half_edges[edge_index + 1];
+				const Int contraction_vertex = std::min(u, w);
+				const Int deletion_vertex = std::max(u, w);
+
+				if (contraction_vertex == deletion_vertex) {
+					return BasisElement<ContGraph, fieldType>(ContGraph{}, static_cast<fieldType>(0));
+				}
+
+				BasisElement<ContGraph, fieldType> contracted(ContGraph(), k);
+
+				for (Int j = 0; j < edge_index; ++j) {
+					contracted.getValue().half_edges[j] =
+						contraction_value_preserve_order(half_edges[j], contraction_vertex, deletion_vertex);
+				}
+
+				for (Int j = edge_index + 2; j < ThisGraph::SIZE; ++j) {
+					contracted.getValue().half_edges[j - 2] =
+						contraction_value_preserve_order(half_edges[j], contraction_vertex, deletion_vertex);
+				}
+
+				if constexpr (FLIP_EDGE_SIGN == -1) {
+					if (u > w) {
+						contracted.multiplyCoefficient(fieldType{-1});
+					}
+				}
+
+				if constexpr (SWAP_EDGE_SIGN == -1) {
+					if ((N_EDGES - i) % 2 == 1) {
+						contracted.multiplyCoefficient(fieldType{-1});
+					}
+				}
+
+				if constexpr (SWAP_VERTICES_SIGN == -1) {
+					if ((N_VERTICES - deletion_vertex) % 2 == 1) {
+						contracted.multiplyCoefficient(fieldType{-1});
+					}
+				}
+
+				return contracted;
+			}
+
 
 			static BasisElement<ContGraph, fieldType> contract_edge(const BasisElement<ThisGraph, fieldType>& be, Int i) {
 				return be.getValue().contract_edge(i, be.getCoefficient());
+			}
+
+			static BasisElement<ContGraph, fieldType> contract_preserve_order(const BasisElement<ThisGraph, fieldType>& be, Int i) {
+				return be.getValue().contract_preserve_order(i, be.getCoefficient());
 			}
 
 			static Int contraction_value(Int v, Int contraction_vertex, Int deletion_vertex) {
@@ -446,6 +768,16 @@ Int N_VERTICES,
 				}
 				return v;
 
+			}
+
+			static Int contraction_value_preserve_order(Int v, Int contraction_vertex, Int deletion_vertex) {
+				if (v == deletion_vertex) {
+					return contraction_vertex;
+				}
+				if (v > deletion_vertex) {
+					return v - 1;
+				}
+				return v;
 			}
 
 			signedInt flipEdge(Int i) {
