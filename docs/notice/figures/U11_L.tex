@@ -1,0 +1,64 @@
+\begin{tikzpicture}[x=0.8cm,y=0.8cm,baseline=(current bounding box.center)]
+  \tikzset{graphvertex/.style={circle,fill=black,draw=black,inner sep=0pt,minimum size=2.2pt}}
+  \tikzset{graphedge/.style={draw=black,line width=0.4pt}}
+  \tikzset{edgelabel/.style={font=\scriptsize,inner sep=1pt,fill=white,text=black}}
+  \node[graphvertex] (v0) at (0.000,2.200) {};
+  \node[graphvertex] (v1) at (-3.000,0.000) {};
+  \node[graphvertex] (v2) at (0.000,0.000) {};
+  \node[graphvertex] (v3) at (3.000,0.000) {};
+  \node[graphvertex] (v4) at (0.000,-2.200) {};
+  \node[graphvertex] (v5) at (-3.000,-2.200) {};
+  \node[graphvertex] (v6) at (0.000,-4.400) {};
+  \node[graphvertex] (v7) at (-2.226,-5.593) {};
+  \node[graphvertex] (v8) at (-1.010,-6.331) {};
+  \node[graphvertex] (v9) at (0.405,-6.470) {};
+  \node[graphvertex] (v10) at (1.740,-5.980) {};
+  \node[graphvertex] (v11) at (2.730,-4.960) {};
+  \node[graphvertex] (v12) at (3.180,-3.611) {};
+  \draw[graphedge] (v0) -- (v1);
+  \node[edgelabel] at (-1.405,0.971) {0};
+  \draw[graphedge] (v0) -- (v2);
+  \node[edgelabel] at (0.160,1.100) {1};
+  \draw[graphedge] (v0) -- (v3);
+  \node[edgelabel] at (1.595,1.229) {2};
+  \draw[graphedge] (v1) -- (v2);
+  \node[edgelabel] at (-1.500,0.160) {3};
+  \draw[graphedge] (v2) -- (v3);
+  \node[edgelabel] at (1.500,0.160) {4};
+  \draw[graphedge] (v2) -- (v4);
+  \node[edgelabel] at (0.160,-1.100) {5};
+  \draw[graphedge] (v4) -- (v1);
+  \node[edgelabel] at (-1.595,-1.229) {6};
+  \draw[graphedge] (v1) -- (v5);
+  \node[edgelabel] at (-2.840,-1.100) {7};
+  \draw[graphedge] (v4) -- (v5);
+  \node[edgelabel] at (-1.500,-2.360) {8};
+  \draw[graphedge] (v4) -- (v6);
+  \node[edgelabel] at (0.160,-3.300) {9};
+  \draw[graphedge] (v5) -- (v7);
+  \node[edgelabel] at (-2.457,-3.861) {10};
+  \draw[graphedge] (v6) -- (v7);
+  \node[edgelabel] at (-1.037,-5.137) {11};
+  \draw[graphedge] (v7) -- (v8);
+  \node[edgelabel] at (-1.535,-5.825) {12};
+  \draw[graphedge] (v6) -- (v8);
+  \node[edgelabel] at (-0.363,-5.440) {13};
+  \draw[graphedge] (v8) -- (v9);
+  \node[edgelabel] at (-0.287,-6.241) {14};
+  \draw[graphedge] (v6) -- (v9);
+  \node[edgelabel] at (0.359,-5.404) {15};
+  \draw[graphedge] (v9) -- (v10);
+  \node[edgelabel] at (1.017,-6.075) {16};
+  \draw[graphedge] (v6) -- (v10);
+  \node[edgelabel] at (0.978,-5.072) {17};
+  \draw[graphedge] (v10) -- (v11);
+  \node[edgelabel] at (2.120,-5.358) {18};
+  \draw[graphedge] (v6) -- (v11);
+  \node[edgelabel] at (1.397,-4.523) {19};
+  \draw[graphedge] (v11) -- (v12);
+  \node[edgelabel] at (2.804,-4.235) {20};
+  \draw[graphedge] (v6) -- (v12);
+  \node[edgelabel] at (1.552,-3.850) {21};
+  \draw[graphedge] (v12) -- (v3);
+  \node[edgelabel] at (2.930,-1.813) {22};
+\end{tikzpicture}
