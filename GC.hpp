@@ -249,9 +249,9 @@ class GC {
 			dThis.standardize_all();
 
 			for (auto b : dThis.data()) { 
-				if (b.getCoefficient != fieldType{}) seenGraphs.insert(b.getValue());
+				if (b.getCoefficient() != fieldType{}) seenGraphs.insert(b.getValue());
 			}
-			return dThis;
+			return;
 		}
 
 

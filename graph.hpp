@@ -32,12 +32,18 @@ Int N_VERTICES,
 	>
 	class Graph {
 		public:
+			static constexpr Int N_VERTICES_ = N_VERTICES;
 			static constexpr Int SIZE = N_IN_HAIR + N_OUT_HAIR + (Int)2 * N_EDGES;
 			static constexpr Int N_HAIR = N_IN_HAIR + N_OUT_HAIR;
+			static constexpr Int N_OUT_HAIR_ = N_OUT_HAIR;
+			static constexpr Int N_IN_HAIR_ = N_IN_HAIR;
 			static constexpr Int N_EDGES_ = N_EDGES;
+			static constexpr signedInt C_ = c;
+			static constexpr signedInt D_ = d;
 			static constexpr signedInt FLIP_EDGE_SIGN = ((c % 2) != 0 && (d % 2) != 0) ? -1 : 1;
 			static constexpr signedInt SWAP_EDGE_SIGN = (((c + d) % 2) != 0) ? -1 : 1;
 			static constexpr signedInt SWAP_VERTICES_SIGN = -1 * SWAP_EDGE_SIGN;
+			using Field = fieldType;
 
 			using SplitGraph = Graph<N_VERTICES + 1, N_EDGES + 1, N_OUT_HAIR, N_IN_HAIR, c, d, fieldType>;
 
