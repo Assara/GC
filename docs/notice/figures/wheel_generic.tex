@@ -1,0 +1,35 @@
+\begin{tikzpicture}[x=0.78cm,y=0.78cm,baseline=(current bounding box.center)]
+  \tikzset{graphvertex/.style={circle,fill=black,draw=black,inner sep=0pt,minimum size=2.2pt}}
+  \tikzset{graphedge/.style={draw=black,line width=0.4pt}}
+  \tikzset{edgelabel/.style={font=\scriptsize,inner sep=1pt,fill=white,text=black}}
+
+  \node[graphvertex] (c) at (0,0) {};
+  \coordinate (t) at (-115:2.05);
+  \node[graphvertex] (v1) at (35:2.05) {};
+  \node[graphvertex] (v2) at (-15:2.05) {};
+  \node[graphvertex] (v3) at (-65:2.05) {};
+  \node[graphvertex] (v4) at (-165:2.05) {};
+  \node[graphvertex] (v5) at (145:2.05) {};
+  \node[graphvertex] (v6) at (95:2.05) {};
+
+  \draw[dotted, line width=0.5pt] (c) -- (t);
+  \draw[graphedge] (c) -- (v1);
+  \draw[graphedge] (c) -- (v2);
+  \draw[graphedge] (c) -- (v3);
+  \draw[graphedge] (c) -- (v4);
+  \draw[graphedge] (c) -- (v5);
+  \draw[graphedge] (c) -- (v6);
+
+  \draw[graphedge] (v6) -- (v1);
+  \node[edgelabel] at ($(v6)!0.5!(v1)+(0.02,0.14)$) {1};
+  \draw[graphedge] (v1) -- (v2);
+  \node[edgelabel] at ($(v1)!0.5!(v2)+(0.12,0.05)$) {2};
+  \draw[graphedge] (v2) -- (v3);
+  \node[edgelabel] at ($(v2)!0.5!(v3)+(0.10,-0.08)$) {3};
+  \draw[dotted, line width=0.5pt] (v3) -- (t);
+  \draw[dotted, line width=0.5pt] (t) -- (v4);
+  \draw[graphedge] (v4) -- (v5);
+  \node[edgelabel] at ($(v4)!0.5!(v5)+(-0.12,-0.06)$) {\(2m\)};
+  \draw[graphedge] (v5) -- (v6);
+  \node[edgelabel] at ($(v5)!0.5!(v6)+(-0.08,0.10)$) {\(2m+1\)};
+\end{tikzpicture}
