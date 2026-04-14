@@ -1,5 +1,8 @@
 #pragma once
+#include <cstdint>
+#include <memory>
 #include <string>
+#include <vector>
 #include "Z32783.hpp"
 
 // Change this alias to change the integer type project-wide
@@ -19,8 +22,6 @@ template<>
 struct TypeName<double> {
 	static std::string name() { return "double"; }
 };
-
-#include "Z32783.hpp"
 
 template<>
 struct TypeName<Z32783> {

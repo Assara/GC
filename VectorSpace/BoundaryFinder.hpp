@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "../GC.hpp"
 
@@ -63,7 +64,7 @@ namespace VectorSpace {
 			}
 
 
-			BoundaryFinder(unordered_map<B, VectorSpace::LinComb<A,k>>& delta, unordered_set<A> filter) {
+			BoundaryFinder(unordered_map<B, VectorSpace::LinComb<A,k>>& delta, std::unordered_set<A> filter) {
 				coBoundaryRepMap.reserve(delta.size());
 				size_t a = 0;
 

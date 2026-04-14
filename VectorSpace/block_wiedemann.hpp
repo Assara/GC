@@ -113,6 +113,67 @@ namespace VectorSpace {
 					return result;
 				}
 
+				static DomainVec clone_vec(const DomainVec& vec, const std::size_t size) {
+					return scaled_copy(vec, size, k{1});
+				}
+
+				static DomainVec affine_combine(
+					const DomainVec& x,
+					const DomainVec& y,
+					const std::size_t size,
+					const k t
+				) {
+					DomainVec result = std::make_unique<k[]>(size);
+					for (std::size_t i = 0; i < size; ++i) {
+						result[i] = x[i] + t * (y[i] - x[i]);
+					}
+					return result;
+				}
+
+				static std::size_t support_size(const DomainVec& vec, const std::size_t size) {
+					std::size_t support = 0;
+					for (std::size_t i = 0; i < size; ++i) {
+						if (vec[i] != k{0}) {
+							++support;
+						}
+					}
+					return support;
+				}
+
+				DomainVec best_affine_line_combination(const DomainVec& x, const DomainVec& y) const {
+					const std::size_t size = domain_dim();
+					DomainVec best = clone_vec(x, size);
+					std::size_t best_support = support_size(best, size);
+
+					std::vector<k> candidates;
+					candidates.reserve(size + 2);
+					candidates.push_back(k{0});
+					candidates.push_back(k{1});
+
+					for (std::size_t i = 0; i < size; ++i) {
+						const k diff = y[i] - x[i];
+						if (diff == k{0}) {
+							continue;
+						}
+						candidates.push_back(-(x[i] / diff));
+					}
+
+					std::sort(candidates.begin(), candidates.end(),
+						[](const k& a, const k& b) { return a.value() < b.value(); });
+					candidates.erase(std::unique(candidates.begin(), candidates.end()), candidates.end());
+
+					for (const k t : candidates) {
+						DomainVec candidate = affine_combine(x, y, size, t);
+						const std::size_t candidate_support = support_size(candidate, size);
+						if (candidate_support < best_support) {
+							best = std::move(candidate);
+							best_support = candidate_support;
+						}
+					}
+
+					return best;
+				}
+
 
 
 				std::vector<DomainVec>
@@ -198,40 +259,45 @@ namespace VectorSpace {
 							if (L[a] == 0) continue;
 
 							DomainVec x = scaled_copy(acc[a], domain_dim(), scale[a]);
-
-							if (!verify_solution(y0, x)) {
+							k lambda = find_scaling_and_verify(y0, x);
+							if (lambda == k{0}) {
 								std::cout << "False solution for poly[" << a << "]\n";
 								continue;
 							}
 
-							out.push_back(std::move(x));
+							out.push_back(scaled_copy(x, domain_dim(), lambda));
 						}
 
 						return out;
 					}
 
 
-				bool verify_solution(const ImageVec& y0, const DomainVec& X) const {
+				k find_scaling_and_verify(const ImageVec& y0, const DomainVec& X) const {
 					ImageVec y_found = M.evaluate_from_dense(X);
 
+					k lambda = k{0};
 					size_t i = 0;
 
-
-
-					for ( ;i< M.image_dim(); i++) {
-
-						if (y0[i] != y_found[i]) {
-							std::cout << "false solution type 2!" << std::endl;
-
-							return false;
+					for (; i < M.image_dim(); i++) {
+						if (y0[i] != k{0} && y_found[i] != k{0}) {
+							lambda = y0[i] / y_found[i];
+							break;
+						} else if (y0[i] != k{0} || y_found[i] != k{0}) {
+							std::cout << "false solution type 1!" << std::endl;
+							return k{0};
 						}
 					}
 
-					std::cout << "Solution validated!" << std::endl;
+					for (; i < M.image_dim(); i++) {
+						if (y0[i] != lambda * y_found[i]) {
+							std::cout << "false solution type 2!" << std::endl;
+							return k{0};
+						}
+					}
 
-
-					return true;	
-				} 
+					std::cout << "Solution validated! with lambda " << lambda << std::endl;
+					return lambda;
+				}
 
 
 				size_t block_size() const {
@@ -249,6 +315,50 @@ namespace VectorSpace {
 
 
 			public:
+				std::optional<DomainVec> min_support_solution(const std::vector<DomainVec>& solutions) const {
+					if (solutions.empty()) {
+						return std::nullopt;
+					}
+
+					std::size_t best_index = 0;
+					std::size_t best_support = support_size(solutions[0], domain_dim());
+					for (std::size_t i = 1; i < solutions.size(); ++i) {
+						const std::size_t current_support = support_size(solutions[i], domain_dim());
+						if (current_support < best_support) {
+							best_support = current_support;
+							best_index = i;
+						}
+					}
+
+					return clone_vec(solutions[best_index], domain_dim());
+				}
+
+				std::optional<DomainVec> min_support_affine_combination(const std::vector<DomainVec>& solutions) const {
+					auto best_opt = min_support_solution(solutions);
+					if (!best_opt.has_value()) {
+						return std::nullopt;
+					}
+
+					DomainVec best = std::move(*best_opt);
+					std::size_t best_support = support_size(best, domain_dim());
+
+					bool improved = true;
+					while (improved) {
+						improved = false;
+						for (const auto& solution : solutions) {
+							DomainVec candidate = best_affine_line_combination(best, solution);
+							const std::size_t candidate_support = support_size(candidate, domain_dim());
+							if (candidate_support < best_support) {
+								best = std::move(candidate);
+								best_support = candidate_support;
+								improved = true;
+							}
+						}
+					}
+
+					return best;
+				}
+
 				std::vector<DomainVec> solve_MX_equals_y(const ImageVec& y0) {
 					// Build scalar sequence s_i = <r, y_i>, y_{i+1} = (M M^T) y_i
 					if (image_dim() == 0) {

@@ -1,314 +1,55 @@
-#include <iostream>
-//#include "graph.hpp"
-#include "examplegraphs.hpp"
+#include <filesystem>
 #include <fstream>
-#include "VectorSpace/LinComb.hpp"
-
-using namespace std;
-
-template<Int N>
-void tryFindFullWheelClassesByWaterfall() {
-	GC loop(loop_graph<4*N+1>());
-
-	auto maybe_W3 = push_down_the_waterfall(loop);
-
-	if (!maybe_W3) {
-		cout << "Could not find primitive!! " << endl;
-
-	}
-
-	maybe_W3 ->  add_edge_differential().print();
-}
-
-
-template <
-Int N_VERTICES, Int N_EDGES
-> 
-std::optional<GC<N_VERTICES-1, N_EDGES, 0, 0, 0, 1>> push_down_the_waterfall(GC<N_VERTICES, N_EDGES, 0, 0, 0, 1> gamma) {
-	cout << "using push_down_the_waterfall: " ;
-	auto with_edge_diff = gamma.add_edge_differential();  
-	cout << "completed edge differential. size = " << with_edge_diff.size() << endl;
-
-	return with_edge_diff
-		.try_find_split_primitive_graded();
-}
-
-
-void tryFindFullWheel5ClassByWaterfall() {
-	GC loop(loop_graph<9>());
-
-	cout << "loop: ";
-	loop.print();
-
-
-	auto step1 = push_down_the_waterfall(loop);
-
-	if (!step1) {
-		cout << "Could not find primitive for step 1!! " << endl;
-	}
-
-
-	auto step2 = push_down_the_waterfall(*step1);
-
-	if (!step2) {
-		cout << "Could not find primitive for step 2!! " << endl;
-	}
-
-
-	auto step3 = push_down_the_waterfall(*step2);
-
-	if (!step3) {
-		cout << "Could not find primitive for step 3!! " << endl;
-	}
-
-
-
-	auto W5 = step3 -> add_edge_differential();
-
-
-	cout << "W5 class:" << endl;
-	W5.print();
-
-
-	cout << "dW5 (should be 0)" << endl;
-
-
-	W5.delta().print();
-
-
-}
-
-
-void tryFindFullWheel7ClassByWaterfall() {
-	GC loop(loop_graph<13>());
-
-	cout << "loop: ";
-	loop.print();
-
-	auto step1 = push_down_the_waterfall(loop);
-
-	if (!step1.has_value()) {
-		cout << "Could not find primitive for step 1!! " << endl;
-	}
-
-
-	auto step2 = push_down_the_waterfall(*step1);
-
-	if (!step2.has_value()) {
-		cout << "Could not find primitive for step 2!! " << endl;
-	}
-
-
-	auto step3 = push_down_the_waterfall(*step2);
-
-	if (!step3) {
-		cout << "Could not find primitive for step 3!! " << endl;
-	}
-
-	auto step4 = push_down_the_waterfall(*step3);
-
-	if (!step4) {
-		cout << "Could not find primitive for step 4!! " << endl;
-		//step3 -> print();
-
-		return;
-	}
-
-	auto step5 = push_down_the_waterfall(*step4);
-
-	if (!step5) {
-		cout << "Could not find primitive for step 5!! " << endl;
-	}
-
-	OddGCdegZero<8> W7_class =  step5 -> add_edge_differential();
-
-	MetaGraph metaGraph(W7_class.map_split_differential());
-
-
-	cout << "W7 size before filtering: " << W7_class.size() << endl;
-
-	unordered_set<OddGraphdegZero<8>> important_graphs = metaGraph.component_containing(wheel_graph<7>().canonical_represesentation());
-
-
-	cout<< "found " << important_graphs.size() << " graphs in the component of W7" << endl;
-
-
-	auto W7_class_filtered = W7_class.filtered(important_graphs);
-
-
-	auto d_W7_class = W7_class_filtered.delta();
-
-	if (d_W7_class.size() != 0) {
-		cout << "error! final class not a cocycle" << endl;
-
-		std::ofstream out("false_W7.txt");
-		W7_class_filtered.print(out);
-		return;
-	}
-
-	cout << "found W7 class of size: " << W7_class_filtered.size() << endl;
-
-	std::ofstream out("W7.txt");
-
-	W7_class_filtered.print(out);
-}
-
-
-void tryFindFullWheel9ClassByWaterfall() {
-	GC loop(loop_graph<17>());
-
-	cout << "loop: ";
-	loop.print();
-
-	cout << "are we getting step 1?" << endl;
-
-	auto step1 = push_down_the_waterfall(loop);
-
-	if (!step1.has_value()) {
-		cout << "Could not find primitive for step 1!! " << endl;
-	}
-	cout << "step 2" << endl;
-
-	auto step2 = push_down_the_waterfall(*step1);
-
-	if (!step2.has_value()) {
-		cout << "Could not find primitive for step 2!! " << endl;
-	}
-	cout << "step 3" << endl;
-
-	auto step3 = push_down_the_waterfall(*step2);
-
-	if (!step3.has_value()) {
-		cout << "Could not find primitive for step 3!! " << endl;
-	}
-
-	cout << "trying step 4. step3.size() = " << step3 -> size() << endl;
-
-
-	auto step4 = push_down_the_waterfall(*step3);
-
-	if (!step4.has_value()) {
-		cout << "Could not find primitive for step 4!! " << endl;
-
-		return;
-	}
-
-	cout << "step 5" << endl;
-	auto step5 = push_down_the_waterfall(*step4);
-
-	if (!step5.has_value()) {
-		cout << "Could not find primitive for step 5!! " << endl;
-	}
-
-
-
-	cout << "step 6" << endl;
-	auto step6 = push_down_the_waterfall(*step5);
-
-	if (!step6.has_value()) {
-		cout << "Could not find primitive for step 6!! " << endl;
-	}
-
-	cout << "step 7" << endl;
-
-	auto step7 = push_down_the_waterfall(*step6);
-
-	if (!step7.has_value()) {
-		cout << "Could not find primitive for step 7!! " << endl;
-	}
-
-	OddGCdegZero<10> W9_class =  step7 -> add_edge_differential();
-
-	MetaGraph metaGraph(W9_class.map_split_differential());
-
-
-	unordered_set<OddGraphdegZero<10>> important_graphs = metaGraph.component_containing(wheel_graph<9>().canonical_represesentation());
-
-
-	cout<< "found " << important_graphs.size() << " graphs in the component of W9" << endl;
-
-
-	auto W9_class_filtered = W9_class.filtered(important_graphs);
-
-
-	auto d_W9_class = W9_class_filtered.delta();
-
-	if (d_W9_class.size() != 0) {
-		cout << "error! final class not a cocycle" << endl;
-
-		std::ofstream out("false_W7.txt");
-		d_W9_class.print(out);
-		return;
-	}
-
-	cout << "found W9 class of size: " << W9_class_filtered.size() << endl;
-
-	std::ofstream out("W9.txt");
-
-	W9_class_filtered.print(out);
-}
-
-void some_truss_graph_exploration () {
-	const Int size = 17;
-
-	OddGraphdegZero<size + 1> T = truss_graph<size>();
-
-	T.print();
-
-	cout << "-------------------" << endl;
-	GC truss = GC(T);
-
-	auto d_truss = truss.d_contraction();
-
-
-	vector< OddGraphdegZero<size + 1>> graphs_to_exclude;
-
-
-	auto canon_T = T.canonical_represesentation();
-
-	graphs_to_exclude.push_back(T.canonical_represesentation());
-
-	auto other_primitive_optional = d_truss.try_find_cont_primitive(graphs_to_exclude); 
-
-	auto other_primitive = *other_primitive_optional;
-
-
-	bool found_truss_graph = false;
-	for (const auto& be: other_primitive.data()) {
-		if (be.getValue() == canon_T) {
-			cout << "found truss in other primitive. Something is wrong" << endl;
-			found_truss_graph= true;
-		}
-	}
-
-	if (!found_truss_graph) {
-		cout << "truss graph is not present in other primitive. All good" << endl;
-	}
-
-	truss.scalar_multiply(fieldType{-1}); 
-	truss += other_primitive;
-
-	cout << "truss_class size = " << truss.size() << std::endl;
-
-	auto d_truss_class = truss.d_contraction();
-	cout << "d_truss_class size = " << d_truss_class.size() << std::endl;
-
-
-	truss.try_find_cont_primitive();
-}
+#include <iostream>
+#include "graph.hpp"
+#include "GC.hpp"
+#include "examplegraphs.hpp"
+
+#define GC_CONTRACTION_PLAYGROUND_NO_MAIN
+#include "GC_contraction_playground.cpp"
 
 int main() {
-	auto g9_class = python_G9_class();
-	cout << "input GC size = " << g9_class.size() << endl;
-	g9_class.standardize_all();
-	cout << "size after standardize_all = " << g9_class.size() << endl;
-	g9_class.print();
+    using WheelGC = OddGCdegZero<20>;
+    constexpr const char* kOutputPath = "/home/assar/Projects/GC/output/classes/W19_class.txt";
 
-	auto d_g9_class = g9_class.d_contraction();
-	cout << "d_contraction size = " << d_g9_class.size() << endl;
-	if (d_g9_class.size() != 0) {
-		d_g9_class.print();
-	}
+    WheelGC start(wheel_graph<19>());
+    auto rep = try_find_quadratic_contraction_representative_via_min_triangle_split_solver(start);
+    if (!rep.has_value()) {
+        std::cout << "no solution" << std::endl;
+        return 1;
+    }
 
-	return 0;
+    auto gamma = *rep;
+    gamma.standardize_all();
+    gamma.sort_elements();
+
+    std::filesystem::create_directories("/home/assar/Projects/GC/output/classes");
+    std::ofstream out(kOutputPath, std::ios::trunc);
+    if (!out) {
+        std::cerr << "failed to open output file: " << kOutputPath << std::endl;
+        return 1;
+    }
+
+    out << "graph_size: (20,38)\n";
+    out << "field_type: " << TypeName<fieldType>::name() << "\n";
+    out << "number_of_graphs: " << gamma.size() << "\n";
+    for (const auto& be : gamma.data()) {
+        out << be.getCoefficient() << "; ";
+        for (Int e = 0; e < WheelGC::GraphType::N_EDGES_; ++e) {
+            auto edge = be.getValue().getEdge(e);
+            out << "(" << +edge.first << "," << +edge.second << ")";
+            if (e + 1 < WheelGC::GraphType::N_EDGES_) {
+                out << ", ";
+            }
+        }
+        out << "\n";
+    }
+    out.close();
+
+    std::cout << "saved class to " << kOutputPath << std::endl;
+    std::cout << "representative size = " << gamma.size() << std::endl;
+
+    auto d_final = gamma.d_contraction();
+    std::cout << "d_contraction size = " << d_final.size() << std::endl;
+    return 0;
 }

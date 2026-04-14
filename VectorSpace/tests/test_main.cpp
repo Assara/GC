@@ -167,8 +167,6 @@ bool performance_test_block_wiedemann_solver(size_t image_dim, size_t domain_dim
 	std::unique_ptr<fieldType[]> pre_x = M.make_dense_domain_vec_random(domain_dim);
 	std::unique_ptr<fieldType[]> y = M.evaluate_from_dense(pre_x);
 
-
-
 	VectorSpace::block_wiedemann_solver<fieldType> solver(M, 16);
 
 

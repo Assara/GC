@@ -6,6 +6,7 @@
 #include <cassert>
 #include <optional>
 #include <vector>
+#include <iostream>
 
 namespace VectorSpace {
 
@@ -43,11 +44,11 @@ namespace VectorSpace {
 
 				inline void set(size_t row, size_t col, k value) {
 					if (row >= rows()) {
-						cout << "invalid row";
+						std::cout << "invalid row";
 					}
 
 					if (col >= cols()) {
-						cout << "invalid col";
+						std::cout << "invalid col";
 					}
 					M[row + n_rows * col] = value;
 				}

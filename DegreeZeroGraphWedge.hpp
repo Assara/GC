@@ -55,6 +55,34 @@ class DegreeZeroGraphWedge {
 			return wedge;
 		}
 
+		template <Int LEFT_VERTICES, Int LEFT_EDGES, Int RIGHT_VERTICES, Int RIGHT_EDGES>
+		static ThisType from_graphs(
+			const Graph<LEFT_VERTICES, LEFT_EDGES, 0, 0, 0, 1, fieldType>& left_graph,
+			const Graph<RIGHT_VERTICES, RIGHT_EDGES, 0, 0, 0, 1, fieldType>& right_graph
+		) {
+			static_assert(NumberOfWedges == 2, "from_graphs is only available for two-factor wedges.");
+			static_assert(static_cast<Int>(2 * LEFT_EDGES + 2 * RIGHT_EDGES) == TotalHalfEdges,
+				"graph sizes do not match the wedge total half-edge count");
+			static_assert(LEFT_EDGES - 2 * LEFT_VERTICES + 2 == 0,
+				"from_graphs expects degree-zero GC_2 left graph");
+			static_assert(RIGHT_EDGES - 2 * RIGHT_VERTICES + 2 == 0,
+				"from_graphs expects degree-zero GC_2 right graph");
+
+			ThisType wedge;
+			wedge.split_offsets[0] = 0;
+			wedge.split_offsets[1] = static_cast<Int>(2 * LEFT_EDGES);
+			wedge.split_offsets[2] = TotalHalfEdges;
+
+			for (std::size_t i = 0; i < static_cast<std::size_t>(2 * LEFT_EDGES); ++i) {
+				wedge.half_edges[i] = left_graph.half_edges[i];
+			}
+			for (std::size_t i = 0; i < static_cast<std::size_t>(2 * RIGHT_EDGES); ++i) {
+				wedge.half_edges[static_cast<std::size_t>(2 * LEFT_EDGES) + i] = right_graph.half_edges[i];
+			}
+
+			return wedge;
+		}
+
 		signedInt compare(const ThisType& other) const noexcept {
 			for (std::size_t i = 0; i < N_WEDGES_SIZE_T + 1; ++i) {
 				if (split_offsets[i] < other.split_offsets[i]) {
@@ -538,3 +566,26 @@ class DegreeZeroGraphWedge {
 		std::array<Int, N_WEDGES + 1> split_offsets{};
 		std::array<Int, TOTAL_HALF_EDGES_SIZE_T> half_edges{};
 };
+
+namespace std {
+
+template <Int TotalHalfEdges, Int NumberOfWedges>
+struct hash<DegreeZeroGraphWedge<TotalHalfEdges, NumberOfWedges>> {
+	std::size_t operator()(const DegreeZeroGraphWedge<TotalHalfEdges, NumberOfWedges>& wedge) const noexcept {
+		std::size_t seed = 0;
+		const auto mix = [&seed](std::size_t value) {
+			seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
+		};
+
+		for (const Int split : wedge.splits()) {
+			mix(std::hash<Int>{}(split));
+		}
+		for (const Int half_edge : wedge.data()) {
+			mix(std::hash<Int>{}(half_edge));
+		}
+
+		return seed;
+	}
+};
+
+} // namespace std

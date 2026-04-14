@@ -13,60 +13,10 @@ using namespace std;
 
 constexpr bool kVerboseLocalSearch = false;
 
+// Beam-search helper only. The restricted solvers below use
+// split_vertex_differential_4valent(...) instead.
 template <typename GCType>
-std::vector<typename GCType::SplitGraphType> valence_4_splits(const typename GCType::GraphType& graph);
-
-template <typename GCType>
-void add_valence_4_split_boundaries(
-	const GCType& cycle,
-	std::unordered_map<typename GCType::SplitGraphType, typename GCType::L>& boundary_map
-) {
-	using SplitGraphType = typename GCType::SplitGraphType;
-	using SplitGC = typename GCType::SplitGC;
-
-	for (const auto& be : cycle.data()) {
-		for (const SplitGraphType& split_graph : valence_4_splits<GCType>(be.getValue())) {
-			if (boundary_map.contains(split_graph)) {
-				continue;
-			}
-			boundary_map.emplace(
-				split_graph,
-				SplitGC(split_graph, AssumeBasisOrderTag{}).d_contraction().data()
-			);
-		}
-	}
-}
-
-template <typename GCType>
-std::unordered_map<typename GCType::SplitGraphType, typename GCType::L> make_min_triangle_drop_valence_4_split_boundary_stage(
-	const GCType& cycle,
-	const std::unordered_set<typename GCType::SplitGraphType>& known_split_graphs
-) {
-	using GraphType = typename GCType::GraphType;
-	using SplitGraphType = typename GCType::SplitGraphType;
-	using SplitGC = typename GCType::SplitGC;
-
-	std::unordered_map<SplitGraphType, typename GCType::L> stage_map;
-
-	for (const auto& be : cycle.data()) {
-		const GraphType& graph = be.getValue();
-		const bigInt triangle_count = graph.count_triangles();
-		for (const SplitGraphType& split_graph : valence_4_splits<GCType>(graph)) {
-			if (triangle_count - split_graph.count_triangles() > 2) {
-				continue;
-			}
-			if (known_split_graphs.contains(split_graph)) {
-				continue;
-			}
-			stage_map.emplace(
-				split_graph,
-				SplitGC(split_graph, AssumeBasisOrderTag{}).d_contraction().data()
-			);
-		}
-	}
-
-	return stage_map;
-}
+std::vector<typename GCType::SplitGraphType> beam_valence_4_splits(const typename GCType::GraphType& graph);
 
 template <typename GCType>
 void add_min_triangle_drop_valence_4_split_boundaries(
@@ -76,15 +26,27 @@ void add_min_triangle_drop_valence_4_split_boundaries(
 	using GraphType = typename GCType::GraphType;
 	using SplitGraphType = typename GCType::SplitGraphType;
 	using SplitGC = typename GCType::SplitGC;
+	std::unordered_set<SplitGraphType> rejected;
+
+	for (const auto& [split_graph, _] : boundary_map) {
+		rejected.insert(split_graph);
+	}
 
 	for (const auto& be : cycle.data()) {
 		const GraphType& graph = be.getValue();
 		const bigInt triangle_count = graph.count_triangles();
-		for (const SplitGraphType& split_graph : valence_4_splits<GCType>(graph)) {
+		auto splits = graph.split_vertex_differential_4valent_preserving_bank_at_zero(fieldType{1});
+		for (const auto& split_be : splits) {
+			const SplitGraphType& split_graph = split_be.getValue();
 			if (triangle_count - split_graph.count_triangles() > 2) {
 				continue;
 			}
-			if (boundary_map.contains(split_graph)) {
+			if (rejected.contains(split_graph) && !boundary_map.contains(split_graph)) {
+				continue;
+			}
+			if (auto it = boundary_map.find(split_graph); it != boundary_map.end()) {
+				boundary_map.erase(it);
+				rejected.insert(split_graph);
 				continue;
 			}
 			boundary_map.emplace(
@@ -93,102 +55,6 @@ void add_min_triangle_drop_valence_4_split_boundaries(
 			);
 		}
 	}
-}
-
-template <typename GraphType, typename SplitGraphType, typename L, typename Predicate>
-std::optional<VectorSpace::LinComb<SplitGraphType, fieldType>> find_staged_primitive_or_empty(
-	const std::vector<std::unordered_map<SplitGraphType, L>>& staged_boundary_maps,
-	const VectorSpace::LinComb<GraphType, fieldType>& target,
-	const Predicate& predicate
-) {
-	using Solver = VectorSpace::wiedemann_primitive_finder<GraphType, SplitGraphType, fieldType>;
-
-	if (staged_boundary_maps.empty()) {
-		return std::nullopt;
-	}
-
-	auto full_solver = Solver::create_filtered(staged_boundary_maps, predicate);
-	return full_solver.find_primitive_or_empty(target);
-}
-
-template <typename GCType>
-std::optional<GCType> try_find_quadratic_contraction_representative_via_solver(GCType cycle) {
-	using GraphType = typename GCType::GraphType;
-	using SplitGraphType = typename GCType::SplitGraphType;
-	using SplitGC = typename GCType::SplitGC;
-	using L = typename GCType::L;
-
-	std::unordered_map<SplitGraphType, L> boundary_map;
-	SplitGC splits = cycle.delta();
-
-	for (signedInt i = cycle.find_max_odd_pairs(); cycle.frontValence() > 4; --i) {
-		for (const auto& split_be : splits.data()) {
-			const SplitGraphType& split_graph = split_be.getValue();
-			if (boundary_map.contains(split_graph)) {
-				continue;
-			}
-			boundary_map.emplace(
-				split_graph,
-				SplitGC(split_graph, AssumeBasisOrderTag{}).d_contraction().data()
-			);
-		}
-
-		auto solver =
-			VectorSpace::wiedemann_primitive_finder<GraphType, SplitGraphType, fieldType>::create_filtered(
-				boundary_map,
-				[i](const GraphType& graph) { return graph.n_odd_pairs() >= i; }
-			);
-
-		auto primitive_opt = solver.find_primitive_or_empty(cycle.data());
-		if (!primitive_opt.has_value()) {
-			return std::nullopt;
-		}
-
-		SplitGC primitive(*primitive_opt);
-		GCType full_correction = primitive.d_contraction();
-		cycle += full_correction.scalar_multiply(fieldType{-1});
-		splits = cycle.delta();
-	}
-
-	return cycle;
-}
-
-template <typename GCType>
-std::optional<GCType> try_find_quadratic_contraction_representative_via_4valent_split_solver(GCType cycle) {
-	using GraphType = typename GCType::GraphType;
-	using SplitGraphType = typename GCType::SplitGraphType;
-	using SplitGC = typename GCType::SplitGC;
-	using L = typename GCType::L;
-
-	std::unordered_map<SplitGraphType, L> boundary_map;
-
-	signedInt stage = 0;
-	for (signedInt i = cycle.find_max_odd_pairs(); cycle.frontValence() > 4; --i) {
-		stage++;
-		std::cout << "stage: " << stage << std::endl;
-		const signedInt current_4val = stage*2;
-		add_valence_4_split_boundaries(cycle, boundary_map);
-
-		auto solver =
-			VectorSpace::wiedemann_primitive_finder<GraphType, SplitGraphType, fieldType>::create_filtered(
-				boundary_map,
-				[i, current_4val](const GraphType& graph) {
-					return graph.n_odd_pairs() >= i &&
-						graph.n_4valent_vertices() < current_4val;
-				}
-			);
-
-		auto primitive_opt = solver.find_primitive_or_empty(cycle.data());
-		if (!primitive_opt.has_value()) {
-			return std::nullopt;
-		}
-
-		SplitGC primitive(*primitive_opt);
-		GCType full_correction = primitive.d_contraction();
-		cycle += full_correction.scalar_multiply(fieldType{-1});
-	}
-
-	return cycle;
 }
 
 template <typename GCType>
@@ -198,10 +64,13 @@ std::optional<GCType> try_find_quadratic_contraction_representative_via_min_tria
 	using SplitGC = typename GCType::SplitGC;
 	using L = typename GCType::L;
 
-	std::vector<std::unordered_map<SplitGraphType, L>> staged_boundary_maps;
-	std::unordered_set<SplitGraphType> known_split_graphs;
+	std::unordered_map<SplitGraphType, L> boundary_map;
+
+	int stage = 0;
 
 	for (signedInt i = cycle.find_max_odd_pairs(); cycle.frontValence() > 4; --i) {
+		stage++;
+		std::cout << "stage" << stage << std::endl;
 		const signedInt current_4val = min_4valent_vertices_class(cycle);
 		const signedInt max_4val = max_4valent_vertices_class(cycle);
 		if (current_4val != max_4val) {
@@ -209,23 +78,21 @@ std::optional<GCType> try_find_quadratic_contraction_representative_via_min_tria
 				  << current_4val << " max=" << max_4val << std::endl;
 		}
 
-		auto stage_map = make_min_triangle_drop_valence_4_split_boundary_stage<GCType>(cycle, known_split_graphs);
-		for (const auto& [split_graph, _] : stage_map) {
-			known_split_graphs.insert(split_graph);
-		}
-		staged_boundary_maps.push_back(std::move(stage_map));
-		if (staged_boundary_maps.back().empty() && staged_boundary_maps.size() == 1) {
+		add_min_triangle_drop_valence_4_split_boundaries(cycle, boundary_map);
+		if (boundary_map.empty()) {
 			return std::nullopt;
 		}
 
-		auto primitive_opt = find_staged_primitive_or_empty<GraphType, SplitGraphType, L>(
-			staged_boundary_maps,
-			cycle.data(),
-			[i, current_4val](const GraphType& graph) {
-				return graph.n_odd_pairs() >= i &&
-					graph.n_4valent_vertices() <= current_4val;
-			}
-		);
+		auto solver =
+			VectorSpace::wiedemann_primitive_finder<GraphType, SplitGraphType, fieldType>::create_filtered(
+				boundary_map,
+				[i, stage](const GraphType& graph) {
+					return graph.n_odd_pairs() >= i ||
+						graph.n_4valent_vertices() < stage * 2;
+				}
+			);
+
+		auto primitive_opt = solver.find_primitive_or_empty(cycle.data());
 		if (!primitive_opt.has_value()) {
 			return std::nullopt;
 		}
@@ -239,78 +106,6 @@ std::optional<GCType> try_find_quadratic_contraction_representative_via_min_tria
 	}
 
 	return cycle;
-}
-
-template <typename GCType>
-std::optional<GCType> try_find_odd_preserving_split_lift(const GCType& seed, signedInt n) {
-	using GraphType = typename GCType::GraphType;
-	using SplitGraphType = typename GCType::SplitGraphType;
-	using SplitGC = typename GCType::SplitGC;
-	using SplitL = typename GCType::SplitL;
-
-	const signedInt target_grade = n + 1;
-	SplitGC target = seed.delta();
-
-	if (target.size() == 0) {
-		std::cout << "delta(G) is zero\n";
-		return GCType{};
-	}
-
-	for (const auto& be : target.data()) {
-		if (be.getValue().n_odd_pairs() != target_grade) {
-			std::cout << "delta(G) contains grade " << be.getValue().n_odd_pairs()
-				  << ", expected only grade " << target_grade << "\n";
-			return std::nullopt;
-		}
-	}
-
-	std::unordered_map<GraphType, SplitL> boundary_map;
-	for (const auto& split_be : target.data()) {
-		const SplitGraphType& split_graph = split_be.getValue();
-		for (Int i = 0; i < SplitGraphType::N_EDGES_; ++i) {
-			auto contracted = split_graph.contract_edge(i, fieldType{1});
-			if (contracted.getCoefficient() == fieldType{0}) {
-				continue;
-			}
-			if (contracted.getValue().n_odd_pairs() != target_grade) {
-				continue;
-			}
-
-			GraphType::std(contracted);
-			if (contracted.getCoefficient() == fieldType{0}) {
-				continue;
-			}
-
-			const GraphType& graph = contracted.getValue();
-			if (boundary_map.contains(graph)) {
-				continue;
-			}
-
-			boundary_map.emplace(
-				graph,
-				GCType(graph, AssumeBasisOrderTag{}).delta().data()
-			);
-		}
-	}
-
-	std::cout << "odd-preserving contraction domain size = " << boundary_map.size() << "\n";
-
-	auto solver =
-		VectorSpace::wiedemann_primitive_finder<SplitGraphType, GraphType, fieldType>::create_filtered(
-			boundary_map,
-			[target_grade](const SplitGraphType& split_graph) {
-				return split_graph.n_odd_pairs() <= target_grade;
-			}
-		);
-
-	auto primitive_opt = solver.find_primitive_or_empty(target.data());
-	if (!primitive_opt.has_value()) {
-		return std::nullopt;
-	}
-
-	GCType primitive(*primitive_opt);
-	primitive.standardize_all();
-	return primitive;
 }
 
 template <typename GCType>
@@ -499,7 +294,7 @@ inline vector<vector<Int>> choose_k_indices(Int n, Int k) {
 }
 
 template <typename GCType>
-std::vector<typename GCType::SplitGraphType> valence_4_splits(const typename GCType::GraphType& graph) {
+std::vector<typename GCType::SplitGraphType> beam_valence_4_splits(const typename GCType::GraphType& graph) {
 	using SplitGraphType = typename GCType::SplitGraphType;
 
 	std::vector<SplitGraphType> splits;
@@ -540,7 +335,7 @@ GCType trunk_contraction(const typename GCType::SplitGraphType& split_graph) {
 template <typename GCType>
 std::vector<GCType> split_con_candidates(const typename GCType::GraphType& graph) {
 	std::vector<GCType> candidates;
-	for (const auto& split_graph : valence_4_splits<GCType>(graph)) {
+	for (const auto& split_graph : beam_valence_4_splits<GCType>(graph)) {
 		candidates.push_back(trunk_contraction<GCType>(split_graph));
 	}
 	return candidates;
@@ -698,6 +493,7 @@ std::vector<GCType> make_list(
 	return result;
 }
 
+#ifndef GC_CONTRACTION_PLAYGROUND_NO_MAIN
 int main() {
 	using WheelGC = OddGCdegZero<18>;
 
@@ -723,3 +519,4 @@ int main() {
 
 	return 0;
 }
+#endif
