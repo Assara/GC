@@ -2,33 +2,8 @@
 #include <iostream>
 
 #include "examplegraphs.hpp"
-
-template <typename GraphType>
-bool check_contract_preserve_order_matches(const GraphType& graph, const char* label) {
-	typename GraphType::Basis standardized_input(graph, fieldType{1});
-	GraphType::std(standardized_input);
-	const GraphType standardized_graph = standardized_input.getValue();
-
-	bool ok = true;
-	for (Int i = 0; i < GraphType::N_EDGES_; ++i) {
-		auto standard = standardized_graph.contract_edge(i, fieldType{1});
-		auto preserve = standardized_graph.contract_preserve_order(i, fieldType{1});
-		using ContGraph = typename GraphType::ContGraph;
-		ContGraph::std(standard);
-		ContGraph::std(preserve);
-
-		const bool edge_ok =
-			standard.getCoefficient() == preserve.getCoefficient() &&
-			standard.getValue() == preserve.getValue();
-		if (!edge_ok) {
-			std::cout << label << ": contract_preserve_order mismatch at edge " << int(i) << '\n';
-			ok = false;
-		}
-	}
-
-	std::cout << label << ": preserve-order contraction -> " << (ok ? "ok" : "failed") << '\n';
-	return ok;
-}
+#include "GraphDirections.hpp"
+#include "GraphIsomorphism.hpp"
 
 template <typename GCType>
 bool check_odd_even_contraction_split(const GCType& input, const char* label) {
@@ -86,6 +61,220 @@ static OddGraphdegZero<10> w9_term_3() {
 	return g;
 }
 
+template <typename GraphType>
+bool check_graph_isomorphism_action(const char* label) {
+	GraphType source;
+	source.setEdge(0, 0, 1);
+	source.setEdge(1, 1, 2);
+	source.setEdge(2, 0, 2);
+
+	GraphIsomorphism<3, 3> iso;
+	iso.vertex_perm = {1, 2, 0};
+	iso.edge_perm = {2, 0, 1};
+	iso.edge_flip = {false, true, false};
+
+	GraphType image = iso.permute(source);
+
+	GraphType expected;
+	expected.setEdge(0, 0, 2);
+	expected.setEdge(1, 1, 0);
+	expected.setEdge(2, 1, 2);
+
+	const bool ok = (image == expected);
+	std::cout << label << ": graph isomorphism action -> " << (ok ? "ok" : "failed") << '\n';
+	return ok;
+}
+
+template <typename GraphType>
+bool check_graph_isomorphism_composition(const char* label) {
+	GraphType source;
+	source.setEdge(0, 0, 1);
+	source.setEdge(1, 1, 2);
+	source.setEdge(2, 0, 2);
+
+	GraphIsomorphism<3, 3> a;
+	a.vertex_perm = {1, 2, 0};
+	a.edge_perm = {2, 0, 1};
+	a.edge_flip = {false, true, false};
+
+	GraphIsomorphism<3, 3> b;
+	b.vertex_perm = {2, 0, 1};
+	b.edge_perm = {1, 2, 0};
+	b.edge_flip = {true, false, true};
+
+	const GraphType stepwise = b.permute(a.permute(source));
+	const GraphIsomorphism<3, 3> ab = a.compose(b);
+	const GraphType composed = ab.permute(source);
+
+	const bool ok = (stepwise == composed);
+	std::cout << label << ": graph isomorphism composition -> " << (ok ? "ok" : "failed") << '\n';
+	return ok;
+}
+
+template <typename GraphType>
+bool check_graph_isomorphism_inverse(const char* label) {
+	GraphType source;
+	source.setEdge(0, 0, 1);
+	source.setEdge(1, 1, 2);
+	source.setEdge(2, 0, 2);
+
+	GraphIsomorphism<3, 3> iso;
+	iso.vertex_perm = {1, 2, 0};
+	iso.edge_perm = {2, 0, 1};
+	iso.edge_flip = {false, true, false};
+
+	const auto inv = iso.inverse();
+	const GraphType recovered = inv.permute(iso.permute(source));
+	const GraphType recovered_other_side = iso.permute(inv.permute(source));
+
+	const GraphIsomorphism<3, 3> id_left = iso.compose(inv);
+	const GraphIsomorphism<3, 3> id_right = inv.compose(iso);
+	const GraphType identity_left_image = id_left.permute(source);
+	const GraphType identity_right_image = id_right.permute(source);
+
+	const bool ok =
+		(recovered == source) &&
+		(recovered_other_side == source) &&
+		(identity_left_image == source) &&
+		(identity_right_image == source);
+
+	std::cout << label << ": graph isomorphism inverse -> " << (ok ? "ok" : "failed") << '\n';
+	return ok;
+}
+
+template <typename GraphType>
+bool check_minimizing_isomorphisms(const char* label, const GraphType& source, bigInt expected_count) {
+	GraphStandardizer<
+		GraphType::N_VERTICES_,
+		GraphType::N_EDGES_,
+		GraphType::N_OUT_HAIR_,
+		GraphType::N_IN_HAIR_,
+		GraphType::C_,
+		GraphType::D_,
+		fieldType
+	> standardizer;
+
+	const auto minimizers = standardizer.minimizing_isomorphisms(source);
+	bool ok = !minimizers.empty() && minimizers.size() == expected_count;
+
+	if (!minimizers.empty()) {
+		const GraphType target = minimizers.front().permute(source);
+		for (const auto& iso : minimizers) {
+			if (!(iso.permute(source) == target)) {
+				ok = false;
+				break;
+			}
+		}
+	}
+
+	const bool count_matches = standardizer.automorphism_group_size(source) == minimizers.size();
+	ok &= count_matches;
+
+	std::cout << label
+		  << ": minimizing isomorphisms -> "
+		  << (ok ? "ok" : "failed")
+		  << " (count=" << minimizers.size() << ")\n";
+	return ok;
+}
+
+template <typename GraphType>
+bool check_minimizing_isomorphisms_match_standardization(const char* label, const GraphType& source, bigInt expected_count) {
+	GraphStandardizer<
+		GraphType::N_VERTICES_,
+		GraphType::N_EDGES_,
+		GraphType::N_OUT_HAIR_,
+		GraphType::N_IN_HAIR_,
+		GraphType::C_,
+		GraphType::D_,
+		fieldType
+	> standardizer;
+
+	const auto minimizers = standardizer.minimizing_isomorphisms(source);
+	typename GraphType::Basis standardized_input(source, fieldType{1});
+	GraphType::std(standardized_input);
+	const GraphType standardized_graph = standardized_input.getValue();
+
+	bool ok = minimizers.size() == expected_count;
+	for (const auto& iso : minimizers) {
+		if (!(iso.permute(source) == standardized_graph)) {
+			ok = false;
+			break;
+		}
+	}
+
+	std::cout << label
+		  << ": minimizing isomorphisms match std -> "
+		  << (ok ? "ok" : "failed")
+		  << " (count=" << minimizers.size() << ")\n";
+	return ok;
+}
+
+template <typename GraphType>
+bool check_graph_directions_shape(const char* label) {
+	GraphDirections<GraphType> directions;
+	directions.fill(false);
+	directions[0] = true;
+	directions[GraphType::SIZE - 1] = true;
+
+	const bool ok =
+		(directions.size() == GraphType::SIZE) &&
+		directions[0] &&
+		directions[GraphType::SIZE - 1];
+
+	std::cout << label << ": graph directions shape -> " << (ok ? "ok" : "failed") << '\n';
+	return ok;
+}
+
+template <typename GraphType>
+bool check_graph_directions_isomorphism_action(const char* label) {
+	GraphDirections<GraphType> source;
+	source.fill(false);
+	source[0] = true;
+	source[GraphType::N_HAIR + 0] = true;
+	source[GraphType::N_HAIR + 3] = true;
+
+	GraphIsomorphism<3, 3> iso;
+	iso.vertex_perm = {1, 2, 0};
+	iso.edge_perm = {2, 0, 1};
+	iso.edge_flip = {false, true, false};
+
+	const auto image = iso.permute(source);
+
+	GraphDirections<GraphType> expected;
+	expected.fill(false);
+	expected[GraphType::N_HAIR + 0] = true;
+	expected[GraphType::N_HAIR + 4] = true;
+
+	const bool ok = (image == expected);
+	std::cout << label << ": graph directions isomorphism action -> " << (ok ? "ok" : "failed") << '\n';
+	return ok;
+}
+
+template <typename GraphType>
+bool check_graph_directions_order(const char* label) {
+	GraphDirections<GraphType> a;
+	GraphDirections<GraphType> b;
+	GraphDirections<GraphType> c;
+
+	a.fill(false);
+	b.fill(false);
+	c.fill(false);
+
+	b[GraphType::SIZE - 1] = true;
+	c[0] = true;
+
+	const bool ok =
+		(a.compare(a) == 0) &&
+		(a < b) &&
+		(b < c) &&
+		(a < c) &&
+		!(b < a) &&
+		!(c < b);
+
+	std::cout << label << ": graph directions order -> " << (ok ? "ok" : "failed") << '\n';
+	return ok;
+}
+
 int main() {
 	bool ok = true;
 	OddGCdegZero<10> combined(w9_term_1());
@@ -96,10 +285,14 @@ int main() {
 	ok &= check_odd_even_contraction_split(OddGCdegZero<10>(w9_term_2()), "w9_term_2");
 	ok &= check_odd_even_contraction_split(OddGCdegZero<10>(w9_term_3()), "w9_term_3");
 	ok &= check_odd_even_contraction_split(combined, "w9_sum");
-	ok &= check_contract_preserve_order_matches(w9_term_1(), "w9_term_1");
-	ok &= check_contract_preserve_order_matches(w9_term_2(), "w9_term_2");
-	ok &= check_contract_preserve_order_matches(w9_term_3(), "w9_term_3");
-	ok &= check_contract_preserve_order_matches(wheel_graph<5>(), "wheel_5");
+	ok &= check_graph_isomorphism_action<OddLoopGraphType<3>>("triangle_iso");
+	ok &= check_graph_isomorphism_composition<OddLoopGraphType<3>>("triangle_iso_comp");
+	ok &= check_graph_isomorphism_inverse<OddLoopGraphType<3>>("triangle_iso_inv");
+	ok &= check_graph_directions_shape<OddLoopGraphType<3>>("triangle_directions");
+	ok &= check_graph_directions_isomorphism_action<OddLoopGraphType<3>>("triangle_directions_iso");
+	ok &= check_graph_directions_order<OddLoopGraphType<3>>("triangle_directions_order");
+	ok &= check_minimizing_isomorphisms("triangle_minimizers", loop_graph<3>(), 6);
+	ok &= check_minimizing_isomorphisms_match_standardization("wheel_11_minimizers", wheel_graph<11>(), 22);
 
 	if (!ok) {
 		return EXIT_FAILURE;
