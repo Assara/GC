@@ -712,57 +712,8 @@ Int N_VERTICES,
 				return contracted;
 			}
 
-			BasisElement<ContGraph, fieldType> contract_preserve_order(Int i, fieldType k) const {
-				const Int edge_index = N_HAIR + 2 * i;
-				const Int u = half_edges[edge_index];
-				const Int w = half_edges[edge_index + 1];
-				const Int contraction_vertex = std::min(u, w);
-				const Int deletion_vertex = std::max(u, w);
-
-				if (contraction_vertex == deletion_vertex) {
-					return BasisElement<ContGraph, fieldType>(ContGraph{}, static_cast<fieldType>(0));
-				}
-
-				BasisElement<ContGraph, fieldType> contracted(ContGraph(), k);
-
-				for (Int j = 0; j < edge_index; ++j) {
-					contracted.getValue().half_edges[j] =
-						contraction_value_preserve_order(half_edges[j], contraction_vertex, deletion_vertex);
-				}
-
-				for (Int j = edge_index + 2; j < ThisGraph::SIZE; ++j) {
-					contracted.getValue().half_edges[j - 2] =
-						contraction_value_preserve_order(half_edges[j], contraction_vertex, deletion_vertex);
-				}
-
-				if constexpr (FLIP_EDGE_SIGN == -1) {
-					if (u > w) {
-						contracted.multiplyCoefficient(fieldType{-1});
-					}
-				}
-
-				if constexpr (SWAP_EDGE_SIGN == -1) {
-					if ((N_EDGES - i) % 2 == 1) {
-						contracted.multiplyCoefficient(fieldType{-1});
-					}
-				}
-
-				if constexpr (SWAP_VERTICES_SIGN == -1) {
-					if ((N_VERTICES - deletion_vertex) % 2 == 1) {
-						contracted.multiplyCoefficient(fieldType{-1});
-					}
-				}
-
-				return contracted;
-			}
-
-
 			static BasisElement<ContGraph, fieldType> contract_edge(const BasisElement<ThisGraph, fieldType>& be, Int i) {
 				return be.getValue().contract_edge(i, be.getCoefficient());
-			}
-
-			static BasisElement<ContGraph, fieldType> contract_preserve_order(const BasisElement<ThisGraph, fieldType>& be, Int i) {
-				return be.getValue().contract_preserve_order(i, be.getCoefficient());
 			}
 
 			static Int contraction_value(Int v, Int contraction_vertex, Int deletion_vertex) {
@@ -774,16 +725,6 @@ Int N_VERTICES,
 				}
 				return v;
 
-			}
-
-			static Int contraction_value_preserve_order(Int v, Int contraction_vertex, Int deletion_vertex) {
-				if (v == deletion_vertex) {
-					return contraction_vertex;
-				}
-				if (v > deletion_vertex) {
-					return v - 1;
-				}
-				return v;
 			}
 
 			signedInt flipEdge(Int i) {

@@ -152,24 +152,6 @@ class GC {
 			return result;
 		}
 
-		vector<BasisElement<typename GraphType::ContGraph, fieldType>> d_contraction_preserve_order_without_sort() const {
-			using ContGraph = typename GraphType::ContGraph;
-			vector<BasisElement<typename GraphType::ContGraph, fieldType>> result;
-			result.reserve(vec.raw_elements().size() * GraphType::N_EDGES_);
-
-			for (const auto& elem : vec.raw_elements()) {
-				const auto& be = elem;
-				for (Int i = 0; i < GraphType::N_EDGES_; ++i) {
-					BasisElement<ContGraph, fieldType> contracted = GraphType::contract_preserve_order(be, i);
-
-					if (contracted.getCoefficient() != 0) {
-						result.push_back(std::move(contracted));
-					}
-				}
-			}
-			return result;
-		}
-
 		vector<BasisElement<typename GraphType::ContGraph, fieldType>> d_even_contraction_without_sort() const {
 			using ContGraph = typename GraphType::ContGraph;
 			vector<BasisElement<typename GraphType::ContGraph, fieldType>> result;
@@ -226,12 +208,6 @@ class GC {
 
 		ContGC d_contraction() {
 			std::vector<BasisElement<typename GraphType::ContGraph, fieldType>> elems = d_contraction_without_sort();
-			ContGC dThis(std::move(elems));
-			return dThis;
-		}
-
-		ContGC d_contraction_preserve_order() {
-			std::vector<BasisElement<typename GraphType::ContGraph, fieldType>> elems = d_contraction_preserve_order_without_sort();
 			ContGC dThis(std::move(elems));
 			return dThis;
 		}
