@@ -1,6 +1,7 @@
 #pragma once
 
 #include "HasCompare.hpp"
+#include "HasCustomizedMerge.hpp"
 // #include <memory>   // no longer needed
 
 template<typename T, typename k>
@@ -86,7 +87,11 @@ class BasisElement {
 
 		void add_if_same(BasisElement& other) {
 			if (*this == other) {
-				coefficient += other.getCoefficient();
+				if constexpr (VectorSpace::HasCustomizedMerge<T, k>) {
+					*this = T::merge(*this, other);
+				} else {
+					coefficient += other.getCoefficient();
+				}
 				other.set_coefficient(k{0});
 			}
 

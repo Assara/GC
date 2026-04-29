@@ -2,6 +2,7 @@
 
 #include "BasisElement.hpp"
 #include "HasCanonized.hpp"
+#include "HasCustomizedMerge.hpp"
 #include <algorithm>  
 #include <vector>
 #include <iostream>
@@ -140,9 +141,16 @@ namespace VectorSpace {
 							result.append_in_basis_order(B[j]);
 							++j;
 						} else {
-							k sumCoeff = A[i].getCoefficient() + B[j].getCoefficient();
-							if (sumCoeff != k{}) {
-								result.append_in_basis_order(valA, sumCoeff);
+							if constexpr (HasCustomizedMerge<T, k>) {
+								Element merged = T::merge(A[i], B[j]);
+								if (merged.getCoefficient() != k{}) {
+									result.append_in_basis_order(merged);
+								}
+							} else {
+								k sumCoeff = A[i].getCoefficient() + B[j].getCoefficient();
+								if (sumCoeff != k{}) {
+									result.append_in_basis_order(valA, sumCoeff);
+								}
 							}
 							++i;
 							++j;
@@ -195,9 +203,17 @@ namespace VectorSpace {
 							result.append_in_basis_order(B[j].getValue(), B[j].getCoefficient() * scalar);
 							++j;
 						} else {
-							k sumCoeff = A[i].getCoefficient() + B[j].getCoefficient() * scalar;
-							if (sumCoeff != k{}) {
-								result.append_in_basis_order(valA, sumCoeff);
+							if constexpr (HasCustomizedMerge<T, k>) {
+								Element scaled_other(B[j].getValue(), B[j].getCoefficient() * scalar);
+								Element merged = T::merge(A[i], scaled_other);
+								if (merged.getCoefficient() != k{}) {
+									result.append_in_basis_order(merged);
+								}
+							} else {
+								k sumCoeff = A[i].getCoefficient() + B[j].getCoefficient() * scalar;
+								if (sumCoeff != k{}) {
+									result.append_in_basis_order(valA, sumCoeff);
+								}
 							}
 							++i;
 							++j;
