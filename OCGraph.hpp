@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <array>
+#include <map>
+#include <optional>
 #include <vector>
 
 #include "GraphDirections.hpp"
@@ -146,6 +148,211 @@ class OCGraph : public VectorSpace::LinComb<GraphDirections<GraphType>, fieldTyp
 			return result;
 		}
 
+		std::optional<OCGraph> greedy_delta_e_primitive_step() const {
+			OCGraph source = normalized_copy();
+			if (source.size() == 0) {
+				return OCGraph(graph, DirectionComb{}, automorphisms);
+			}
+
+			const DirectionType current_max = source.raw_elements().back().getValue();
+			const fieldType current_max_coefficient = source.raw_elements().back().getCoefficient();
+
+			bool found = false;
+			DirectionType best_lift{};
+			fieldType best_lift_coefficient = fieldType{0};
+			OCGraph best_residual;
+
+			for (const Element& elem : source.raw_elements()) {
+				for (Int i = 0; i < GraphType::SIZE; ++i) {
+					if (elem.getValue()[i]) {
+						continue;
+					}
+
+					DirectionType lifted = elem.getValue();
+					lifted[i] = true;
+
+					OCGraph lifted_graph(graph, single_direction_lincomb(lifted, fieldType{1}), automorphisms);
+					OCGraph lifted_boundary = lifted_graph.delta_e();
+
+					const fieldType boundary_max_coefficient =
+						coefficient_of_direction(static_cast<const DirectionComb&>(lifted_boundary), current_max);
+					if (boundary_max_coefficient == fieldType{0}) {
+						continue;
+					}
+
+					const fieldType lift_coefficient = -current_max_coefficient / boundary_max_coefficient;
+					DirectionComb residual_combination = static_cast<const DirectionComb&>(source);
+					residual_combination += static_cast<const DirectionComb&>(lifted_boundary) * lift_coefficient;
+
+					OCGraph residual(graph, std::move(residual_combination), automorphisms);
+					residual.standardize_and_sort();
+
+					if (compare_descending_direction_support(
+						static_cast<const DirectionComb&>(residual),
+						static_cast<const DirectionComb&>(source)
+					) >= 0) {
+						continue;
+					}
+
+					if (!found || compare_descending_direction_support(
+						static_cast<const DirectionComb&>(residual),
+						static_cast<const DirectionComb&>(best_residual)
+					) < 0) {
+						found = true;
+						best_lift = lifted;
+						best_lift_coefficient = lift_coefficient;
+						best_residual = std::move(residual);
+					}
+				}
+			}
+
+			if (!found) {
+				return std::nullopt;
+			}
+
+			OCGraph primitive_step(graph, single_direction_lincomb(best_lift, best_lift_coefficient), automorphisms);
+			primitive_step.standardize_and_sort();
+			return primitive_step;
+		}
+
+		std::optional<OCGraph> greedy_delta_e_primitive(bigInt max_steps = 10000) const {
+			(void)max_steps;
+			return morse_delta_e_primitive();
+		}
+
+		std::optional<OCGraph> exact_delta_e_primitive() const {
+			OCGraph source = normalized_copy();
+			if (source.size() == 0) {
+				return OCGraph(graph, DirectionComb{}, automorphisms);
+			}
+
+			if (all_terms_have_exactly_one_true_half_edge_at_each_vertex(static_cast<const DirectionComb&>(source))) {
+				OCGraph correction = source.homotopy_standardize();
+				DirectionComb residual = static_cast<const DirectionComb&>(source);
+				residual += static_cast<const DirectionComb&>(correction.delta_e());
+				OCGraph reduced(graph, std::move(residual), automorphisms);
+				reduced.standardize_and_sort();
+				if (reduced.size() == 0) {
+					correction.standardize_and_sort();
+					return correction;
+				}
+			}
+
+			std::map<Int, DirectionComb> by_true_count;
+			for (const Element& elem : source.raw_elements()) {
+				by_true_count[count_true(elem.getValue())] .append_in_basis_order(elem);
+			}
+
+			DirectionComb primitive_combination;
+
+			for (const auto& [true_count, component] : by_true_count) {
+				const auto lifted_component = exact_delta_e_primitive_for_true_count(component, true_count);
+				if (!lifted_component.has_value()) {
+					return std::nullopt;
+				}
+				static_cast<DirectionComb&>(primitive_combination) += lifted_component.value();
+			}
+
+			OCGraph primitive(graph, std::move(primitive_combination), automorphisms);
+			primitive.standardize_and_sort();
+
+			DirectionComb check = static_cast<const DirectionComb&>(primitive.delta_e());
+			DirectionComb target = static_cast<const DirectionComb&>(source);
+			check.sort_elements();
+			target.sort_elements();
+			if (!(check == target)) {
+				return std::nullopt;
+			}
+
+			return primitive;
+		}
+
+		std::optional<OCGraph> morse_delta_e_homotopy() const {
+			OCGraph source = normalized_copy();
+			OCGraph correction(graph, DirectionComb{}, automorphisms);
+
+			const DirectionType critical_direction = minimal_one_true_direction();
+			const auto critical_indices = critical_true_indices_by_vertex(critical_direction);
+
+			for (const Element& elem : source.raw_elements()) {
+				const auto lifted = morse_delta_e_homotopy_of_element(elem, critical_indices);
+				if (!lifted.has_value()) {
+					return std::nullopt;
+				}
+				static_cast<DirectionComb&>(correction) += lifted.value();
+			}
+
+			correction.standardize_and_sort();
+			return correction;
+		}
+
+		std::optional<OCGraph> morse_delta_e_primitive(bigInt max_steps = 10000) const {
+			OCGraph source = normalized_copy();
+			if (source.size() == 0) {
+				return OCGraph(graph, DirectionComb{}, automorphisms);
+			}
+
+			if (source.delta_e().size() != 0) {
+				return std::nullopt;
+			}
+
+			const DirectionType critical_direction = minimal_one_true_direction();
+
+			OCGraph primitive(graph, DirectionComb{}, automorphisms);
+			OCGraph residual = source;
+
+			for (bigInt step = 0; step < max_steps && residual.size() != 0; ++step) {
+				const auto homotopy_step = residual.morse_delta_e_homotopy();
+				if (!homotopy_step.has_value()) {
+					return std::nullopt;
+				}
+
+				if (homotopy_step->size() == 0) {
+					break;
+				}
+
+				static_cast<DirectionComb&>(primitive) +=
+					static_cast<const DirectionComb&>(homotopy_step.value());
+
+				DirectionComb next_residual = static_cast<const DirectionComb&>(residual);
+				next_residual += static_cast<const DirectionComb&>(homotopy_step.value().delta_e()) * fieldType{-1};
+				OCGraph reduced(graph, std::move(next_residual), automorphisms);
+				reduced.standardize_and_sort();
+				residual = std::move(reduced);
+			}
+
+			if (residual.size() == 0) {
+				primitive.standardize_and_sort();
+				return primitive;
+			}
+
+			if (all_terms_have_exactly_one_true_half_edge_at_each_vertex(
+				static_cast<const DirectionComb&>(residual)
+			)) {
+				OCGraph correction = residual.homotopy_standardize();
+				DirectionComb final_residual = static_cast<const DirectionComb&>(residual);
+				final_residual += static_cast<const DirectionComb&>(correction.delta_e()) * fieldType{-1};
+				OCGraph reduced(graph, std::move(final_residual), automorphisms);
+				reduced.standardize_and_sort();
+
+				if (reduced.size() == 0) {
+					static_cast<DirectionComb&>(primitive) +=
+						static_cast<const DirectionComb&>(correction);
+					primitive.standardize_and_sort();
+					return primitive;
+				}
+
+				residual = std::move(reduced);
+			}
+
+			if (residual.size() == 1
+				&& residual.raw_elements().front().getValue() == critical_direction) {
+				return std::nullopt;
+			}
+
+			return std::nullopt;
+		}
+
 		OCGraph homotopy_standardize() const {
 			OCGraph source = normalized_copy();
 			OCGraph correction(graph, DirectionComb{}, automorphisms);
@@ -180,6 +387,205 @@ class OCGraph : public VectorSpace::LinComb<GraphDirections<GraphType>, fieldTyp
 		std::vector<IsoType> automorphisms{};
 
 	private:
+		Int count_true(const DirectionType& directions) const {
+			Int result = 0;
+			for (Int i = 0; i < GraphType::SIZE; ++i) {
+				if (directions[i]) {
+					++result;
+				}
+			}
+			return result;
+		}
+
+		std::vector<DirectionType> enumerate_canonical_admissible_directions_with_true_count(Int true_count) const {
+			std::vector<DirectionType> raw_directions;
+			DirectionType current;
+			current.fill(false);
+
+			auto backtrack = [&](auto&& self, Int index, Int chosen) -> void {
+				if (chosen > true_count) {
+					return;
+				}
+				if (chosen + (GraphType::SIZE - index) < true_count) {
+					return;
+				}
+				if (index == GraphType::SIZE) {
+					if (chosen != true_count || !has_true_half_edge_at_each_vertex(current)) {
+						return;
+					}
+					const Element canon = standardize_direction_element(Element(current, fieldType{1}));
+					if (canon.getCoefficient() != fieldType{0}) {
+						raw_directions.push_back(canon.getValue());
+					}
+					return;
+				}
+
+				current[index] = false;
+				self(self, index + 1, chosen);
+
+				current[index] = true;
+				self(self, index + 1, chosen + 1);
+				current[index] = false;
+			};
+
+			backtrack(backtrack, 0, 0);
+			std::sort(raw_directions.begin(), raw_directions.end());
+			raw_directions.erase(
+				std::unique(raw_directions.begin(), raw_directions.end()),
+				raw_directions.end()
+			);
+			return raw_directions;
+		}
+
+		std::optional<DirectionComb> exact_delta_e_primitive_for_true_count(
+			const DirectionComb& target_component,
+			Int true_count
+		) const {
+			const std::vector<DirectionType> row_basis =
+				enumerate_canonical_admissible_directions_with_true_count(true_count);
+			const std::vector<DirectionType> col_basis =
+				enumerate_canonical_admissible_directions_with_true_count(true_count + 1);
+
+			if (row_basis.empty()) {
+				return target_component.size() == 0 ? std::optional<DirectionComb>(DirectionComb{}) : std::nullopt;
+			}
+
+			std::map<DirectionType, Int> row_index;
+			for (Int i = 0; i < static_cast<Int>(row_basis.size()); ++i) {
+				row_index.emplace(row_basis[i], i);
+			}
+
+			std::vector<std::vector<fieldType>> matrix(
+				row_basis.size(),
+				std::vector<fieldType>(col_basis.size() + 1, fieldType{0})
+			);
+
+			for (const Element& elem : target_component.raw_elements()) {
+				const auto it = row_index.find(elem.getValue());
+				if (it == row_index.end()) {
+					return std::nullopt;
+				}
+				matrix[it->second][col_basis.size()] = elem.getCoefficient();
+			}
+
+			for (Int col = 0; col < static_cast<Int>(col_basis.size()); ++col) {
+				OCGraph lifted_graph(graph, single_direction_lincomb(col_basis[col], fieldType{1}), automorphisms);
+				const OCGraph boundary = lifted_graph.delta_e();
+				for (const Element& boundary_term : boundary.raw_elements()) {
+					const auto it = row_index.find(boundary_term.getValue());
+					if (it != row_index.end()) {
+						matrix[it->second][col] = boundary_term.getCoefficient();
+					}
+				}
+			}
+
+			const std::vector<fieldType> solution = solve_linear_system(matrix, static_cast<Int>(col_basis.size()));
+			if (solution.empty() && !col_basis.empty()) {
+				return std::nullopt;
+			}
+
+			DirectionComb primitive_component;
+			for (Int col = 0; col < static_cast<Int>(col_basis.size()); ++col) {
+				if (solution[col] != fieldType{0}) {
+					primitive_component.append_in_basis_order(col_basis[col], solution[col]);
+				}
+			}
+			primitive_component.sort_elements();
+			return primitive_component;
+		}
+
+		std::vector<fieldType> solve_linear_system(
+			std::vector<std::vector<fieldType>>& augmented,
+			Int n_variables
+		) const {
+			const Int n_rows = static_cast<Int>(augmented.size());
+			Int pivot_row = 0;
+			std::vector<Int> pivot_column_for_row;
+			pivot_column_for_row.reserve(std::min(n_rows, n_variables));
+
+			for (Int col = 0; col < n_variables && pivot_row < n_rows; ++col) {
+				Int selected_row = pivot_row;
+				while (selected_row < n_rows && augmented[selected_row][col] == fieldType{0}) {
+					++selected_row;
+				}
+				if (selected_row == n_rows) {
+					continue;
+				}
+
+				if (selected_row != pivot_row) {
+					std::swap(augmented[selected_row], augmented[pivot_row]);
+				}
+
+				const fieldType inv_pivot = fieldType{1} / augmented[pivot_row][col];
+				for (Int j = col; j <= n_variables; ++j) {
+					augmented[pivot_row][j] *= inv_pivot;
+				}
+
+				for (Int row = 0; row < n_rows; ++row) {
+					if (row == pivot_row || augmented[row][col] == fieldType{0}) {
+						continue;
+					}
+					const fieldType factor = augmented[row][col];
+					for (Int j = col; j <= n_variables; ++j) {
+						augmented[row][j] -= factor * augmented[pivot_row][j];
+					}
+				}
+
+				pivot_column_for_row.push_back(col);
+				++pivot_row;
+			}
+
+			for (Int row = pivot_row; row < n_rows; ++row) {
+				if (augmented[row][n_variables] != fieldType{0}) {
+					return {};
+				}
+			}
+
+			std::vector<fieldType> solution(n_variables, fieldType{0});
+			for (Int row = 0; row < static_cast<Int>(pivot_column_for_row.size()); ++row) {
+				solution[pivot_column_for_row[row]] = augmented[row][n_variables];
+			}
+			return solution;
+		}
+
+		static signedInt compare_descending_direction_support(
+			const DirectionComb& lhs,
+			const DirectionComb& rhs
+		) {
+			const auto& left = lhs.raw_elements();
+			const auto& right = rhs.raw_elements();
+
+			bigInt i = static_cast<bigInt>(left.size());
+			bigInt j = static_cast<bigInt>(right.size());
+
+			while (i > 0 && j > 0) {
+				const signedInt comparison =
+					left[i - 1].getValue().compare(right[j - 1].getValue());
+				if (comparison != 0) {
+					return comparison;
+				}
+				--i;
+				--j;
+			}
+
+			if (i == 0 && j == 0) {
+				return 0;
+			}
+			return i == 0 ? -1 : 1;
+		}
+
+		fieldType coefficient_of_direction(
+			const DirectionComb& directions,
+			const DirectionType& target
+		) const {
+			for (const Element& elem : directions.raw_elements()) {
+				if (elem.getValue() == target) {
+					return elem.getCoefficient();
+				}
+			}
+			return fieldType{0};
+		}
+
 		signedInt graph_isomorphism_sign(const IsoType& iso) const {
 			return iso.graph_permutation_sign() * iso.vertex_permutation_sign();
 		}
@@ -325,6 +731,71 @@ class OCGraph : public VectorSpace::LinComb<GraphDirections<GraphType>, fieldTyp
 			return result;
 		}
 
+		std::array<Int, GraphType::N_VERTICES_> true_counts_by_vertex(const DirectionType& directions) const {
+			std::array<Int, GraphType::N_VERTICES_> counts{};
+			for (Int i = 0; i < GraphType::SIZE; ++i) {
+				if (directions[i]) {
+					++counts[graph.half_edges[i]];
+				}
+			}
+			return counts;
+		}
+
+		std::array<Int, GraphType::N_VERTICES_> critical_true_indices_by_vertex(const DirectionType& directions) const {
+			std::array<Int, GraphType::N_VERTICES_> indices{};
+			for (Int i = 0; i < GraphType::SIZE; ++i) {
+				if (directions[i]) {
+					indices[graph.half_edges[i]] = i;
+				}
+			}
+			return indices;
+		}
+
+		std::optional<DirectionComb> morse_delta_e_homotopy_of_element(
+			const Element& elem,
+			const std::array<Int, GraphType::N_VERTICES_>& critical_indices
+		) const {
+			const DirectionType& directions = elem.getValue();
+			const auto counts = true_counts_by_vertex(directions);
+
+			for (Int vertex = 0; vertex < GraphType::N_VERTICES_; ++vertex) {
+				const Int critical_index = critical_indices[vertex];
+				const bool has_critical = directions[critical_index];
+				const Int count = counts[vertex];
+
+				if (has_critical && count == 1) {
+					continue;
+				}
+
+				if (has_critical) {
+					return DirectionComb{};
+				}
+
+				DirectionType lifted = directions;
+				lifted[critical_index] = true;
+
+				OCGraph lifted_graph(graph, single_direction_lincomb(lifted, fieldType{1}), automorphisms);
+				lifted_graph.standardize_and_sort();
+				if (lifted_graph.size() == 0) {
+					return std::nullopt;
+				}
+
+				const fieldType boundary_coefficient = coefficient_of_direction(
+					static_cast<const DirectionComb&>(lifted_graph.delta_e()),
+					directions
+				);
+				if (boundary_coefficient == fieldType{0}) {
+					return std::nullopt;
+				}
+
+				DirectionComb result = static_cast<const DirectionComb&>(lifted_graph);
+				result *= elem.getCoefficient() / boundary_coefficient;
+				return result;
+			}
+
+			return DirectionComb{};
+		}
+
 		Int unique_true_index_at_vertex(const DirectionType& directions, Int vertex) const {
 			for (Int i = 0; i < GraphType::SIZE; ++i) {
 				if (graph.half_edges[i] == vertex && directions[i]) {
@@ -463,5 +934,14 @@ class OCGraph : public VectorSpace::LinComb<GraphDirections<GraphType>, fieldTyp
 			}
 
 			return std::all_of(counts.begin(), counts.end(), [](Int count) { return count == 1; });
+		}
+
+		bool all_terms_have_exactly_one_true_half_edge_at_each_vertex(const DirectionComb& directions) const {
+			for (const Element& elem : directions.raw_elements()) {
+				if (!has_exactly_one_true_half_edge_at_each_vertex(elem.getValue())) {
+					return false;
+				}
+			}
+			return true;
 		}
 };

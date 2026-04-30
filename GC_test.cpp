@@ -270,6 +270,23 @@ bool check_wheel_OCG_F0_delta_homotopy_equivalence(const char* label) {
 	return check_OCG_F0_delta_homotopy_equivalence_on_graph(label, source);
 }
 
+template <Int N>
+bool check_wheel_full_F_morse_report(const char* label) {
+	using GraphType = OddGraphdegZero<N + 1>;
+	const GraphType source = wheel_graph<N>();
+	const auto report = build_full_F_greedy_report(source);
+
+	const bool ok = report.success;
+	std::cout << label
+		<< ": success=" << (report.success ? "yes" : "no")
+		<< " failed_n=" << report.failed_n
+		<< " zero_n=" << report.zero_n
+		<< " last_nonzero_n=" << report.last_nonzero_n
+		<< " max_valence=" << report.highest_valence_in_last_nonzero
+		<< " -> " << (ok ? "ok" : "failed") << '\n';
+	return ok;
+}
+
 template <typename GCType>
 bool check_odd_even_contraction_split(const GCType& input, const char* label) {
 	GCType gc = input;
