@@ -58,6 +58,9 @@ Int N_VERTICES,
 			template <typename NewFieldType>
 			using RebindField = Graph<N_VERTICES, N_EDGES, N_OUT_HAIR, N_IN_HAIR, c, d, NewFieldType>;
 
+			template <signedInt NewC, signedInt NewD>
+			using RebindDegree = Graph<N_VERTICES, N_EDGES, N_OUT_HAIR, N_IN_HAIR, NewC, NewD, fieldType>;
+
 
 			Graph() = default;
 
@@ -351,6 +354,22 @@ Int N_VERTICES,
 				return result;
 			}
 
+			VectorSpace::LinComb<SplitGraph, fieldType> unsorted_full_splits(fieldType coef) const {
+				vector<vector<Int>> adjRepresentation;
+				adjRepresentation.reserve(N_VERTICES);
+
+				VectorSpace::LinComb<SplitGraph, fieldType> result;
+
+				for (Int v = 0; v < N_VERTICES; v++) {
+					adjRepresentation.push_back(adjacent(v));
+				}
+
+				for (Int v = 0; v < N_VERTICES; v++) {
+					split_vertex_full(v, adjRepresentation[v], result, coef);
+				}
+				return result;
+			}
+
 			VectorSpace::LinComb<SplitGraph, fieldType> unsorted_4valent_splits(fieldType coef) const {
 				vector<vector<Int>> adjRepresentation;
 				adjRepresentation.reserve(N_VERTICES);
@@ -493,6 +512,38 @@ Int N_VERTICES,
 				Int max_index = adjacent.size() - 1;
 				for (Int i = 2; i < max_index; i++) {
 					vector<Int> S = combutils::firstSubset(1, i);
+
+					do {
+						result.append_in_basis_order(splitGraph(split_vertex, adjacent, S), coef);
+					} while (combutils::nextSubset(S, max_index));
+				}
+			}
+
+			void split_vertex_full(Int split_vertex, const vector<Int>& adjacent, VectorSpace::LinComb<SplitGraph, fieldType>& result, fieldType coef) const {
+				if (adjacent.empty()) {
+					result.append_in_basis_order(splitGraph(split_vertex, adjacent, vector<Int>()), coef);
+					return;
+				}
+
+				if (adjacent.size() == 1) {
+					result.append_in_basis_order(splitGraph(split_vertex, adjacent, vector<Int>()), coef);
+					result.append_in_basis_order(splitGraph(split_vertex, adjacent, vector<Int>{0}), coef);
+					return;
+				}
+
+				if (adjacent.size() == 2) {
+					result.append_in_basis_order(splitGraph(split_vertex, adjacent, vector<Int>{0}), -coef);
+					result.append_in_basis_order(splitGraph(split_vertex, adjacent, vector<Int>{1}), -coef);
+					return;
+				}
+
+				if (adjacent.size() == 3) {
+					return;
+				}
+
+				const Int max_index = adjacent.size() - 1;
+				for (Int i = 2; i < max_index; i++) {
+					vector<Int> S = combutils::firstSubset(0, i);
 
 					do {
 						result.append_in_basis_order(splitGraph(split_vertex, adjacent, S), coef);

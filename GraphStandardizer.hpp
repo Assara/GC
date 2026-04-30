@@ -1,3 +1,5 @@
+#pragma once
+
 #include <vector>
 #include <utility>
 #include "VectorSpace/BasisElement.hpp"
@@ -131,19 +133,22 @@ Int N_VERTICES,
 
 					static IsomorphismType vertex_swap_isomorphism(Int v, Int w) {
 						IsomorphismType iso;
-						std::swap(iso.vertex_perm[v], iso.vertex_perm[w]);
+						std::swap(iso.vertex_permutation_data()[v], iso.vertex_permutation_data()[w]);
+						iso.template compute_signs<N_OUT_HAIR, N_IN_HAIR, c, d, fieldType>();
 						return iso;
 					}
 
 					static IsomorphismType edge_flip_isomorphism(Int e) {
 						IsomorphismType iso;
-						iso.edge_flip[e] = true;
+						iso.edge_flip_data()[e] = true;
+						iso.template compute_signs<N_OUT_HAIR, N_IN_HAIR, c, d, fieldType>();
 						return iso;
 					}
 
 					static IsomorphismType edge_swap_isomorphism(Int i, Int j) {
 						IsomorphismType iso;
-						std::swap(iso.edge_perm[i], iso.edge_perm[j]);
+						std::swap(iso.edge_permutation_data()[i], iso.edge_permutation_data()[j]);
+						iso.template compute_signs<N_OUT_HAIR, N_IN_HAIR, c, d, fieldType>();
 						return iso;
 					}
 

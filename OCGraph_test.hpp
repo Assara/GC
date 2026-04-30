@@ -16,9 +16,10 @@ bool check_graph_isomorphism_action(const char* label) {
 	source.setEdge(2, 0, 2);
 
 	GraphIsomorphism<3, 3> iso;
-	iso.vertex_perm = {1, 2, 0};
-	iso.edge_perm = {2, 0, 1};
-	iso.edge_flip = {false, true, false};
+	iso.vertex_permutation_data() = {1, 2, 0};
+	iso.edge_permutation_data() = {2, 0, 1};
+	iso.edge_flip_data() = {false, true, false};
+	iso.template compute_signs<GraphType::N_OUT_HAIR_, GraphType::N_IN_HAIR_, GraphType::C_, GraphType::D_, fieldType>();
 
 	GraphType image = iso.permute(source);
 
@@ -40,14 +41,16 @@ bool check_graph_isomorphism_composition(const char* label) {
 	source.setEdge(2, 0, 2);
 
 	GraphIsomorphism<3, 3> a;
-	a.vertex_perm = {1, 2, 0};
-	a.edge_perm = {2, 0, 1};
-	a.edge_flip = {false, true, false};
+	a.vertex_permutation_data() = {1, 2, 0};
+	a.edge_permutation_data() = {2, 0, 1};
+	a.edge_flip_data() = {false, true, false};
+	a.template compute_signs<GraphType::N_OUT_HAIR_, GraphType::N_IN_HAIR_, GraphType::C_, GraphType::D_, fieldType>();
 
 	GraphIsomorphism<3, 3> b;
-	b.vertex_perm = {2, 0, 1};
-	b.edge_perm = {1, 2, 0};
-	b.edge_flip = {true, false, true};
+	b.vertex_permutation_data() = {2, 0, 1};
+	b.edge_permutation_data() = {1, 2, 0};
+	b.edge_flip_data() = {true, false, true};
+	b.template compute_signs<GraphType::N_OUT_HAIR_, GraphType::N_IN_HAIR_, GraphType::C_, GraphType::D_, fieldType>();
 
 	const GraphType stepwise = b.permute(a.permute(source));
 	const GraphIsomorphism<3, 3> ab = a.compose(b);
@@ -66,9 +69,10 @@ bool check_graph_isomorphism_inverse(const char* label) {
 	source.setEdge(2, 0, 2);
 
 	GraphIsomorphism<3, 3> iso;
-	iso.vertex_perm = {1, 2, 0};
-	iso.edge_perm = {2, 0, 1};
-	iso.edge_flip = {false, true, false};
+	iso.vertex_permutation_data() = {1, 2, 0};
+	iso.edge_permutation_data() = {2, 0, 1};
+	iso.edge_flip_data() = {false, true, false};
+	iso.template compute_signs<GraphType::N_OUT_HAIR_, GraphType::N_IN_HAIR_, GraphType::C_, GraphType::D_, fieldType>();
 
 	const auto inv = iso.inverse();
 	const GraphType recovered = inv.permute(iso.permute(source));
@@ -97,7 +101,8 @@ bool check_graph_isomorphism_graph_sign(const char* label) {
 	source.setEdge(2, 0, 2);
 
 	GraphIsomorphism<3, 3> iso;
-	iso.edge_perm = {1, 0, 2};
+	iso.edge_permutation_data() = {1, 0, 2};
+	iso.template compute_signs<GraphType::N_OUT_HAIR_, GraphType::N_IN_HAIR_, GraphType::C_, GraphType::D_, fieldType>();
 
 	const bool ok = (iso.graph_sign(source) == -1);
 	std::cout << label << ": graph isomorphism graph sign -> " << (ok ? "ok" : "failed") << '\n';
@@ -172,6 +177,53 @@ bool check_minimizing_isomorphisms_match_standardization(const char* label, cons
 }
 
 template <typename GraphType>
+bool check_generated_isomorphism_standardization_matches_standardize(const char* label, const GraphType& source) {
+	GraphStandardizer<
+		GraphType::N_VERTICES_,
+		GraphType::N_EDGES_,
+		GraphType::N_OUT_HAIR_,
+		GraphType::N_IN_HAIR_,
+		GraphType::C_,
+		GraphType::D_,
+		fieldType
+	> standardizer;
+
+	typename GraphType::Basis standardized_input(source, fieldType{1});
+	GraphType::std(standardized_input);
+
+	const auto minimizers = standardizer.minimizing_isomorphisms(source);
+	bool ok = !minimizers.empty();
+
+	if (ok) {
+		const auto& sigma0 = minimizers.front();
+		bool contains_plus = false;
+		bool contains_minus = false;
+
+		for (const auto& sigma : minimizers) {
+			if (sigma.graph_permutation_sign() > 0) {
+				contains_plus = true;
+			}
+			if (sigma.graph_permutation_sign() < 0) {
+				contains_minus = true;
+			}
+		}
+
+		const fieldType coeff =
+			(contains_plus && contains_minus) ? fieldType{0}
+			: contains_plus ? fieldType{1}
+			: fieldType{-1};
+
+		typename GraphType::Basis via_isomorphism(sigma0.permute(source), coeff);
+		ok = standardized_input.total_equality(via_isomorphism);
+	}
+
+	std::cout << label
+		  << ": generated isomorphism standardization -> "
+		  << (ok ? "ok" : "failed") << '\n';
+	return ok;
+}
+
+template <typename GraphType>
 bool check_graph_directions_shape(const char* label) {
 	GraphDirections<GraphType> directions;
 	directions.fill(false);
@@ -196,9 +248,10 @@ bool check_graph_directions_isomorphism_action(const char* label) {
 	source[GraphType::N_HAIR + 3] = true;
 
 	GraphIsomorphism<3, 3> iso;
-	iso.vertex_perm = {1, 2, 0};
-	iso.edge_perm = {2, 0, 1};
-	iso.edge_flip = {false, true, false};
+	iso.vertex_permutation_data() = {1, 2, 0};
+	iso.edge_permutation_data() = {2, 0, 1};
+	iso.edge_flip_data() = {false, true, false};
+	iso.template compute_signs<GraphType::N_OUT_HAIR_, GraphType::N_IN_HAIR_, GraphType::C_, GraphType::D_, fieldType>();
 
 	const auto image = iso.permute(source);
 
@@ -249,7 +302,9 @@ bool check_graph_directions_standardize(const char* label) {
 
 	IsoType identity;
 	IsoType flip_middle;
-	flip_middle.edge_flip[1] = true;
+	flip_middle.edge_flip_data()[1] = true;
+	identity.template compute_signs<GraphType::N_OUT_HAIR_, GraphType::N_IN_HAIR_, GraphType::C_, GraphType::D_, fieldType>();
+	flip_middle.template compute_signs<GraphType::N_OUT_HAIR_, GraphType::N_IN_HAIR_, GraphType::C_, GraphType::D_, fieldType>();
 
 	const BasisElement<DirectionType, fieldType> input(directions, fieldType{1});
 	const std::vector<IsoType> automorphisms{identity, flip_middle};
@@ -284,7 +339,7 @@ bool check_ocgraph_standardize_and_sort(const char* label) {
 	directions[GraphType::N_HAIR + 0] = true;
 	directions[GraphType::N_HAIR + 3] = true;
 
-	typename OCGraph<GraphType>::Base lincomb;
+	typename OCGraph<GraphType>::DirectionComb lincomb;
 	lincomb.append_in_basis_order(directions, fieldType{1});
 
 	OCGraph<GraphType> oc(source, lincomb);
@@ -336,7 +391,7 @@ bool check_ocgraph_filters_non_covering_directions(const char* label) {
 	directions[GraphType::N_HAIR + 0] = true;
 	directions[GraphType::N_HAIR + 1] = true;
 
-	typename OCGraph<GraphType>::Base lincomb;
+	typename OCGraph<GraphType>::DirectionComb lincomb;
 	lincomb.append_in_basis_order(directions, fieldType{1});
 
 	OCGraph<GraphType> oc(source, lincomb);
@@ -358,7 +413,8 @@ bool check_ocgraph_delta_e(const char* label) {
 	source.setEdge(2, 0, 2);
 
 	IsoType iso;
-	iso.edge_perm = {1, 0, 2};
+	iso.edge_permutation_data() = {1, 0, 2};
+	iso.template compute_signs<GraphType::N_OUT_HAIR_, GraphType::N_IN_HAIR_, GraphType::C_, GraphType::D_, fieldType>();
 
 	DirectionType directions;
 	directions.fill(false);
@@ -369,7 +425,7 @@ bool check_ocgraph_delta_e(const char* label) {
 	directions[GraphType::N_HAIR + 4] = true;
 	directions[GraphType::N_HAIR + 5] = true;
 
-	typename OCGraph<GraphType>::Base lincomb;
+	typename OCGraph<GraphType>::DirectionComb lincomb;
 	lincomb.append_in_basis_order(directions, fieldType{3});
 
 	OCGraph<GraphType> oc(source, lincomb, {iso});
@@ -395,7 +451,7 @@ bool check_ocgraph_delta_e(const char* label) {
 		sign = -sign;
 	}
 
-	typename OCGraph<GraphType>::Base expected_lincomb;
+	typename OCGraph<GraphType>::DirectionComb expected_lincomb;
 	for (const auto& elem : expected) {
 		if (elem.getCoefficient() != fieldType{0}) {
 			expected_lincomb.append_in_basis_order(elem);
@@ -405,8 +461,8 @@ bool check_ocgraph_delta_e(const char* label) {
 
 	bool ok = (delta.graph == source);
 	ok &= (delta.automorphisms.size() == 1);
-	ok &= (delta.automorphisms.front().edge_perm == iso.edge_perm);
-	ok &= static_cast<typename OCGraph<GraphType>::Base>(delta) == expected_lincomb;
+	ok &= (delta.automorphisms.front().edge_permutation_data() == iso.edge_permutation_data());
+	ok &= static_cast<typename OCGraph<GraphType>::DirectionComb>(delta) == expected_lincomb;
 
 	std::cout << label << ": ocgraph delta_e -> " << (ok ? "ok" : "failed") << '\n';
 	return ok;
@@ -427,7 +483,7 @@ bool check_ocgraph_delta_e_prunes_uncovered_vertices(const char* label) {
 	directions[GraphType::N_HAIR + 2] = true;
 	directions[GraphType::N_HAIR + 5] = true;
 
-	typename OCGraph<GraphType>::Base lincomb;
+	typename OCGraph<GraphType>::DirectionComb lincomb;
 	lincomb.append_in_basis_order(directions, fieldType{1});
 
 	OCGraph<GraphType> oc(source, lincomb);
@@ -454,7 +510,7 @@ bool check_ocgraph_delta_e_squares_to_zero(const char* label) {
 	directions[GraphType::N_HAIR + 2] = true;
 	directions[GraphType::N_HAIR + 4] = true;
 
-	typename OCGraph<GraphType>::Base lincomb;
+	typename OCGraph<GraphType>::DirectionComb lincomb;
 	lincomb.append_in_basis_order(directions, fieldType{1});
 
 	OCGraph<GraphType> oc(source, lincomb);
@@ -475,7 +531,7 @@ bool check_ocgraph_delta_e_isomorphism_equivariance_on_data(
 ) {
 	using IsoType = GraphIsomorphism<GraphType::N_VERTICES_, GraphType::N_EDGES_>;
 
-	typename OCGraph<GraphType>::Base lincomb;
+	typename OCGraph<GraphType>::DirectionComb lincomb;
 	lincomb.append_in_basis_order(directions, fieldType{2});
 
 	OCGraph<GraphType> original(source, lincomb);
@@ -483,7 +539,7 @@ bool check_ocgraph_delta_e_isomorphism_equivariance_on_data(
 
 	bool ok = true;
 	for (const IsoType& iso : isomorphisms) {
-		typename OCGraph<GraphType>::Base moved_lincomb;
+		typename OCGraph<GraphType>::DirectionComb moved_lincomb;
 		moved_lincomb.append_in_basis_order(
 			iso.permute(directions),
 			fieldType{2} * fieldType{iso.graph_sign(source) * iso.direction_sign(directions)}
@@ -492,7 +548,7 @@ bool check_ocgraph_delta_e_isomorphism_equivariance_on_data(
 		OCGraph<GraphType> moved_graph(iso.permute(source), moved_lincomb);
 		OCGraph<GraphType> delta_moved = moved_graph.delta_e();
 
-		typename OCGraph<GraphType>::Base expected_lincomb;
+		typename OCGraph<GraphType>::DirectionComb expected_lincomb;
 		for (const auto& elem : delta_original.raw_elements()) {
 			expected_lincomb.append_in_basis_order(
 				iso.permute(elem.getValue()),
@@ -505,8 +561,8 @@ bool check_ocgraph_delta_e_isomorphism_equivariance_on_data(
 		delta_moved.sort_elements();
 
 		ok &= (delta_moved.graph == expected.graph)
-			&& (static_cast<typename OCGraph<GraphType>::Base>(delta_moved)
-				== static_cast<typename OCGraph<GraphType>::Base>(expected));
+			&& (static_cast<typename OCGraph<GraphType>::DirectionComb>(delta_moved)
+				== static_cast<typename OCGraph<GraphType>::DirectionComb>(expected));
 	}
 
 	std::cout << label << ": ocgraph delta_e equivariant under isomorphism -> " << (ok ? "ok" : "failed") << '\n';
@@ -530,7 +586,7 @@ bool check_ocgraph_delta_e_isomorphism_equivariance(const char* label) {
 	directions[GraphType::N_HAIR + 3] = true;
 	directions[GraphType::N_HAIR + 5] = true;
 
-	typename OCGraph<GraphType>::Base lincomb;
+	typename OCGraph<GraphType>::DirectionComb lincomb;
 	lincomb.append_in_basis_order(directions, fieldType{2});
 
 	OCGraph<GraphType> original(source, lincomb);
@@ -541,82 +597,60 @@ bool check_ocgraph_delta_e_isomorphism_equivariance(const char* label) {
 	isomorphisms.push_back(identity);
 
 	IsoType edge_swap;
-	edge_swap.edge_perm = {1, 0, 2};
+	edge_swap.edge_permutation_data() = {1, 0, 2};
+	edge_swap.template compute_signs<GraphType::N_OUT_HAIR_, GraphType::N_IN_HAIR_, GraphType::C_, GraphType::D_, fieldType>();
 	isomorphisms.push_back(edge_swap);
 
 	IsoType edge_flip;
-	edge_flip.edge_flip = {true, false, false};
+	edge_flip.edge_flip_data() = {true, false, false};
+	edge_flip.template compute_signs<GraphType::N_OUT_HAIR_, GraphType::N_IN_HAIR_, GraphType::C_, GraphType::D_, fieldType>();
 	isomorphisms.push_back(edge_flip);
 
 	IsoType cyclic_with_flip;
-	cyclic_with_flip.vertex_perm = {1, 2, 0};
-	cyclic_with_flip.edge_perm = {2, 0, 1};
-	cyclic_with_flip.edge_flip = {false, true, false};
+	cyclic_with_flip.vertex_permutation_data() = {1, 2, 0};
+	cyclic_with_flip.edge_permutation_data() = {2, 0, 1};
+	cyclic_with_flip.edge_flip_data() = {false, true, false};
+	cyclic_with_flip.template compute_signs<GraphType::N_OUT_HAIR_, GraphType::N_IN_HAIR_, GraphType::C_, GraphType::D_, fieldType>();
 	isomorphisms.push_back(cyclic_with_flip);
 
 	IsoType odd_vertex_odd_edge;
-	odd_vertex_odd_edge.vertex_perm = {1, 0, 2};
-	odd_vertex_odd_edge.edge_perm = {0, 2, 1};
-	odd_vertex_odd_edge.edge_flip = {true, false, true};
+	odd_vertex_odd_edge.vertex_permutation_data() = {1, 0, 2};
+	odd_vertex_odd_edge.edge_permutation_data() = {0, 2, 1};
+	odd_vertex_odd_edge.edge_flip_data() = {true, false, true};
+	odd_vertex_odd_edge.template compute_signs<GraphType::N_OUT_HAIR_, GraphType::N_IN_HAIR_, GraphType::C_, GraphType::D_, fieldType>();
 	isomorphisms.push_back(odd_vertex_odd_edge);
 
 	return check_ocgraph_delta_e_isomorphism_equivariance_on_data(label, source, directions, isomorphisms);
 }
 
-inline bool check_ocgraph_total_sign_cancellation(const char* label) {
-	using GraphType = Graph<2, 2, 0, 0, 0, 1, fieldType>;
+inline bool check_ocgraph_OCG_F0_same_degree(const char* label) {
+	using GraphType = Graph<3, 3, 0, 0, 0, 0, fieldType>;
 	using DirectionType = GraphDirections<GraphType>;
-	using IsoType = GraphIsomorphism<GraphType::N_VERTICES_, GraphType::N_EDGES_>;
-
-	GraphType source;
-	source.setEdge(0, 0, 1);
-	source.setEdge(1, 0, 1);
-
-	IsoType swap_edges;
-	swap_edges.edge_perm = {1, 0};
-
-	DirectionType directions;
-	directions.fill(true);
-
-	typename OCGraph<GraphType>::Base lincomb;
-	lincomb.append_in_basis_order(directions, fieldType{1});
-
-	OCGraph<GraphType> oc(source, lincomb, {IsoType{}, swap_edges});
-	oc.standardize_and_sort();
-
-	const bool ok = oc.size() == 0;
-	std::cout << label << ": ocgraph total-sign cancellation -> " << (ok ? "ok" : "failed") << '\n';
-	return ok;
-}
-
-inline bool check_ocgraph_OCG_F0_shifted_degree(const char* label) {
-	using SourceGraphType = Graph<3, 3, 0, 0, 0, 0, fieldType>;
-	using TargetGraphType = Graph<3, 3, 0, 0, 0, 1, fieldType>;
-	using DirectionType = GraphDirections<TargetGraphType>;
 	using IsoType = GraphIsomorphism<3, 3>;
 
-	SourceGraphType source;
+	GraphType source;
 	source.setEdge(0, 0, 1);
 	source.setEdge(1, 1, 2);
 	source.setEdge(2, 0, 2);
 
 	IsoType iso;
-	iso.vertex_perm = {1, 2, 0};
-	iso.edge_perm = {2, 0, 1};
-	iso.edge_flip = {false, true, false};
+	iso.vertex_permutation_data() = {1, 2, 0};
+	iso.edge_permutation_data() = {2, 0, 1};
+	iso.edge_flip_data() = {false, true, false};
+	iso.template compute_signs<GraphType::N_OUT_HAIR_, GraphType::N_IN_HAIR_, GraphType::C_, GraphType::D_, fieldType>();
 
-	SourceGraphType permuted = iso.permute(source);
+	GraphType permuted = iso.permute(source);
 
-	OCGraph<TargetGraphType> image = OCGraph<TargetGraphType>::OCG_F0(source);
-	OCGraph<TargetGraphType> permuted_image = OCGraph<TargetGraphType>::OCG_F0(permuted);
+	OCGraph<GraphType> image = OCGraph<GraphType>::OCG_F0(source);
+	OCGraph<GraphType> permuted_image = OCGraph<GraphType>::OCG_F0(permuted);
 
 	bool ok = (image == permuted_image);
 	ok &= image.size() <= 1;
 
 	if (image.size() == 1) {
-		std::array<Int, TargetGraphType::N_VERTICES_> counts{};
+		std::array<Int, GraphType::N_VERTICES_> counts{};
 		const DirectionType& directions = image.raw_elements().front().getValue();
-		for (Int i = 0; i < TargetGraphType::SIZE; ++i) {
+		for (Int i = 0; i < GraphType::SIZE; ++i) {
 			if (directions[i]) {
 				++counts[image.graph.half_edges[i]];
 			}
@@ -624,7 +658,7 @@ inline bool check_ocgraph_OCG_F0_shifted_degree(const char* label) {
 		ok &= std::all_of(counts.begin(), counts.end(), [](Int count) { return count == 1; });
 	}
 
-	std::cout << label << ": ocgraph OCG_F0 shifted degree -> " << (ok ? "ok" : "failed") << '\n';
+	std::cout << label << ": ocgraph OCG_F0 same degree -> " << (ok ? "ok" : "failed") << '\n';
 	return ok;
 }
 
@@ -634,18 +668,17 @@ bool check_OCG_F0_exact_equivariance_on_graph(
 	const SourceGraphType& source,
 	const std::vector<GraphIsomorphism<SourceGraphType::N_VERTICES_, SourceGraphType::N_EDGES_>>& isomorphisms
 ) {
-	using TargetGraphType = SourceGraphType::template RebindDegree<SourceGraphType::C_, SourceGraphType::D_ + 1>;
 	using IsoType = GraphIsomorphism<SourceGraphType::N_VERTICES_, SourceGraphType::N_EDGES_>;
 
-	const OCGraph<TargetGraphType> reference = OCGraph<TargetGraphType>::OCG_F0(source);
+	const OCGraph<SourceGraphType> reference = OCGraph<SourceGraphType>::OCG_F0(source);
 
 	bool ok = true;
 	for (const IsoType& iso : isomorphisms) {
 		const SourceGraphType moved = iso.permute(source);
-		const OCGraph<TargetGraphType> image = OCGraph<TargetGraphType>::OCG_F0(moved);
+		const OCGraph<SourceGraphType> image = OCGraph<SourceGraphType>::OCG_F0(moved);
 		ok &= (image.graph == reference.graph)
-			&& (static_cast<const typename OCGraph<TargetGraphType>::Base&>(image)
-				== static_cast<const typename OCGraph<TargetGraphType>::Base&>(reference));
+			&& (static_cast<const typename OCGraph<SourceGraphType>::DirectionComb&>(image)
+				== static_cast<const typename OCGraph<SourceGraphType>::DirectionComb&>(reference));
 	}
 
 	std::cout << label << ": OCG_F0 exact equivariance -> " << (ok ? "ok" : "failed") << '\n';
@@ -658,8 +691,7 @@ bool check_OCG_F0_unique_direction_on_graph(
 	const SourceGraphType& source,
 	const std::vector<GraphIsomorphism<SourceGraphType::N_VERTICES_, SourceGraphType::N_EDGES_>>& isomorphisms
 ) {
-	using TargetGraphType = SourceGraphType::template RebindDegree<SourceGraphType::C_, SourceGraphType::D_ + 1>;
-	using TargetOCGraph = OCGraph<TargetGraphType>;
+	using TargetOCGraph = OCGraph<SourceGraphType>;
 	using DirectionElement = typename TargetOCGraph::Element;
 	using DirectionType = typename TargetOCGraph::DirectionType;
 	using IsoType = GraphIsomorphism<SourceGraphType::N_VERTICES_, SourceGraphType::N_EDGES_>;
@@ -700,6 +732,102 @@ bool check_OCG_F0_unique_direction_on_graph(
 }
 
 template <typename GraphType>
+OCGC<GraphType> reduce_ocgc_via_delta_e_homotopy(const OCGC<GraphType>& input) {
+	using OCGraphType = OCGraph<GraphType>;
+	using OCGCType = OCGC<GraphType>;
+
+	std::vector<typename OCGCType::Base> reduced_terms;
+	reduced_terms.reserve(input.data().raw_elements().size());
+
+	for (const auto& be : input.data().raw_elements()) {
+		const OCGraphType& y = be.getValue();
+		OCGraphType correction = y.homotopy_standardize();
+
+		typename OCGraphType::DirectionComb reduced_base =
+			static_cast<typename OCGraphType::DirectionComb>(y);
+		reduced_base += static_cast<const typename OCGraphType::DirectionComb&>(correction.delta_e());
+
+		OCGraphType reduced(y.graph, std::move(reduced_base), y.automorphisms);
+		reduced.standardize_and_sort();
+		if (reduced.size() != 0) {
+			reduced_terms.emplace_back(std::move(reduced), be.getCoefficient());
+		}
+	}
+
+	return OCGCType(std::move(reduced_terms));
+}
+
+template <typename GraphType>
+OCGC<GraphType> absorb_outer_coefficients_into_ocgraphs(const OCGC<GraphType>& input) {
+	using OCGraphType = OCGraph<GraphType>;
+	using OCGCType = OCGC<GraphType>;
+
+	std::vector<typename OCGCType::Base> normalized_terms;
+	normalized_terms.reserve(input.data().raw_elements().size());
+
+	for (const auto& be : input.data().raw_elements()) {
+		typename OCGraphType::DirectionComb scaled_inner =
+			static_cast<const typename OCGraphType::DirectionComb&>(be.getValue()) * be.getCoefficient();
+		OCGraphType normalized(be.getValue().graph, std::move(scaled_inner), be.getValue().automorphisms);
+		normalized.standardize_and_sort();
+		if (normalized.size() != 0) {
+			normalized_terms.emplace_back(std::move(normalized), fieldType{1});
+		}
+	}
+
+	return OCGCType(std::move(normalized_terms));
+}
+
+template <typename SourceGraphType>
+bool check_OCG_F0_delta_homotopy_equivalence_on_graph(
+	const char* label,
+	const SourceGraphType& source
+) {
+	using GCType = GC<
+		SourceGraphType::N_VERTICES_,
+		SourceGraphType::N_EDGES_,
+		SourceGraphType::N_OUT_HAIR_,
+		SourceGraphType::N_IN_HAIR_,
+		SourceGraphType::C_,
+		SourceGraphType::D_
+	>;
+	using SourceOCGraphType = OCGraph<SourceGraphType>;
+	using SplitGraphType = typename SourceGraphType::SplitGraph;
+	using SplitOCGraphType = OCGraph<SplitGraphType>;
+	using SplitOCGCType = OCGC<SplitGraphType>;
+
+	GCType gc(source);
+	const auto dgc = gc.delta();
+
+	std::vector<typename SplitOCGCType::Base> lhs_terms;
+	lhs_terms.reserve(dgc.data().raw_elements().size());
+	for (const auto& be : dgc.data().raw_elements()) {
+		SplitOCGraphType image = SplitOCGraphType::OCG_F0(be.getValue());
+		if (image.size() != 0) {
+			lhs_terms.emplace_back(std::move(image), be.getCoefficient());
+		}
+	}
+	SplitOCGCType lhs(std::move(lhs_terms));
+	lhs.standardize_and_sort();
+
+	OCGC<SourceGraphType> f0_of_g(SourceOCGraphType::OCG_F0(source));
+	auto rhs = f0_of_g.delta_v();
+	rhs.standardize_and_sort();
+	auto rhs_reduced = reduce_ocgc_via_delta_e_homotopy(rhs);
+	rhs_reduced.standardize_and_sort();
+
+	auto lhs_flat = absorb_outer_coefficients_into_ocgraphs(lhs);
+	auto rhs_flat = absorb_outer_coefficients_into_ocgraphs(rhs_reduced);
+	lhs_flat.standardize_and_sort();
+	rhs_flat.standardize_and_sort();
+
+	const bool ok = lhs_flat.data() == rhs_flat.data();
+	std::cout << label << ": F0(delta(G)) ~ delta_v(F0(G)) via delta_e -> "
+		  << (ok ? "ok" : "failed") << '\n';
+	return ok;
+}
+
+template <typename GraphType>
 bool check_ocgraph_homotopy_standardize_minimal_true_case(const char* label) {
 	using DirectionType = GraphDirections<GraphType>;
 
@@ -714,22 +842,22 @@ bool check_ocgraph_homotopy_standardize_minimal_true_case(const char* label) {
 	directions[GraphType::N_HAIR + 1] = true;
 	directions[GraphType::N_HAIR + 3] = true;
 
-	typename OCGraph<GraphType>::Base lincomb;
+	typename OCGraph<GraphType>::DirectionComb lincomb;
 	lincomb.append_in_basis_order(directions, fieldType{1});
 
 	OCGraph<GraphType> y(source, lincomb);
 	OCGraph<GraphType> x = y.homotopy_standardize();
 
-	typename OCGraph<GraphType>::Base reduced_base = static_cast<typename OCGraph<GraphType>::Base>(y);
-	reduced_base += static_cast<const typename OCGraph<GraphType>::Base&>(x.delta_e());
+	typename OCGraph<GraphType>::DirectionComb reduced_base = static_cast<typename OCGraph<GraphType>::DirectionComb>(y);
+	reduced_base += static_cast<const typename OCGraph<GraphType>::DirectionComb&>(x.delta_e());
 	OCGraph<GraphType> reduced(source, reduced_base);
 	reduced.sort_elements();
 
 	DirectionType expected;
 	expected.fill(false);
-	expected[GraphType::N_HAIR + 4] = true;
-	expected[GraphType::N_HAIR + 2] = true;
-	expected[GraphType::N_HAIR + 5] = true;
+	expected[GraphType::N_HAIR + 0] = true;
+	expected[GraphType::N_HAIR + 1] = true;
+	expected[GraphType::N_HAIR + 3] = true;
 
 	bool ok = reduced.size() == 1;
 	if (ok) {
@@ -762,10 +890,10 @@ bool check_ocgraph_compare_and_merge(const char* label) {
 	d1[GraphType::N_HAIR + 1] = true;
 	d1[GraphType::N_HAIR + 4] = true;
 
-	typename OCGraph<GraphType>::Base lincomb_a;
+	typename OCGraph<GraphType>::DirectionComb lincomb_a;
 	lincomb_a.append_in_basis_order(d0, fieldType{2});
 
-	typename OCGraph<GraphType>::Base lincomb_b;
+	typename OCGraph<GraphType>::DirectionComb lincomb_b;
 	lincomb_b.append_in_basis_order(d1, fieldType{5});
 
 	OCGraph<GraphType> oc_a(source_a, lincomb_a);
@@ -823,10 +951,10 @@ bool check_lincomb_of_ocgraphs_addition(const char* label) {
 	d1[GraphType::N_HAIR + 1] = true;
 	d1[GraphType::N_HAIR + 4] = true;
 
-	typename OCGraph<GraphType>::Base lincomb_a;
+	typename OCGraph<GraphType>::DirectionComb lincomb_a;
 	lincomb_a.append_in_basis_order(d0, fieldType{2});
 
-	typename OCGraph<GraphType>::Base lincomb_b;
+	typename OCGraph<GraphType>::DirectionComb lincomb_b;
 	lincomb_b.append_in_basis_order(d1, fieldType{5});
 
 	OCLinComb a;
@@ -886,10 +1014,10 @@ bool check_ocgc_wrapper(const char* label) {
 	d1[GraphType::N_HAIR + 3] = true;
 	d1[GraphType::N_HAIR + 4] = true;
 
-	typename OCGraphType::Base lincomb_a;
+	typename OCGraphType::DirectionComb lincomb_a;
 	lincomb_a.append_in_basis_order(d0, fieldType{1});
 
-	typename OCGraphType::Base lincomb_b;
+	typename OCGraphType::DirectionComb lincomb_b;
 	lincomb_b.append_in_basis_order(d1, fieldType{2});
 
 	OCGCType a(OCGraphType(source, lincomb_a));
@@ -911,8 +1039,8 @@ bool check_ocgc_wrapper(const char* label) {
 		const auto& delta_term = delta.data().raw_elements().front();
 		ok &= (delta_term.getCoefficient() == fieldType{1});
 		ok &= (delta_term.getValue().graph == expected_delta.graph);
-		ok &= (static_cast<const typename OCGraphType::Base&>(delta_term.getValue())
-			== static_cast<const typename OCGraphType::Base&>(expected_delta));
+		ok &= (static_cast<const typename OCGraphType::DirectionComb&>(delta_term.getValue())
+			== static_cast<const typename OCGraphType::DirectionComb&>(expected_delta));
 	}
 
 	std::cout << label << ": ocgc wrapper -> " << (ok ? "ok" : "failed") << '\n';
