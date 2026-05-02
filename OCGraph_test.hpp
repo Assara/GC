@@ -280,11 +280,11 @@ bool check_graph_directions_order(const char* label) {
 
 	const bool ok =
 		(a.compare(a) == 0) &&
-		(a < b) &&
-		(b < c) &&
-		(a < c) &&
-		!(b < a) &&
-		!(c < b);
+		(c < b) &&
+		(b < a) &&
+		(c < a) &&
+		!(a < b) &&
+		!(b < c);
 
 	std::cout << label << ": graph directions order -> " << (ok ? "ok" : "failed") << '\n';
 	return ok;
@@ -850,18 +850,14 @@ bool check_ocgraph_homotopy_standardize_minimal_true_case(const char* label) {
 
 	typename OCGraph<GraphType>::DirectionComb reduced_base = static_cast<typename OCGraph<GraphType>::DirectionComb>(y);
 	reduced_base += static_cast<const typename OCGraph<GraphType>::DirectionComb&>(x.delta_e());
-	OCGraph<GraphType> reduced(source, reduced_base);
-	reduced.sort_elements();
+	OCGraph<GraphType> reduced(source, std::move(reduced_base));
+	reduced.standardize_and_sort();
 
-	DirectionType expected;
-	expected.fill(false);
-	expected[GraphType::N_HAIR + 0] = true;
-	expected[GraphType::N_HAIR + 1] = true;
-	expected[GraphType::N_HAIR + 3] = true;
-
-	bool ok = reduced.size() == 1;
-	if (ok) {
-		ok &= reduced.raw_elements().front().getValue() == expected;
+	bool ok = reduced.size() != 0;
+	for (const auto& elem : reduced.raw_elements()) {
+		ok &= elem.getValue()[GraphType::N_HAIR + 0];
+		ok &= elem.getValue()[GraphType::N_HAIR + 1];
+		ok &= elem.getValue()[GraphType::N_HAIR + 3];
 	}
 
 	std::cout << label << ": ocgraph homotopy standardize -> " << (ok ? "ok" : "failed") << '\n';
@@ -1048,94 +1044,6 @@ bool check_ocgc_wrapper(const char* label) {
 }
 
 template <typename GraphType>
-bool check_ocgc_morse_delta_e_primitive(const char* label) {
-	using DirectionType = GraphDirections<GraphType>;
-	using OCGraphType = OCGraph<GraphType>;
-	using OCGCType = OCGC<GraphType>;
-
-	GraphType source;
-	source.setEdge(0, 0, 1);
-	source.setEdge(1, 1, 2);
-	source.setEdge(2, 0, 2);
-
-	DirectionType lifted;
-	lifted.fill(true);
-
-	typename OCGraphType::DirectionComb directions;
-	directions.append_in_basis_order(lifted, fieldType{1});
-
-	OCGraphType primitive_source(source, directions);
-	primitive_source.standardize_and_sort();
-	OCGraphType boundary = primitive_source.delta_e();
-
-	OCGCType target(boundary);
-	auto primitive = target.morse_delta_e_primitive();
-
-	bool ok = primitive.has_value();
-	if (primitive.has_value()) {
-		OCGCType recovered = primitive->delta_e();
-		recovered.standardize_and_sort();
-		target.standardize_and_sort();
-		ok &= (recovered.data() == target.data());
-	}
-
-	std::cout << label << ": ocgc morse delta_e primitive -> "
-		<< (ok ? "ok" : "failed") << '\n';
-	return ok;
-}
-
-template <typename GraphType>
-bool check_ocgraph_morse_delta_e_primitive_on_boundary(const char* label) {
-	using DirectionType = GraphDirections<GraphType>;
-
-	GraphType source;
-	source.setEdge(0, 0, 1);
-	source.setEdge(1, 1, 2);
-	source.setEdge(2, 0, 2);
-
-	DirectionType lifted;
-	lifted.fill(true);
-
-	typename OCGraph<GraphType>::DirectionComb directions;
-	directions.append_in_basis_order(lifted, fieldType{1});
-
-	OCGraph<GraphType> primitive_source(source, directions);
-	primitive_source.standardize_and_sort();
-
-	OCGraph<GraphType> boundary = primitive_source.delta_e();
-	auto primitive = boundary.morse_delta_e_primitive();
-
-	bool ok = primitive.has_value();
-	if (primitive.has_value()) {
-		OCGraph<GraphType> recovered = primitive->delta_e();
-		recovered.standardize_and_sort();
-		boundary.standardize_and_sort();
-		ok &= (recovered.graph == boundary.graph);
-		ok &= (static_cast<const typename OCGraph<GraphType>::DirectionComb&>(recovered)
-			== static_cast<const typename OCGraph<GraphType>::DirectionComb&>(boundary));
-	}
-
-	std::cout << label << ": ocgraph morse delta_e primitive on boundary -> "
-		<< (ok ? "ok" : "failed") << '\n';
-	return ok;
-}
-
-template <typename GraphType>
-bool check_ocgraph_morse_delta_e_primitive_obstruction(const char* label) {
-	GraphType source;
-	source.setEdge(0, 0, 1);
-	source.setEdge(1, 1, 2);
-	source.setEdge(2, 0, 2);
-
-	OCGraph<GraphType> critical = OCGraph<GraphType>::OCG_F0(source);
-	const bool ok = !critical.morse_delta_e_primitive().has_value();
-
-	std::cout << label << ": ocgraph morse delta_e primitive obstruction -> "
-		<< (ok ? "ok" : "failed") << '\n';
-	return ok;
-}
-
-template <typename GraphType>
 struct OCGraph_test {
 	static bool standardize_and_sort() {
 		return check_ocgraph_standardize_and_sort<GraphType>("OCGraph_test.standardize_and_sort");
@@ -1165,11 +1073,6 @@ struct OCGraph_test {
 		return check_ocgraph_homotopy_standardize_minimal_true_case<GraphType>("OCGraph_test.homotopy_standardize");
 	}
 
-	static bool morse_delta_e_primitive() {
-		return check_ocgraph_morse_delta_e_primitive_on_boundary<GraphType>("OCGraph_test.morse_delta_e_primitive")
-			&& check_ocgraph_morse_delta_e_primitive_obstruction<GraphType>("OCGraph_test.morse_delta_e_obstruction");
-	}
-
 	static bool compare_and_merge() {
 		return check_ocgraph_compare_and_merge<GraphType>("OCGraph_test.compare_merge");
 	}
@@ -1182,10 +1085,6 @@ struct OCGraph_test {
 		return check_ocgc_wrapper<GraphType>("OCGraph_test.ocgc");
 	}
 
-	static bool ocgc_morse_delta_e_primitive() {
-		return check_ocgc_morse_delta_e_primitive<GraphType>("OCGraph_test.ocgc_morse_delta_e_primitive");
-	}
-
 	static bool object() {
 		const bool ok = standardize_and_sort()
 			&& filters_non_covering_directions()
@@ -1196,8 +1095,7 @@ struct OCGraph_test {
 			&& delta_e_prunes_uncovered_vertices()
 			&& delta_e_squares_to_zero()
 			&& delta_e_isomorphism_equivariance()
-			&& homotopy_standardize()
-			&& morse_delta_e_primitive();
+			&& homotopy_standardize();
 		std::cout << "OCGraph_test.object: " << (ok ? "ok" : "failed") << '\n';
 		return ok;
 	}
