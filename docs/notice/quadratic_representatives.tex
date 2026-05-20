@@ -51,7 +51,7 @@
 \begin{abstract}
 We show that the wheel classes in the Kontsevich graph complex $\GC_d$ admit representatives supported on graphs with only
 $3$- and $4$-valent vertices. This verifies that Merkulov’s low-valence conjecture holds for the wheel classes.
- More precisely, for every $m \ge 2$, we prove that the wheel graph $W_{2m+1}$ is homologous to an explicit linear combination of $2^{m-1}$ graphs, each having only $3$- and $4$-valent vertices.
+ More precisely, for every $m \ge 2$, we prove that the wheel graph $W_{2m+1}$ is homologous to an explicit linear combination of $2^{m-2}$ graphs, each having only $3$- and $4$-valent vertices.
 \end{abstract}
 
 \medskip
@@ -104,7 +104,7 @@ We will exclusively consider the case that $d$ is even. In this case, vertex lab
 
 The differential $d$ is the edge-contraction differential. If a graph has $m$ edges, then the contraction of the edge labelled $i$ carries the sign
 \[
-(-1)^{i+m+1}.
+(-1)^{i+m}.
 \]
 After contracting the edge labelled $i$, we relabel the remaining edges by preserving their relative order: labels smaller than $i$ remain unchanged, while each label greater than $i$ is decreased by $1$.
 
@@ -144,15 +144,15 @@ Add one further centre vertex $\texttt{new\_C}$ and an edge $(\texttt{C},\texttt
 Denote the new vertex $C$.
 
 \item \label{it:arc} 
-Now, for both $V_N(S)$ and $U_N(S)$, let $m = N-2k-3$ be the number of remaining vertices to be added, and let $n$ denote the current largest vertex label.
+Now, for both $V_N(S)$ and $U_N(S)$, let $m$ denote the number of remaining vertices to be added; explicitly, $m=N-2k-3$. Let $n$ denote the current largest vertex label.
 If $m = 0$, add the final edge $(L,R)$, with edge label $2N-1$ (this case will only be considered for $V_N(S)$). 
 Otherwise, add the remaining vertices and edges as an arc of triangles as follows: 
 Let us denote the least unassigned edge label $e = 4k+5$ for $V_N(S)$ and $e = 4k+6$ for $U_N(S)$.
 
 \begin{enumerate}
-\item \label{it:left_arc} Add $(L, n+1)$ with edge label $e$.
-\item \label{it:mid_arc} For $i = 1, \ldots, m-1$: Add $(n+i, C)$ with edge label  $e+ 2i-1$, and $(n+i, n+i+1)$ with edge label $e+ 2i$.
-\item \label{it:right_arc} Add $(n+m, R)$ with edge label $2N-1 $ for $V_N(S)$ and $2N+1$ for $U_N(S)$. 
+\item \label{it:left_arc} Add $(L, n+1)$ with edge label $e$, and add $(n+1,C)$ with edge label $e+1$.
+\item \label{it:mid_arc} For $i = 1, \ldots, m-1$: Add $(n+i, n+i+1)$ with edge label $e+2i$, and add $(n+i+1,C)$ with edge label $e+2i+1$.
+\item \label{it:right_arc} Add $(n+m, R)$ with edge label $2N-1$ for $V_N(S)$ and $2N$ for $U_N(S)$. 
 
 \end{enumerate}
 \end{enumerate}
@@ -335,12 +335,12 @@ The edges that may be contracted are the following.
 \begin{enumerate}[itemsep=0.35em, topsep=0.35em]
 \item The edge labelled $4k+5$, created in Step~\ref{it:U}. The resulting graph is identical to $V_N(S)$. The sign of this contraction is
 \[
-(-1)^{4k+5+2N+1+1} = -1.
+(-1)^{4k+5+2N} = -1.
 \]
 
 \item The edge labelled $4k+6$, created in Step~\ref{it:left_arc}. This creates a graph that is identical to $V_N(S,\LeftChoice)$. The sign of this contraction is $+1$.
 
-\item The edge labelled $2N+1$, created in Step~\ref{it:right_arc}. This creates a graph that is isomorphic to $V_N(S,\RightChoice)$. The sign of this contraction is $+1$.
+\item The edge labelled $2N$, created in Step~\ref{it:right_arc}. This creates a graph that is isomorphic to $V_N(S,\RightChoice)$. The sign of this contraction is $+1$.
 
 The isomorphism is given by swapping the edges labelled $2N-1$ and $2N-3$ and by the three insertions
 \[
