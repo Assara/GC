@@ -56,16 +56,14 @@ namespace VectorSpace {
 
 
 			private:
-				ImageVec M_MT(const ImageVec& y) const {
-
-					DomainVec v;
+				void M_MT_into(const ImageVec& y, DomainVec& v, ImageVec& result) const {
 					{
 						timer_accum::guard g(timing.eval_MT);
-						v = compressed_M.evaluate_transpose(y);
+						compressed_M.evaluate_transpose(y, v);
 					}
 					{
 						timer_accum::guard g(timing.eval_M);
-						return compressed_transpose_M.evaluate_transpose(v);
+						compressed_transpose_M.evaluate_transpose(v, result);
 					}
 				}
 
@@ -130,15 +128,19 @@ namespace VectorSpace {
 						// Horner evaluation of:
 						// q(A)y0 = A^{L-1}y0 + c1 A^{L-2}y0 + ... + c_{L-1} y0
 						ImageVec acc = scaled_copy(y0, image_dim(), k{1});  // acc = y0
+						ImageVec next_acc = compressed_transpose_M.reserve_dense_domain_vec();
+						DomainVec mt_work = compressed_M.reserve_dense_domain_vec();
 
 						for (std::size_t j = 1; j <= L - 1; ++j) {
-							acc = M_MT(acc);                              // acc = A(acc)
+							M_MT_into(acc, mt_work, next_acc);             // next_acc = A(acc)
+							std::swap(acc, next_acc);
 							add_scaled_inplace(acc, y0, image_dim(), C[j]); // acc += c_j * y0
 						}
 
 						ImageVec y_minus_1 = scaled_copy(acc, image_dim(), scale);
 
-						DomainVec result = M.evaluate_transpose_dense(y_minus_1);
+						DomainVec result = compressed_M.reserve_dense_domain_vec();
+						compressed_M.evaluate_transpose(y_minus_1, result);
 
 						k lambda = find_scaling_and_verify(y0, result);
 
@@ -228,7 +230,11 @@ namespace VectorSpace {
 
 					signatures.emplace_back(get_signature(y0));
 
-					ImageVec yi = M_MT(y0);
+					DomainVec mt_work = compressed_M.reserve_dense_domain_vec();
+					ImageVec yi = compressed_transpose_M.reserve_dense_domain_vec();
+					ImageVec next_yi = compressed_transpose_M.reserve_dense_domain_vec();
+
+					M_MT_into(y0, mt_work, yi);
 					signatures.emplace_back(get_signature(yi));
 
 
@@ -240,7 +246,8 @@ namespace VectorSpace {
 
 					while (more_needed > 0) {
 						for (std::size_t i = 0; i < more_needed; ++i) {
-							yi = M_MT(yi);
+							M_MT_into(yi, mt_work, next_yi);
+							std::swap(yi, next_yi);
 							signatures.emplace_back(get_signature(yi));       
 						}
 						{

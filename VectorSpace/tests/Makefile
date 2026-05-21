@@ -26,6 +26,7 @@ BIN_DIR := $(THIS_DIR)/bin
 
 TEST_SRCS := $(wildcard $(THIS_DIR)/test_*.cpp)
 TEST_BINS := $(patsubst $(THIS_DIR)/%.cpp,$(BIN_DIR)/%,$(TEST_SRCS))
+HEADER_DEPS := $(wildcard $(VSPACE_ROOT)/*.hpp) $(wildcard $(REPO_ROOT)/*.hpp)
 
 .PHONY: all run clean rebuild info asan ubsan
 
@@ -44,7 +45,7 @@ $(BIN_DIR):
 	@mkdir -p "$(BIN_DIR)"
 
 # Build each test executable directly
-$(BIN_DIR)/%: $(THIS_DIR)/%.cpp | $(BIN_DIR)
+$(BIN_DIR)/%: $(THIS_DIR)/%.cpp $(HEADER_DEPS) | $(BIN_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) "$<" $(LDFLAGS) $(LDLIBS) -o "$@"
 
 run: all

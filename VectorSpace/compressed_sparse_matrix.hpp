@@ -77,9 +77,16 @@ class compressed_sparse_matrix {
 			return std::make_unique<k[]>(static_cast<std::size_t>(image_dim_));
 		}
 
+
 		// x = M^T * y
 		DenseDomainVec evaluate_transpose(const DenseImageVec& input) const {
 			DenseDomainVec result = reserve_dense_domain_vec();
+			evaluate_transpose(input, result);
+			return result;
+		}
+
+
+		void evaluate_transpose(const DenseImageVec& input, DenseDomainVec& result) const {
 			const indexType ncols = domain_dim();
 
 #pragma omp parallel for schedule(static)
@@ -92,7 +99,7 @@ class compressed_sparse_matrix {
 				}
 				result[static_cast<std::size_t>(col)] = acc;
 			}
-
-			return result;
 		}
+
+
 };
