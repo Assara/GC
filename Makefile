@@ -6,6 +6,7 @@ LD        := clang++
 TARGET    := gc
 PLAYGROUND_TARGET := gc_contraction_playground
 SPLIT_WATERFALL_TARGET := gc_split_waterfall_playground
+STANDARDIZE_PERF_TARGET := standardize_perf
 TEST_TARGET := gc_test
 BUILD_DIR := build
 
@@ -34,12 +35,15 @@ PLAYGROUND_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(PLAYGROUND_SRCS))
 SPLIT_WATERFALL_SRCS := GC_split_waterfall_playground.cpp
 SPLIT_WATERFALL_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(SPLIT_WATERFALL_SRCS))
 
+STANDARDIZE_PERF_SRCS := tools/standardize_perf.cpp
+STANDARDIZE_PERF_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(STANDARDIZE_PERF_SRCS))
+
 TEST_SRCS := GC_test.cpp
 TEST_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(TEST_SRCS))
 
 # ======= RULES =======
 
-.PHONY: all clean run playground split-waterfall run-split-waterfall test
+.PHONY: all clean run playground split-waterfall run-split-waterfall standardize-perf run-standardize-perf test
 
 all: $(TARGET)
 
@@ -58,6 +62,11 @@ $(SPLIT_WATERFALL_TARGET): $(SPLIT_WATERFALL_OBJS)
 	$(LD) $(SPLIT_WATERFALL_OBJS) $(LDFLAGS) -o $(SPLIT_WATERFALL_TARGET)
 	@echo "✅ Build complete."
 
+$(STANDARDIZE_PERF_TARGET): $(STANDARDIZE_PERF_OBJS)
+	@echo "🚧 Linking $(STANDARDIZE_PERF_TARGET) with Clang + LLD..."
+	$(LD) $(STANDARDIZE_PERF_OBJS) $(LDFLAGS) -o $(STANDARDIZE_PERF_TARGET)
+	@echo "✅ Build complete."
+
 $(TEST_TARGET): $(TEST_OBJS)
 	@echo "🚧 Linking $(TEST_TARGET) with Clang + LLD..."
 	$(LD) $(TEST_OBJS) $(LDFLAGS) -o $(TEST_TARGET)
@@ -70,7 +79,7 @@ $(BUILD_DIR)/%.o: %.cpp
 
 clean:
 	@echo "🧹 Cleaning build files..."
-	rm -rf $(BUILD_DIR) $(TARGET) $(PLAYGROUND_TARGET) $(SPLIT_WATERFALL_TARGET) $(TEST_TARGET)
+	rm -rf $(BUILD_DIR) $(TARGET) $(PLAYGROUND_TARGET) $(SPLIT_WATERFALL_TARGET) $(STANDARDIZE_PERF_TARGET) $(TEST_TARGET)
 
 run: all
 	@./$(TARGET)
@@ -81,5 +90,10 @@ split-waterfall: $(SPLIT_WATERFALL_TARGET)
 
 run-split-waterfall: $(SPLIT_WATERFALL_TARGET)
 	@./$(SPLIT_WATERFALL_TARGET) $(or $(WHEEL),7) $(or $(OUT),W$(or $(WHEEL),7).txt)
+
+standardize-perf: $(STANDARDIZE_PERF_TARGET)
+
+run-standardize-perf: $(STANDARDIZE_PERF_TARGET)
+	@./$(STANDARDIZE_PERF_TARGET) $(or $(WHEEL),33) $(or $(REPEAT),1) $(or $(ITER),3)
 
 test: $(TEST_TARGET)

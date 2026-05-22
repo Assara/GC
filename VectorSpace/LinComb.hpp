@@ -26,14 +26,26 @@ namespace VectorSpace {
 					if constexpr (!HasCanonized<T,k>) {
 						return;
 					} else {	
-						std::vector<Element> standardized;
-						for (auto& elem : elements) {
+						std::vector<Element> standardized(elements.size());
+						std::vector<char> keep(elements.size(), 0);
 
-							Element canon = elem.getValue().canonized(elem);
-							if (canon.getCoefficient() != 0) {  
-								standardized.emplace_back(std::move(canon));
+						#pragma omp parallel for schedule(dynamic)
+						for (std::size_t i = 0; i < elements.size(); ++i) {
+							Element canon = elements[i].getValue().canonized(elements[i]);
+							if (canon.getCoefficient() != k{}) {
+								standardized[i] = std::move(canon);
+								keep[i] = 1;
 							}
 						}
+
+						std::size_t write = 0;
+						for (std::size_t read = 0; read < standardized.size(); ++read) {
+							if (!keep[read]) {
+								continue;
+							}
+							standardized[write++] = std::move(standardized[read]);
+						}
+						standardized.resize(write);
 
 						elements = std::move(standardized);
 					}
