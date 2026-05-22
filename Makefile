@@ -5,6 +5,7 @@ LD        := clang++
 
 TARGET    := gc
 PLAYGROUND_TARGET := gc_contraction_playground
+SPLIT_WATERFALL_TARGET := gc_split_waterfall_playground
 TEST_TARGET := gc_test
 BUILD_DIR := build
 
@@ -30,12 +31,15 @@ MAIN_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(MAIN_SRCS))
 PLAYGROUND_SRCS := GC_contraction_playground.cpp
 PLAYGROUND_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(PLAYGROUND_SRCS))
 
+SPLIT_WATERFALL_SRCS := GC_split_waterfall_playground.cpp
+SPLIT_WATERFALL_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(SPLIT_WATERFALL_SRCS))
+
 TEST_SRCS := GC_test.cpp
 TEST_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(TEST_SRCS))
 
 # ======= RULES =======
 
-.PHONY: all clean run playground test
+.PHONY: all clean run playground split-waterfall run-split-waterfall test
 
 all: $(TARGET)
 
@@ -47,6 +51,11 @@ $(TARGET): $(MAIN_OBJS)
 $(PLAYGROUND_TARGET): $(PLAYGROUND_OBJS)
 	@echo "🚧 Linking $(PLAYGROUND_TARGET) with Clang + LLD..."
 	$(LD) $(PLAYGROUND_OBJS) $(LDFLAGS) -o $(PLAYGROUND_TARGET)
+	@echo "✅ Build complete."
+
+$(SPLIT_WATERFALL_TARGET): $(SPLIT_WATERFALL_OBJS)
+	@echo "🚧 Linking $(SPLIT_WATERFALL_TARGET) with Clang + LLD..."
+	$(LD) $(SPLIT_WATERFALL_OBJS) $(LDFLAGS) -o $(SPLIT_WATERFALL_TARGET)
 	@echo "✅ Build complete."
 
 $(TEST_TARGET): $(TEST_OBJS)
@@ -61,11 +70,16 @@ $(BUILD_DIR)/%.o: %.cpp
 
 clean:
 	@echo "🧹 Cleaning build files..."
-	rm -rf $(BUILD_DIR) $(TARGET) $(PLAYGROUND_TARGET) $(TEST_TARGET)
+	rm -rf $(BUILD_DIR) $(TARGET) $(PLAYGROUND_TARGET) $(SPLIT_WATERFALL_TARGET) $(TEST_TARGET)
 
 run: all
 	@./$(TARGET)
 
 playground: $(PLAYGROUND_TARGET)
+
+split-waterfall: $(SPLIT_WATERFALL_TARGET)
+
+run-split-waterfall: $(SPLIT_WATERFALL_TARGET)
+	@./$(SPLIT_WATERFALL_TARGET) $(or $(WHEEL),7) $(or $(OUT),W$(or $(WHEEL),7).txt)
 
 test: $(TEST_TARGET)
