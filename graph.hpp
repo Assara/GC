@@ -161,6 +161,59 @@ Int N_VERTICES,
 				return valence;
 			}
 
+			bool is_connected_after_removing_vertex(Int removed_vertex) const {
+				if constexpr (N_VERTICES <= 2) {
+					return true;
+				}
+
+				if (removed_vertex >= N_VERTICES) {
+					return false;
+				}
+
+				Int start = 0;
+				while (start == removed_vertex) {
+					++start;
+				}
+
+				array<bool, N_VERTICES> visited{};
+				vector<Int> stack;
+				stack.reserve(N_VERTICES);
+				visited[removed_vertex] = true;
+				visited[start] = true;
+				stack.push_back(start);
+
+				while (!stack.empty()) {
+					const Int current = stack.back();
+					stack.pop_back();
+
+					for (Int e = 0; e < N_EDGES; ++e) {
+						auto [u, v] = getEdge(e);
+						if (u == removed_vertex || v == removed_vertex) {
+							continue;
+						}
+
+						Int next = N_VERTICES;
+						if (u == current && !visited[v]) {
+							next = v;
+						} else if (v == current && !visited[u]) {
+							next = u;
+						}
+
+						if (next != N_VERTICES) {
+							visited[next] = true;
+							stack.push_back(next);
+						}
+					}
+				}
+
+				for (bool seen : visited) {
+					if (!seen) {
+						return false;
+					}
+				}
+				return true;
+			}
+
 			bigInt count_triangles() const {
 				array<array<bool, N_VERTICES>, N_VERTICES> adjacency{};
 
@@ -748,6 +801,12 @@ Int N_VERTICES,
 						contraction_value(half_edges[j], contraction_vertex, deletion_vertex);
 				}
 
+
+				if (!contracted.getValue().is_connected_after_removing_vertex(contraction_vertex)) {
+					contracted.multiplyCoefficient(fieldType{0});
+					return contracted;
+				}
+
 				if ( (N_EDGES - i) % 2 == 0) {
 					contracted.multiplyCoefficient(SWAP_EDGE_SIGN);
 				} 
@@ -759,6 +818,7 @@ Int N_VERTICES,
 				if (half_edges[edge_index] > half_edges[edge_index + 1]) {
 					contracted.multiplyCoefficient(FLIP_EDGE_SIGN);
 				}
+
 
 				return contracted;
 			}
