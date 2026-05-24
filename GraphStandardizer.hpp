@@ -1,10 +1,36 @@
 #pragma once
 
 #include <cstdint>
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+#include <atomic>
+#include <chrono>
+#endif
 #include <vector>
 #include <utility>
 #include "VectorSpace/BasisElement.hpp"
 #include "GraphIsomorphism.hpp"
+
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+namespace gc_standardizer_sort_profile {
+	inline std::atomic<unsigned long long> insertion_sort_calls{0};
+	inline std::atomic<unsigned long long> insertion_sort_swaps{0};
+	inline std::atomic<unsigned long long> insertion_sort_nanoseconds{0};
+	inline std::atomic<unsigned long long> vertex_color_update_calls{0};
+	inline std::atomic<unsigned long long> vertex_color_update_nanoseconds{0};
+	inline std::atomic<unsigned long long> vertex_bucket_init_calls{0};
+	inline std::atomic<unsigned long long> vertex_bucket_init_nanoseconds{0};
+
+	inline void reset() {
+		insertion_sort_calls.store(0, std::memory_order_relaxed);
+		insertion_sort_swaps.store(0, std::memory_order_relaxed);
+		insertion_sort_nanoseconds.store(0, std::memory_order_relaxed);
+		vertex_color_update_calls.store(0, std::memory_order_relaxed);
+		vertex_color_update_nanoseconds.store(0, std::memory_order_relaxed);
+		vertex_bucket_init_calls.store(0, std::memory_order_relaxed);
+		vertex_bucket_init_nanoseconds.store(0, std::memory_order_relaxed);
+	}
+}
+#endif
 
 template <
 Int N_VERTICES,
@@ -184,10 +210,45 @@ Int N_VERTICES,
 					next_attempt_mask.clear();
 
 					for (size_t i = 0; i < attempts.size(); ++i) {
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+						const auto color_update_start = std::chrono::steady_clock::now();
+#endif
 						for (Int j = 0; j < static_cast<Int>(RELOAD_ITERATIONS); ++j) {
 							attempts[i].update_colors();
 						}
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+						const auto color_update_stop = std::chrono::steady_clock::now();
+						gc_standardizer_sort_profile::vertex_color_update_calls.fetch_add(
+							RELOAD_ITERATIONS,
+							std::memory_order_relaxed
+						);
+						gc_standardizer_sort_profile::vertex_color_update_nanoseconds.fetch_add(
+							static_cast<unsigned long long>(
+								std::chrono::duration_cast<std::chrono::nanoseconds>(
+									color_update_stop - color_update_start
+								).count()
+							),
+							std::memory_order_relaxed
+						);
+
+						const auto bucket_init_start = std::chrono::steady_clock::now();
+#endif
 						attempts[i].init_bucket();
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+						const auto bucket_init_stop = std::chrono::steady_clock::now();
+						gc_standardizer_sort_profile::vertex_bucket_init_calls.fetch_add(
+							1,
+							std::memory_order_relaxed
+						);
+						gc_standardizer_sort_profile::vertex_bucket_init_nanoseconds.fetch_add(
+							static_cast<unsigned long long>(
+								std::chrono::duration_cast<std::chrono::nanoseconds>(
+									bucket_init_stop - bucket_init_start
+								).count()
+							),
+							std::memory_order_relaxed
+						);
+#endif
 
 						if (attempts[i].bucket_size()< min_bucket_size) {
 							min_bucket_size = attempts[i].bucket_size();

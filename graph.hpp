@@ -8,6 +8,10 @@
 #include <unordered_set>
 #include <iostream>
 #include <algorithm>
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+#include <atomic>
+#include <chrono>
+#endif
 #include "types.hpp"
 #include "permutation.hpp"
 #include "CombinatorialUtils.hpp"
@@ -870,14 +874,28 @@ Int N_VERTICES,
 			}
 
 			signedInt sortEdgesInsertion() {
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+				const auto sort_start = std::chrono::steady_clock::now();
+				unsigned long long swap_count = 0;
+#endif
 				signedInt overallSign = 1;
 				for (Int i = 1; i < N_EDGES; ++i) {
 					Int j = i;
 					while (j > 0 && compareEdge(j - 1, j) > 0) {
 						overallSign *= swapEdges(j - 1, j);
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+						++swap_count;
+#endif
 						j--;
 					}
 				}
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+				const auto sort_stop = std::chrono::steady_clock::now();
+				const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(sort_stop - sort_start).count();
+				gc_standardizer_sort_profile::insertion_sort_calls.fetch_add(1, std::memory_order_relaxed);
+				gc_standardizer_sort_profile::insertion_sort_swaps.fetch_add(swap_count, std::memory_order_relaxed);
+				gc_standardizer_sort_profile::insertion_sort_nanoseconds.fetch_add(static_cast<unsigned long long>(elapsed), std::memory_order_relaxed);
+#endif
 				return overallSign;
 			}
 
