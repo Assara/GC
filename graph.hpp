@@ -112,12 +112,12 @@ Int N_VERTICES,
 
 			static void std(Basis& b) {
 				GraphStandardizer<N_VERTICES, N_EDGES, N_OUT_HAIR, N_IN_HAIR, c, d, fieldType> s;
-				b = s.standardize(b);
+				b = s.standardize2(b);
 			}
 
 			static Basis canonized(Basis& b) {
 				GraphStandardizer<N_VERTICES, N_EDGES, N_OUT_HAIR, N_IN_HAIR, c, d, fieldType> s;
-				return s.standardize(b);
+				return s.standardize2(b);
 			}
 
 			ThisGraph canonical_represesentation() {
