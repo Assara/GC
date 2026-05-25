@@ -225,13 +225,6 @@ Int N_VERTICES,
 					return colors[next_to_assign_bucket[0]];
 				}
 
-
-				void assign_vertex_single(assign_type v) {
-					vertex_permutation.p[next_to_assign_bucket[0]] = v;
-					++colors[next_to_assign_bucket[0]];
-				}
-
-
 				void push_next_attempts(vector<CanonBuilder2>& collector, assign_type v) const {
 					if (bucket_size() == 2) {
 						collector.emplace_back(*this, EmptyBucketCopy{});
@@ -277,7 +270,7 @@ Int N_VERTICES,
 				attempts.push_back(CanonBuilder2(input.getValue()));
 
 				assign_type next_vertex_to_assign = attempts[0].init_starter_colors();
-
+  
 				assign_type min_bucket_size;
 				hash_int_type max_color;
 
@@ -352,14 +345,7 @@ Int N_VERTICES,
 					next_attempts.reserve(next_attempt_mask.size()*min_bucket_size);
 
 					for (size_t i : next_attempt_mask) {
-						if (min_bucket_size == 1) {
-							next_attempts.push_back(attempts[i]);
-							next_attempts.back().assign_vertex_single(next_vertex_to_assign);
-						} else {
-
-							attempts[i].push_next_attempts(next_attempts, next_vertex_to_assign);
-						}
-
+						attempts[i].push_next_attempts(next_attempts, next_vertex_to_assign);
 					}
 
 					if (min_bucket_size == 2) {
