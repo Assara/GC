@@ -21,6 +21,7 @@ namespace gc_standardizer_sort_profile {
 	inline std::atomic<unsigned long long> vertex_bucket_init_nanoseconds{0};
 	inline std::atomic<unsigned long long> labeling_search_calls{0};
 	inline std::atomic<unsigned long long> labeling_search_nanoseconds{0};
+	inline std::atomic<unsigned long long> attempts_created{0};
 	inline std::atomic<unsigned long long> hash_calls{0};
 	inline std::atomic<unsigned long long> hash_nanoseconds{0};
 
@@ -34,6 +35,7 @@ namespace gc_standardizer_sort_profile {
 		vertex_bucket_init_nanoseconds.store(0, std::memory_order_relaxed);
 		labeling_search_calls.store(0, std::memory_order_relaxed);
 		labeling_search_nanoseconds.store(0, std::memory_order_relaxed);
+		attempts_created.store(0, std::memory_order_relaxed);
 		hash_calls.store(0, std::memory_order_relaxed);
 		hash_nanoseconds.store(0, std::memory_order_relaxed);
 	}
@@ -120,18 +122,15 @@ Int N_VERTICES,
 				}
 
 				assign_type init_starter_colors() {
-					array<assign_type, N_VERTICES> valencies{};
 					array<assign_type, (N_VERTICES > 0) ? (N_VERTICES - 1) : 0> valency_counts{};
 
 					for (Int e = 0; e < G.half_edges.size(); ++e) {
-						const assign_type vertex = G.half_edges[e];
-						++colors[vertex];
-						++valencies[vertex];
+						++colors[G.half_edges[e]];
 					}
 
 					for (assign_type v = 0; v < N_VERTICES; ++v) {
-						if (valencies[v] > 0 && valencies[v] < N_VERTICES) {
-							++valency_counts[valencies[v] - 1];
+						if (colors[v] > 0 && colors[v] < N_VERTICES) {
+							++valency_counts[colors[v] - 1];
 						}
 					}
 
@@ -148,7 +147,7 @@ Int N_VERTICES,
 						}
 
 						for (assign_type v = 0; v < N_VERTICES; ++v) {
-							if (valencies[v] == valency) {
+							if (colors[v] == valency) {
 								vertex_permutation.p[v] = next_vertex_to_assign;
 								++colors[v];
 								++next_vertex_to_assign;
@@ -268,6 +267,12 @@ Int N_VERTICES,
 				vector<size_t> next_attempt_mask;
 
 				attempts.push_back(CanonBuilder2(input.getValue()));
+#if defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
+				gc_standardizer_sort_profile::attempts_created.fetch_add(
+					1,
+					std::memory_order_relaxed
+				);
+#endif
 
 				assign_type next_vertex_to_assign = attempts[0].init_starter_colors();
   
@@ -347,6 +352,12 @@ Int N_VERTICES,
 					for (size_t i : next_attempt_mask) {
 						attempts[i].push_next_attempts(next_attempts, next_vertex_to_assign);
 					}
+#if defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
+					gc_standardizer_sort_profile::attempts_created.fetch_add(
+						next_attempts.size(),
+						std::memory_order_relaxed
+					);
+#endif
 
 					if (min_bucket_size == 2) {
 						next_vertex_to_assign += 2;

@@ -1,10 +1,13 @@
 #include <chrono>
 #include <array>
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
 #include <numeric>
 #include <optional>
+#include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #if defined(GC_PERF_WITH_NAUTY)
@@ -44,6 +47,27 @@ std::vector<std::vector<bool>> left_right_sequences_starting_left(int length) {
 	return result;
 }
 
+std::vector<std::vector<bool>> left_right_sequences(int length) {
+	std::vector<std::vector<bool>> result;
+	if (length < 0) {
+		return result;
+	}
+
+	const int count = 1 << length;
+	result.reserve(count);
+
+	for (int mask = 0; mask < count; ++mask) {
+		std::vector<bool> seq;
+		seq.reserve(length);
+		for (int bit = 0; bit < length; ++bit) {
+			seq.push_back(((mask >> bit) & 1) != 0);
+		}
+		result.push_back(std::move(seq));
+	}
+
+	return result;
+}
+
 template <Int N>
 std::vector<typename OddGraphdegZero<N + 1>::SplitGraph> make_wheel_homotopy_graphs() {
 	using WorkGraph = typename OddGraphdegZero<N + 1>::SplitGraph;
@@ -59,6 +83,143 @@ std::vector<typename OddGraphdegZero<N + 1>::SplitGraph> make_wheel_homotopy_gra
 	}
 
 	return graphs;
+}
+
+template <Int N>
+std::vector<OddGraphdegZero<N + 1>> make_split_contract_workload_graphs(int rounds) {
+	using WorkGraph = OddGraphdegZero<N + 1>;
+
+	std::vector<WorkGraph> graphs;
+	graphs.push_back(wheel_graph<N>());
+
+	for (int round = 0; round < rounds; ++round) {
+		std::unordered_set<WorkGraph> next_graphs;
+
+		for (const auto& graph : graphs) {
+			const auto splits = graph.unsorted_splits(fieldType{1});
+			for (const auto& split_be : splits.raw_elements()) {
+				if (split_be.getCoefficient() == fieldType{}) {
+					continue;
+				}
+
+				for (Int edge = 0; edge < WorkGraph::SplitGraph::N_EDGES_; ++edge) {
+					auto contracted = split_be.getValue().contract_edge(
+						edge,
+						split_be.getCoefficient()
+					);
+					WorkGraph::std(contracted);
+					if (contracted.getCoefficient() != fieldType{}) {
+						next_graphs.emplace(contracted.getValue());
+					}
+				}
+			}
+		}
+
+		graphs.assign(next_graphs.begin(), next_graphs.end());
+		std::sort(graphs.begin(), graphs.end());
+	}
+
+	return graphs;
+}
+
+template <Int N>
+std::vector<OddGraphdegZero<N + 1>> make_maximal_v_workload_graphs() {
+	std::vector<OddGraphdegZero<N + 1>> graphs;
+	const int maximal_v_sequence_length = (N - 3) / 2;
+	const int sequence_count = 1 << maximal_v_sequence_length;
+	graphs.reserve(sequence_count);
+
+	for (auto sequence : left_right_sequences(maximal_v_sequence_length)) {
+		graphs.push_back(V_graph<N>(sequence));
+	}
+
+	std::sort(graphs.begin(), graphs.end());
+	return graphs;
+}
+
+template <Int N>
+std::string split_contract_cache_path(int rounds) {
+	return "/tmp/gc_standardizer_split_contract_W" + std::to_string(N)
+		+ "_rounds" + std::to_string(rounds)
+		+ "_int" + std::to_string(sizeof(Int))
+		+ ".bin";
+}
+
+template <typename GraphType>
+bool load_graph_workload_cache(const std::string& path, std::vector<GraphType>& graphs) {
+	std::ifstream in(path, std::ios::binary);
+	if (!in) {
+		return false;
+	}
+
+	std::uint64_t count = 0;
+	in.read(reinterpret_cast<char*>(&count), sizeof(count));
+	if (!in) {
+		return false;
+	}
+
+	graphs.resize(static_cast<std::size_t>(count));
+	for (auto& graph : graphs) {
+		in.read(
+			reinterpret_cast<char*>(graph.half_edges.data()),
+			static_cast<std::streamsize>(graph.half_edges.size() * sizeof(Int))
+		);
+		if (!in) {
+			graphs.clear();
+			return false;
+		}
+	}
+
+	return true;
+}
+
+template <typename GraphType>
+void save_graph_workload_cache(const std::string& path, const std::vector<GraphType>& graphs) {
+	std::ofstream out(path, std::ios::binary);
+	if (!out) {
+		return;
+	}
+
+	const std::uint64_t count = graphs.size();
+	out.write(reinterpret_cast<const char*>(&count), sizeof(count));
+	for (const auto& graph : graphs) {
+		out.write(
+			reinterpret_cast<const char*>(graph.half_edges.data()),
+			static_cast<std::streamsize>(graph.half_edges.size() * sizeof(Int))
+		);
+	}
+}
+
+template <Int N>
+std::vector<OddGraphdegZero<N + 1>> load_or_make_split_contract_workload_graphs(int rounds) {
+	using WorkGraph = OddGraphdegZero<N + 1>;
+
+	std::vector<WorkGraph> graphs;
+	const std::string cache_path = split_contract_cache_path<N>(rounds);
+	if (load_graph_workload_cache(cache_path, graphs)) {
+		std::cout << "loaded workload cache = " << cache_path << '\n';
+		return graphs;
+	}
+
+	graphs = make_split_contract_workload_graphs<N>(rounds);
+	save_graph_workload_cache(cache_path, graphs);
+	std::cout << "saved workload cache = " << cache_path << '\n';
+	return graphs;
+}
+
+enum class WorkloadKind {
+	SplitContract,
+	MaximalV
+};
+
+WorkloadKind parse_workload_kind(const std::string& value) {
+	if (value == "split-contract" || value == "split_contract" || value == "split") {
+		return WorkloadKind::SplitContract;
+	}
+	if (value == "maximal-v" || value == "maximal_v" || value == "vmax" || value == "v") {
+		return WorkloadKind::MaximalV;
+	}
+	throw std::invalid_argument("unknown workload kind: " + value);
 }
 
 template <typename Fn>
@@ -355,9 +516,16 @@ double benchmark_nauty_standardizer(const std::vector<GraphType>& graphs, int it
 #endif
 
 template <Int N>
-int run_graph_standardizer_comparison(int repeat, int iterations) {
-	auto base_graphs = make_wheel_homotopy_graphs<N>();
-	std::vector<typename OddGraphdegZero<N + 1>::SplitGraph> graphs;
+int run_graph_standardizer_comparison(
+	int expansion_rounds,
+	int repeat,
+	int iterations,
+	WorkloadKind workload_kind
+) {
+	const auto base_graphs = workload_kind == WorkloadKind::MaximalV
+		? make_maximal_v_workload_graphs<N>()
+		: load_or_make_split_contract_workload_graphs<N>(expansion_rounds);
+	std::vector<OddGraphdegZero<N + 1>> graphs;
 	graphs.reserve(base_graphs.size() * repeat);
 	for (int r = 0; r < repeat; ++r) {
 		graphs.insert(graphs.end(), base_graphs.begin(), base_graphs.end());
@@ -365,48 +533,44 @@ int run_graph_standardizer_comparison(int repeat, int iterations) {
 
 	std::cout << "graph standardizer comparison\n";
 	std::cout << "wheel = W" << +N << '\n';
-	std::cout << "base homotopy graphs = " << base_graphs.size() << '\n';
+	if (workload_kind == WorkloadKind::MaximalV) {
+		std::cout << "workload kind = maximal V_N sequences\n";
+		std::cout << "maximal sequence length = " << ((N - 3) / 2) << '\n';
+		std::cout << "base maximal V graphs = " << base_graphs.size() << '\n';
+	} else {
+		std::cout << "workload kind = split-contract\n";
+		std::cout << "split-contract rounds = " << expansion_rounds << '\n';
+		std::cout << "base split-contract graphs = " << base_graphs.size() << '\n';
+	}
 	std::cout << "repeat = " << repeat << '\n';
 	std::cout << "workload graphs = " << graphs.size() << '\n';
 	std::cout << "iterations = " << iterations << '\n';
 
-#if defined(GC_PROFILE_STANDARDIZER_SORT)
+#if defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
 	gc_standardizer_sort_profile::reset();
 #endif
 	const double own_avg = benchmark_own_standardizer(graphs, iterations);
 	std::cout << "own standardizer average = " << own_avg << " s\n";
-#if defined(GC_PROFILE_STANDARDIZER_SORT)
-	const double sort_total_seconds =
-		static_cast<double>(gc_standardizer_sort_profile::insertion_sort_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
-	const double sort_avg_seconds = sort_total_seconds / static_cast<double>(iterations);
-	const auto sort_calls = gc_standardizer_sort_profile::insertion_sort_calls.load(std::memory_order_relaxed);
-	const auto sort_swaps = gc_standardizer_sort_profile::insertion_sort_swaps.load(std::memory_order_relaxed);
-	std::cout << "own edge insertion sort average = " << sort_avg_seconds << " s\n";
-	std::cout << "own edge insertion sort share = " << (100.0 * sort_avg_seconds / own_avg) << "%\n";
-	std::cout << "own edge insertion sort calls = " << sort_calls << '\n';
-	std::cout << "own edge insertion sort swaps = " << sort_swaps << '\n';
-
-	const double color_update_total_seconds =
-		static_cast<double>(gc_standardizer_sort_profile::vertex_color_update_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
-	const double color_update_avg_seconds = color_update_total_seconds / static_cast<double>(iterations);
-	const auto color_update_calls = gc_standardizer_sort_profile::vertex_color_update_calls.load(std::memory_order_relaxed);
-	std::cout << "own vertex color update average = " << color_update_avg_seconds << " s\n";
-	std::cout << "own vertex color update share = " << (100.0 * color_update_avg_seconds / own_avg) << "%\n";
-	std::cout << "own vertex color update calls = " << color_update_calls << '\n';
-
-	const double bucket_init_total_seconds =
-		static_cast<double>(gc_standardizer_sort_profile::vertex_bucket_init_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
-	const double bucket_init_avg_seconds = bucket_init_total_seconds / static_cast<double>(iterations);
-	const auto bucket_init_calls = gc_standardizer_sort_profile::vertex_bucket_init_calls.load(std::memory_order_relaxed);
-	std::cout << "own vertex bucket init average = " << bucket_init_avg_seconds << " s\n";
-	std::cout << "own vertex bucket init share = " << (100.0 * bucket_init_avg_seconds / own_avg) << "%\n";
-	std::cout << "own vertex bucket init calls = " << bucket_init_calls << '\n';
+#if defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
+	const double labeling_search_total_seconds =
+		static_cast<double>(gc_standardizer_sort_profile::labeling_search_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
+	const double labeling_search_avg_seconds = labeling_search_total_seconds / static_cast<double>(iterations);
+	const auto labeling_search_calls = gc_standardizer_sort_profile::labeling_search_calls.load(std::memory_order_relaxed);
+	const auto attempts_created = gc_standardizer_sort_profile::attempts_created.load(std::memory_order_relaxed);
+	std::cout << "own labeling search average = " << labeling_search_avg_seconds << " s\n";
+	std::cout << "own labeling search share = " << (100.0 * labeling_search_avg_seconds / own_avg) << "%\n";
+	std::cout << "own labeling search calls = " << labeling_search_calls << '\n';
+	std::cout << "own total attempts created = " << attempts_created << '\n';
 #endif
 
 #if defined(GC_PERF_WITH_NAUTY)
 	check_nauty_sign_correctness(graphs);
 	const double nauty_avg = benchmark_nauty(graphs, iterations);
 	std::cout << "nauty labeling average = " << nauty_avg << " s\n";
+#if defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
+	std::cout << "labeling search / nauty labeling = " << (labeling_search_avg_seconds / nauty_avg) << "x\n";
+	std::cout << "nauty labeling / own labeling search = " << (nauty_avg / labeling_search_avg_seconds) << "x\n";
+#endif
 	const double nauty_full_avg = benchmark_nauty_standardizer(graphs, iterations);
 	std::cout << "nauty full standardizer average = " << nauty_full_avg << " s\n";
 #else
@@ -417,39 +581,57 @@ int run_graph_standardizer_comparison(int repeat, int iterations) {
 }
 
 void print_usage(const char* argv0) {
-	std::cerr << "usage: " << argv0 << " [wheel_N] [repeat] [iterations]\n";
-	std::cerr << "  wheel_N must be one of 9,13,15,17,21,25,29,33\n";
+	std::cerr << "usage: " << argv0 << " [wheel_N] [split_contract_rounds] [repeat] [iterations] [workload]\n";
+	std::cerr << "  workload: split-contract (default) or vmax\n";
+	std::cerr << "  wheel_N must be one of 9,11,13,15,17,21,25,27,29,31,33,35\n";
 }
 
 } // namespace
 
 int main(int argc, char** argv) {
-	const int wheel_n = argc >= 2 ? std::stoi(argv[1]) : 25;
-	const int repeat = argc >= 3 ? std::stoi(argv[2]) : 1;
-	const int iterations = argc >= 4 ? std::stoi(argv[3]) : 3;
+	const int wheel_n = argc >= 2 ? std::stoi(argv[1]) : 11;
+	const int expansion_rounds = argc >= 3 ? std::stoi(argv[2]) : 2;
+	const int repeat = argc >= 4 ? std::stoi(argv[3]) : 1;
+	const int iterations = argc >= 5 ? std::stoi(argv[4]) : 3;
+	WorkloadKind workload_kind = WorkloadKind::SplitContract;
+	try {
+		workload_kind = argc >= 6 ? parse_workload_kind(argv[5]) : WorkloadKind::SplitContract;
+	} catch (const std::invalid_argument& error) {
+		std::cerr << error.what() << '\n';
+		print_usage(argv[0]);
+		return EXIT_FAILURE;
+	}
 
-	if (repeat <= 0 || iterations <= 0) {
+	if (expansion_rounds < 0 || repeat <= 0 || iterations <= 0) {
 		print_usage(argv[0]);
 		return EXIT_FAILURE;
 	}
 
 	switch (wheel_n) {
 	case 9:
-		return run_graph_standardizer_comparison<9>(repeat, iterations);
+		return run_graph_standardizer_comparison<9>(expansion_rounds, repeat, iterations, workload_kind);
+	case 11:
+		return run_graph_standardizer_comparison<11>(expansion_rounds, repeat, iterations, workload_kind);
 	case 13:
-		return run_graph_standardizer_comparison<13>(repeat, iterations);
+		return run_graph_standardizer_comparison<13>(expansion_rounds, repeat, iterations, workload_kind);
 	case 15:
-		return run_graph_standardizer_comparison<15>(repeat, iterations);
+		return run_graph_standardizer_comparison<15>(expansion_rounds, repeat, iterations, workload_kind);
 	case 17:
-		return run_graph_standardizer_comparison<17>(repeat, iterations);
+		return run_graph_standardizer_comparison<17>(expansion_rounds, repeat, iterations, workload_kind);
 	case 21:
-		return run_graph_standardizer_comparison<21>(repeat, iterations);
+		return run_graph_standardizer_comparison<21>(expansion_rounds, repeat, iterations, workload_kind);
 	case 25:
-		return run_graph_standardizer_comparison<25>(repeat, iterations);
+		return run_graph_standardizer_comparison<25>(expansion_rounds, repeat, iterations, workload_kind);
+	case 27:
+		return run_graph_standardizer_comparison<27>(expansion_rounds, repeat, iterations, workload_kind);
 	case 29:
-		return run_graph_standardizer_comparison<29>(repeat, iterations);
+		return run_graph_standardizer_comparison<29>(expansion_rounds, repeat, iterations, workload_kind);
+	case 31:
+		return run_graph_standardizer_comparison<31>(expansion_rounds, repeat, iterations, workload_kind);
 	case 33:
-		return run_graph_standardizer_comparison<33>(repeat, iterations);
+		return run_graph_standardizer_comparison<33>(expansion_rounds, repeat, iterations, workload_kind);
+	case 35:
+		return run_graph_standardizer_comparison<35>(expansion_rounds, repeat, iterations, workload_kind);
 	default:
 		print_usage(argv[0]);
 		return EXIT_FAILURE;
