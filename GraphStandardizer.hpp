@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstdint>
-#if defined(GC_PROFILE_STANDARDIZER_SORT)
+#if defined(GC_PROFILE_STANDARDIZER_SORT) || defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
 #include <atomic>
 #include <chrono>
 #endif
@@ -10,7 +10,7 @@
 #include "VectorSpace/BasisElement.hpp"
 #include "GraphIsomorphism.hpp"
 
-#if defined(GC_PROFILE_STANDARDIZER_SORT)
+#if defined(GC_PROFILE_STANDARDIZER_SORT) || defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
 namespace gc_standardizer_sort_profile {
 	inline std::atomic<unsigned long long> insertion_sort_calls{0};
 	inline std::atomic<unsigned long long> insertion_sort_swaps{0};
@@ -19,6 +19,10 @@ namespace gc_standardizer_sort_profile {
 	inline std::atomic<unsigned long long> vertex_color_update_nanoseconds{0};
 	inline std::atomic<unsigned long long> vertex_bucket_init_calls{0};
 	inline std::atomic<unsigned long long> vertex_bucket_init_nanoseconds{0};
+	inline std::atomic<unsigned long long> labeling_search_calls{0};
+	inline std::atomic<unsigned long long> labeling_search_nanoseconds{0};
+	inline std::atomic<unsigned long long> hash_calls{0};
+	inline std::atomic<unsigned long long> hash_nanoseconds{0};
 
 	inline void reset() {
 		insertion_sort_calls.store(0, std::memory_order_relaxed);
@@ -28,6 +32,10 @@ namespace gc_standardizer_sort_profile {
 		vertex_color_update_nanoseconds.store(0, std::memory_order_relaxed);
 		vertex_bucket_init_calls.store(0, std::memory_order_relaxed);
 		vertex_bucket_init_nanoseconds.store(0, std::memory_order_relaxed);
+		labeling_search_calls.store(0, std::memory_order_relaxed);
+		labeling_search_nanoseconds.store(0, std::memory_order_relaxed);
+		hash_calls.store(0, std::memory_order_relaxed);
+		hash_nanoseconds.store(0, std::memory_order_relaxed);
 	}
 }
 #endif
@@ -99,29 +107,98 @@ Int N_VERTICES,
 					vertex_permutation.p.fill(N_VERTICES);
 				}
 
+				struct EmptyBucketCopy {};
+
+				CanonBuilder2(const CanonBuilder2& other, EmptyBucketCopy)
+					: G(other.G),
+					  colors(other.colors),
+					  vertex_permutation(other.vertex_permutation),
+					  next_to_assign_bucket{} {}
+
 				CanonBuilder2 copy_with_empty_next_to_assign_bucket() const {
-					CanonBuilder2 result(*this);
-					result.next_to_assign_bucket.size = 0;
-					return result;
+					return CanonBuilder2(*this, EmptyBucketCopy{});
 				}
 
-				void init_starter_colors() {
+				assign_type init_starter_colors() {
+					array<assign_type, N_VERTICES> valencies{};
+					array<assign_type, (N_VERTICES > 0) ? (N_VERTICES - 1) : 0> valency_counts{};
+
+					for (Int e = 0; e < G.half_edges.size(); ++e) {
+						const assign_type vertex = G.half_edges[e];
+						++colors[vertex];
+						++valencies[vertex];
+					}
+
+					for (assign_type v = 0; v < N_VERTICES; ++v) {
+						if (valencies[v] > 0 && valencies[v] < N_VERTICES) {
+							++valency_counts[valencies[v] - 1];
+						}
+					}
+
 					if constexpr (GraphType::N_HAIR > 0) {
 						for (Int i = 0; i < GraphType::N_HAIR; ++i) {
 							colors[G.half_edges[i]] += hash(i);
 						}
 					}
+
+					assign_type next_vertex_to_assign = 0;
+					for (std::size_t valency = N_VERTICES; valency-- > 1;) {
+						if (valency_counts[valency - 1] != 1) {
+							continue;
+						}
+
+						for (assign_type v = 0; v < N_VERTICES; ++v) {
+							if (valencies[v] == valency) {
+								vertex_permutation.p[v] = next_vertex_to_assign;
+								++colors[v];
+								++next_vertex_to_assign;
+								break;
+							}
+						}
+					}
+
+					return next_vertex_to_assign;
 				}
 
 				void update_colors() {
 					array<hash_int_type, N_VERTICES> next_colors;
+#if defined(GC_PROFILE_STANDARDIZER_SORT) || defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
+					unsigned long long hash_count = 0;
+#endif
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+					const auto hash_start = std::chrono::steady_clock::now();
+#endif
 					for (Int v = 0; v < N_VERTICES; ++v) {
 						next_colors[v] = hash(colors[v]);
+#if defined(GC_PROFILE_STANDARDIZER_SORT) || defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
+						++hash_count;
+#endif
 					}
 					for (Int e = G.N_HAIR; e<G.half_edges.size(); e+=2) {
-						next_colors[G.half_edges[e]] += hash(colors[G.half_edges[e+1]]);
-						next_colors[G.half_edges[e+1]] += hash(colors[G.half_edges[e]]);
+						next_colors[G.half_edges[e]] += colors[G.half_edges[e+1]];
+						next_colors[G.half_edges[e+1]] += colors[G.half_edges[e]];
 					}
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+					const auto hash_stop = std::chrono::steady_clock::now();
+					gc_standardizer_sort_profile::hash_calls.fetch_add(
+						hash_count,
+						std::memory_order_relaxed
+					);
+					gc_standardizer_sort_profile::hash_nanoseconds.fetch_add(
+						static_cast<unsigned long long>(
+							std::chrono::duration_cast<std::chrono::nanoseconds>(
+								hash_stop - hash_start
+							).count()
+						),
+						std::memory_order_relaxed
+					);
+#endif
+#if defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
+					gc_standardizer_sort_profile::hash_calls.fetch_add(
+						hash_count,
+						std::memory_order_relaxed
+					);
+#endif
 					colors = next_colors;
 				}
 
@@ -156,14 +233,13 @@ Int N_VERTICES,
 
 
 				void push_next_attempts(vector<CanonBuilder2>& collector, assign_type v) const {
-
 					if (bucket_size() == 2) {
-						collector.push_back(copy_with_empty_next_to_assign_bucket());
+						collector.emplace_back(*this, EmptyBucketCopy{});
 						collector.back().vertex_permutation.p[next_to_assign_bucket[0]] = v;
 						collector.back().vertex_permutation.p[next_to_assign_bucket[1]] = v+1;
 						++collector.back().colors[next_to_assign_bucket[0]];
 
-						collector.push_back(copy_with_empty_next_to_assign_bucket());
+						collector.emplace_back(*this, EmptyBucketCopy{});
 						collector.back().vertex_permutation.p[next_to_assign_bucket[1]] = v;
 						collector.back().vertex_permutation.p[next_to_assign_bucket[0]] = v+1;
 						++collector.back().colors[next_to_assign_bucket[1]];
@@ -172,7 +248,7 @@ Int N_VERTICES,
 					}
 
 					for (assign_type i = 0; i< bucket_size(); ++i) {
-						collector.push_back(copy_with_empty_next_to_assign_bucket());
+						collector.emplace_back(*this, EmptyBucketCopy{});
 						collector.back().vertex_permutation.p[next_to_assign_bucket[i]] = v;
 						++collector.back().colors[next_to_assign_bucket[i]];
 					}
@@ -188,82 +264,87 @@ Int N_VERTICES,
 				}
 			};
 
-			BasisElement<GraphType, fieldType> standardize2(BasisElement<GraphType, fieldType>& input)  {
-				static const size_t RELOAD_ITERATIONS = N_VERTICES;
+			BasisElement<GraphType, fieldType> standardize2(BasisElement<GraphType, fieldType>& input) const {
+				static constexpr Int RELOAD_ITERATIONS = (N_VERTICES > 2) ? (N_VERTICES / 3) : 1;
+#if defined(GC_PROFILE_STANDARDIZER_SORT) || defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
+				const auto labeling_search_start = std::chrono::steady_clock::now();
+#endif
 
 				vector<CanonBuilder2> attempts;
 				vector<CanonBuilder2> next_attempts;
 				vector<size_t> next_attempt_mask;
 
-				assign_type next_vertex_to_assign = 0;
-
 				attempts.push_back(CanonBuilder2(input.getValue()));
 
-				attempts[0].init_starter_colors();
+				assign_type next_vertex_to_assign = attempts[0].init_starter_colors();
 
 				assign_type min_bucket_size;
 				hash_int_type max_color;
 
 				while (next_vertex_to_assign < N_VERTICES) {
-					min_bucket_size = N_VERTICES + 1;
-					max_color = 0;
-					next_attempt_mask.clear();
+					for (Int reload = 0; reload < RELOAD_ITERATIONS; ++reload) {
+						min_bucket_size = N_VERTICES + 1;
+						max_color = 0;
+						next_attempt_mask.clear();
 
-					for (size_t i = 0; i < attempts.size(); ++i) {
+						for (size_t i = 0; i < attempts.size(); ++i) {
 #if defined(GC_PROFILE_STANDARDIZER_SORT)
-						const auto color_update_start = std::chrono::steady_clock::now();
+							const auto color_update_start = std::chrono::steady_clock::now();
 #endif
-						for (Int j = 0; j < static_cast<Int>(RELOAD_ITERATIONS); ++j) {
 							attempts[i].update_colors();
-						}
 #if defined(GC_PROFILE_STANDARDIZER_SORT)
-						const auto color_update_stop = std::chrono::steady_clock::now();
-						gc_standardizer_sort_profile::vertex_color_update_calls.fetch_add(
-							RELOAD_ITERATIONS,
-							std::memory_order_relaxed
-						);
-						gc_standardizer_sort_profile::vertex_color_update_nanoseconds.fetch_add(
-							static_cast<unsigned long long>(
-								std::chrono::duration_cast<std::chrono::nanoseconds>(
-									color_update_stop - color_update_start
-								).count()
-							),
-							std::memory_order_relaxed
-						);
+							const auto color_update_stop = std::chrono::steady_clock::now();
+							gc_standardizer_sort_profile::vertex_color_update_calls.fetch_add(
+								1,
+								std::memory_order_relaxed
+							);
+							gc_standardizer_sort_profile::vertex_color_update_nanoseconds.fetch_add(
+								static_cast<unsigned long long>(
+									std::chrono::duration_cast<std::chrono::nanoseconds>(
+										color_update_stop - color_update_start
+									).count()
+								),
+								std::memory_order_relaxed
+							);
 
-						const auto bucket_init_start = std::chrono::steady_clock::now();
+							const auto bucket_init_start = std::chrono::steady_clock::now();
 #endif
-						attempts[i].init_bucket();
+							attempts[i].init_bucket();
 #if defined(GC_PROFILE_STANDARDIZER_SORT)
-						const auto bucket_init_stop = std::chrono::steady_clock::now();
-						gc_standardizer_sort_profile::vertex_bucket_init_calls.fetch_add(
-							1,
-							std::memory_order_relaxed
-						);
-						gc_standardizer_sort_profile::vertex_bucket_init_nanoseconds.fetch_add(
-							static_cast<unsigned long long>(
-								std::chrono::duration_cast<std::chrono::nanoseconds>(
-									bucket_init_stop - bucket_init_start
-								).count()
-							),
-							std::memory_order_relaxed
-						);
+							const auto bucket_init_stop = std::chrono::steady_clock::now();
+							gc_standardizer_sort_profile::vertex_bucket_init_calls.fetch_add(
+								1,
+								std::memory_order_relaxed
+							);
+							gc_standardizer_sort_profile::vertex_bucket_init_nanoseconds.fetch_add(
+								static_cast<unsigned long long>(
+									std::chrono::duration_cast<std::chrono::nanoseconds>(
+										bucket_init_stop - bucket_init_start
+									).count()
+								),
+								std::memory_order_relaxed
+							);
 #endif
 
-						if (attempts[i].bucket_size()< min_bucket_size) {
-							min_bucket_size = attempts[i].bucket_size();
-							max_color = attempts[i].max_hash();
-							next_attempt_mask.clear();
-							next_attempt_mask.push_back(i);
-
-						} else if (attempts[i].bucket_size() == min_bucket_size) {
-							if (max_color < attempts[i].max_hash()) {
+							if (attempts[i].bucket_size()< min_bucket_size) {
+								min_bucket_size = attempts[i].bucket_size();
 								max_color = attempts[i].max_hash();
 								next_attempt_mask.clear();
 								next_attempt_mask.push_back(i);
-							} else if (max_color == attempts[i].max_hash()) {
-								next_attempt_mask.push_back(i);
+
+							} else if (attempts[i].bucket_size() == min_bucket_size) {
+								if (max_color < attempts[i].max_hash()) {
+									max_color = attempts[i].max_hash();
+									next_attempt_mask.clear();
+									next_attempt_mask.push_back(i);
+								} else if (max_color == attempts[i].max_hash()) {
+									next_attempt_mask.push_back(i);
+								}
 							}
+						}
+
+						if (min_bucket_size == 1) {
+							break;
 						}
 					}
 
@@ -290,21 +371,41 @@ Int N_VERTICES,
 					attempts.swap(next_attempts);
 				}
 
+#if defined(GC_PROFILE_STANDARDIZER_SORT) || defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
+				const auto labeling_search_stop = std::chrono::steady_clock::now();
+				gc_standardizer_sort_profile::labeling_search_calls.fetch_add(
+					1,
+					std::memory_order_relaxed
+				);
+				gc_standardizer_sort_profile::labeling_search_nanoseconds.fetch_add(
+					static_cast<unsigned long long>(
+						std::chrono::duration_cast<std::chrono::nanoseconds>(
+							labeling_search_stop - labeling_search_start
+						).count()
+					),
+					std::memory_order_relaxed
+				);
+#endif
+
 				GraphType best_graph = input.getValue();
 				bool have_best = false;
 				bool containsPlus = false;
 				bool containsMinus = false;
-
-				if constexpr (GraphType::SWAP_EDGE_SIGN == -1) {
-					if (best_graph.has_double_edge()) {
-						return BasisElement<GraphType, fieldType>(best_graph, 0);
-					}
-				}
+				bool checked_double_edge = false;
 
 				for (const CanonBuilder2& attempt : attempts) {
 					GraphType graph = input.getValue();
 					signedInt sign = graph.permuteVertices(attempt.vertex_permutation);
 					sign *= graph.directAndSortEdges();
+
+					if constexpr (GraphType::SWAP_EDGE_SIGN == -1) {
+						if (!checked_double_edge) {
+							checked_double_edge = true;
+							if (graph.has_double_edge()) {
+								return BasisElement<GraphType, fieldType>(graph, 0);
+							}
+						}
+					}
 
 					const signedInt comparison = have_best ? graph.compare(best_graph) : -1;
 					if (comparison < 0) {

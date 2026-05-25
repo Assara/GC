@@ -873,22 +873,97 @@ Int N_VERTICES,
 				return std::memcmp(&half_edges[base1], &half_edges[base2], 2 * sizeof(Int));
 			}
 
-			signedInt sortEdgesInsertion() {
+			signedInt compareEdgeToPair(int edge, Int pivot0, Int pivot1) const {
+				const Int base = N_HAIR + 2 * static_cast<Int>(edge);
+				if (half_edges[base] != pivot0) {
+					return static_cast<signedInt>(half_edges[base]) - static_cast<signedInt>(pivot0);
+				}
+				return static_cast<signedInt>(half_edges[base + 1]) - static_cast<signedInt>(pivot1);
+			}
+
+			Int medianEdgeIndex(Int a, Int b, Int c_edge) const {
+				const bool ab = compareEdge(a, b) < 0;
+				const bool ac = compareEdge(a, c_edge) < 0;
+				const bool bc = compareEdge(b, c_edge) < 0;
+				if (ab) {
+					return bc ? b : (ac ? c_edge : a);
+				}
+				return bc ? (ac ? a : c_edge) : b;
+			}
+
+			signedInt sortEdgesQuick() {
 #if defined(GC_PROFILE_STANDARDIZER_SORT)
 				const auto sort_start = std::chrono::steady_clock::now();
 				unsigned long long swap_count = 0;
 #endif
 				signedInt overallSign = 1;
-				for (Int i = 1; i < N_EDGES; ++i) {
-					Int j = i;
-					while (j > 0 && compareEdge(j - 1, j) > 0) {
-						overallSign *= swapEdges(j - 1, j);
+
+				auto insertion_sort_range = [&](int left, int right) {
+					for (int i = left + 1; i <= right; ++i) {
+						int j = i;
+						while (j > left && compareEdge(static_cast<Int>(j - 1), static_cast<Int>(j)) > 0) {
+							overallSign *= swapEdges(static_cast<Int>(j - 1), static_cast<Int>(j));
 #if defined(GC_PROFILE_STANDARDIZER_SORT)
-						++swap_count;
+							++swap_count;
 #endif
-						j--;
+							--j;
+						}
 					}
+				};
+
+				auto quick_sort = [&](auto&& self, int left, int right) -> void {
+					while (right - left > 8) {
+						const Int pivot_index = medianEdgeIndex(
+							static_cast<Int>(left),
+							static_cast<Int>(left + (right - left) / 2),
+							static_cast<Int>(right)
+						);
+						const Int pivot_base = N_HAIR + 2 * pivot_index;
+						const Int pivot0 = half_edges[pivot_base];
+						const Int pivot1 = half_edges[pivot_base + 1];
+
+						int i = left;
+						int j = right;
+						while (i <= j) {
+							while (compareEdgeToPair(i, pivot0, pivot1) < 0) {
+								++i;
+							}
+							while (compareEdgeToPair(j, pivot0, pivot1) > 0) {
+								--j;
+							}
+							if (i <= j) {
+								if (i < j && compareEdge(static_cast<Int>(i), static_cast<Int>(j)) != 0) {
+									overallSign *= swapEdges(static_cast<Int>(i), static_cast<Int>(j));
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+									++swap_count;
+#endif
+								}
+								++i;
+								--j;
+							}
+						}
+
+						if (j - left < right - i) {
+							if (left < j) {
+								self(self, left, j);
+							}
+							left = i;
+						} else {
+							if (i < right) {
+								self(self, i, right);
+							}
+							right = j;
+						}
+					}
+					if (left < right) {
+						insertion_sort_range(left, right);
+					}
+				};
+
+				if constexpr (N_EDGES > 1) {
+					quick_sort(quick_sort, 0, N_EDGES - 1);
 				}
+
 #if defined(GC_PROFILE_STANDARDIZER_SORT)
 				const auto sort_stop = std::chrono::steady_clock::now();
 				const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(sort_stop - sort_start).count();
@@ -900,7 +975,7 @@ Int N_VERTICES,
 			}
 
 			signedInt directAndSortEdges() {
-				return directEdges() * sortEdgesInsertion();
+				return directEdges() * sortEdgesQuick();
 			}
 
 			signedInt permuteVertices(Permutation<N_VERTICES> perm) {
