@@ -546,12 +546,12 @@ int run_graph_standardizer_comparison(
 	std::cout << "workload graphs = " << graphs.size() << '\n';
 	std::cout << "iterations = " << iterations << '\n';
 
-#if defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
+#if defined(GC_PROFILE_STANDARDIZER_SORT) || defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
 	gc_standardizer_sort_profile::reset();
 #endif
 	const double own_avg = benchmark_own_standardizer(graphs, iterations);
 	std::cout << "own standardizer average = " << own_avg << " s\n";
-#if defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
+#if defined(GC_PROFILE_STANDARDIZER_SORT) || defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
 	const double labeling_search_total_seconds =
 		static_cast<double>(gc_standardizer_sort_profile::labeling_search_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
 	const double labeling_search_avg_seconds = labeling_search_total_seconds / static_cast<double>(iterations);
@@ -562,12 +562,50 @@ int run_graph_standardizer_comparison(
 	std::cout << "own labeling search calls = " << labeling_search_calls << '\n';
 	std::cout << "own total attempts created = " << attempts_created << '\n';
 #endif
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+	const double update_colors_total_seconds =
+		static_cast<double>(gc_standardizer_sort_profile::vertex_color_update_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
+	const double update_colors_avg_seconds =
+		update_colors_total_seconds / static_cast<double>(iterations);
+	const double init_bucket_total_seconds =
+		static_cast<double>(gc_standardizer_sort_profile::vertex_bucket_init_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
+	const double init_bucket_avg_seconds =
+		init_bucket_total_seconds / static_cast<double>(iterations);
+	const double mask_maintenance_total_seconds =
+		static_cast<double>(gc_standardizer_sort_profile::mask_maintenance_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
+	const double mask_maintenance_avg_seconds =
+		mask_maintenance_total_seconds / static_cast<double>(iterations);
+	const double push_next_attempts_total_seconds =
+		static_cast<double>(gc_standardizer_sort_profile::push_next_attempts_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
+	const double push_next_attempts_avg_seconds =
+		push_next_attempts_total_seconds / static_cast<double>(iterations);
+	std::cout << "update_colors average = " << update_colors_avg_seconds << " s\n";
+	std::cout << "update_colors share of labeling search = "
+	          << (100.0 * update_colors_avg_seconds / labeling_search_avg_seconds) << "%\n";
+	std::cout << "update_colors share of own standardizer = "
+	          << (100.0 * update_colors_avg_seconds / own_avg) << "%\n";
+	std::cout << "init_bucket average = " << init_bucket_avg_seconds << " s\n";
+	std::cout << "init_bucket share of labeling search = "
+	          << (100.0 * init_bucket_avg_seconds / labeling_search_avg_seconds) << "%\n";
+	std::cout << "init_bucket share of own standardizer = "
+	          << (100.0 * init_bucket_avg_seconds / own_avg) << "%\n";
+	std::cout << "mask maintenance average = " << mask_maintenance_avg_seconds << " s\n";
+	std::cout << "mask maintenance share of labeling search = "
+	          << (100.0 * mask_maintenance_avg_seconds / labeling_search_avg_seconds) << "%\n";
+	std::cout << "mask maintenance share of own standardizer = "
+	          << (100.0 * mask_maintenance_avg_seconds / own_avg) << "%\n";
+	std::cout << "push_next_attempts average = " << push_next_attempts_avg_seconds << " s\n";
+	std::cout << "push_next_attempts share of labeling search = "
+	          << (100.0 * push_next_attempts_avg_seconds / labeling_search_avg_seconds) << "%\n";
+	std::cout << "push_next_attempts share of own standardizer = "
+	          << (100.0 * push_next_attempts_avg_seconds / own_avg) << "%\n";
+#endif
 
 #if defined(GC_PERF_WITH_NAUTY)
 	check_nauty_sign_correctness(graphs);
 	const double nauty_avg = benchmark_nauty(graphs, iterations);
 	std::cout << "nauty labeling average = " << nauty_avg << " s\n";
-#if defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
+#if defined(GC_PROFILE_STANDARDIZER_SORT) || defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
 	std::cout << "labeling search / nauty labeling = " << (labeling_search_avg_seconds / nauty_avg) << "x\n";
 	std::cout << "nauty labeling / own labeling search = " << (nauty_avg / labeling_search_avg_seconds) << "x\n";
 #endif

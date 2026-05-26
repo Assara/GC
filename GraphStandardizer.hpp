@@ -19,6 +19,10 @@ namespace gc_standardizer_sort_profile {
 	inline std::atomic<unsigned long long> vertex_color_update_nanoseconds{0};
 	inline std::atomic<unsigned long long> vertex_bucket_init_calls{0};
 	inline std::atomic<unsigned long long> vertex_bucket_init_nanoseconds{0};
+	inline std::atomic<unsigned long long> mask_maintenance_calls{0};
+	inline std::atomic<unsigned long long> mask_maintenance_nanoseconds{0};
+	inline std::atomic<unsigned long long> push_next_attempts_calls{0};
+	inline std::atomic<unsigned long long> push_next_attempts_nanoseconds{0};
 	inline std::atomic<unsigned long long> labeling_search_calls{0};
 	inline std::atomic<unsigned long long> labeling_search_nanoseconds{0};
 	inline std::atomic<unsigned long long> attempts_created{0};
@@ -33,6 +37,10 @@ namespace gc_standardizer_sort_profile {
 		vertex_color_update_nanoseconds.store(0, std::memory_order_relaxed);
 		vertex_bucket_init_calls.store(0, std::memory_order_relaxed);
 		vertex_bucket_init_nanoseconds.store(0, std::memory_order_relaxed);
+		mask_maintenance_calls.store(0, std::memory_order_relaxed);
+		mask_maintenance_nanoseconds.store(0, std::memory_order_relaxed);
+		push_next_attempts_calls.store(0, std::memory_order_relaxed);
+		push_next_attempts_nanoseconds.store(0, std::memory_order_relaxed);
 		labeling_search_calls.store(0, std::memory_order_relaxed);
 		labeling_search_nanoseconds.store(0, std::memory_order_relaxed);
 		attempts_created.store(0, std::memory_order_relaxed);
@@ -222,6 +230,11 @@ Int N_VERTICES,
 					return colors[next_to_assign_bucket[0]];
 				}
 
+				void assign_unique_next_vertex(assign_type v) {
+					vertex_permutation.p[next_to_assign_bucket[0]] = v;
+					++colors[next_to_assign_bucket[0]];
+				}
+
 				void push_next_attempts(vector<CanonBuilder2>& collector, assign_type v) const {
 					if (bucket_size() == 2) {
 						collector.emplace_back(*this, EmptyBucketCopy{});
@@ -342,6 +355,9 @@ Int N_VERTICES,
 
 						
 						if (next_attempt_mask.size() < attempts.size()) {
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+							const auto mask_maintenance_start = std::chrono::steady_clock::now();
+#endif
 							size_t write = 0;
 							for (size_t read : next_attempt_mask) {
 								if (write != read) {
@@ -350,19 +366,147 @@ Int N_VERTICES,
 								++write;
 							}
 							attempts.resize(next_attempt_mask.size());
-							//cout << "test" << endl;
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+							const auto mask_maintenance_stop = std::chrono::steady_clock::now();
+							gc_standardizer_sort_profile::mask_maintenance_calls.fetch_add(
+								1,
+								std::memory_order_relaxed
+							);
+							gc_standardizer_sort_profile::mask_maintenance_nanoseconds.fetch_add(
+								static_cast<unsigned long long>(
+									std::chrono::duration_cast<std::chrono::nanoseconds>(
+										mask_maintenance_stop - mask_maintenance_start
+									).count()
+								),
+								std::memory_order_relaxed
+							);
+#endif
+						}
+
+							if (min_bucket_size == 1) {
+								break;
+							}
 						}
 
 						if (min_bucket_size == 1) {
-							break;
-						}
-					}
-					next_attempts.clear();
-					next_attempts.reserve(next_attempt_mask.size()*min_bucket_size);
+							for (auto& attempt : attempts) {
+								attempt.assign_unique_next_vertex(next_vertex_to_assign);
+							}
+							++next_vertex_to_assign;
+							if (next_vertex_to_assign >= N_VERTICES) {
+								continue;
+							}
 
+							while (true) {
+								min_bucket_size = N_VERTICES + 1;
+								max_color = 0;
+								next_attempt_mask.clear();
+
+								for (size_t i = 0; i < attempts.size(); ++i) {
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+									const auto bucket_init_start = std::chrono::steady_clock::now();
+#endif
+									attempts[i].init_bucket();
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+									const auto bucket_init_stop = std::chrono::steady_clock::now();
+									gc_standardizer_sort_profile::vertex_bucket_init_calls.fetch_add(
+										1,
+										std::memory_order_relaxed
+									);
+									gc_standardizer_sort_profile::vertex_bucket_init_nanoseconds.fetch_add(
+										static_cast<unsigned long long>(
+											std::chrono::duration_cast<std::chrono::nanoseconds>(
+												bucket_init_stop - bucket_init_start
+											).count()
+										),
+										std::memory_order_relaxed
+									);
+#endif
+
+									if (attempts[i].bucket_size() < min_bucket_size) {
+										min_bucket_size = attempts[i].bucket_size();
+										max_color = attempts[i].max_hash();
+										next_attempt_mask.clear();
+										next_attempt_mask.push_back(i);
+									} else if (attempts[i].bucket_size() == min_bucket_size) {
+										if (max_color < attempts[i].max_hash()) {
+											max_color = attempts[i].max_hash();
+											next_attempt_mask.clear();
+											next_attempt_mask.push_back(i);
+										} else if (max_color == attempts[i].max_hash()) {
+											next_attempt_mask.push_back(i);
+										}
+									}
+								}
+
+								if (next_attempt_mask.size() < attempts.size()) {
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+									const auto mask_maintenance_start = std::chrono::steady_clock::now();
+#endif
+									size_t write = 0;
+									for (size_t read : next_attempt_mask) {
+										if (write != read) {
+											attempts[write] = attempts[read];
+										}
+										++write;
+									}
+									attempts.resize(next_attempt_mask.size());
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+									const auto mask_maintenance_stop = std::chrono::steady_clock::now();
+									gc_standardizer_sort_profile::mask_maintenance_calls.fetch_add(
+										1,
+										std::memory_order_relaxed
+									);
+									gc_standardizer_sort_profile::mask_maintenance_nanoseconds.fetch_add(
+										static_cast<unsigned long long>(
+											std::chrono::duration_cast<std::chrono::nanoseconds>(
+												mask_maintenance_stop - mask_maintenance_start
+											).count()
+										),
+										std::memory_order_relaxed
+									);
+#endif
+								}
+
+								if (min_bucket_size != 1) {
+									break;
+								}
+
+								for (auto& attempt : attempts) {
+									attempt.assign_unique_next_vertex(next_vertex_to_assign);
+								}
+								++next_vertex_to_assign;
+								if (next_vertex_to_assign >= N_VERTICES) {
+									break;
+								}
+							}
+							continue;
+						}
+
+						next_attempts.clear();
+						next_attempts.reserve(next_attempt_mask.size()*min_bucket_size);
+
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+					const auto push_next_attempts_start = std::chrono::steady_clock::now();
+#endif
 					for (auto& attempt: attempts) {
 						attempt.push_next_attempts(next_attempts, next_vertex_to_assign);
 					}
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+					const auto push_next_attempts_stop = std::chrono::steady_clock::now();
+					gc_standardizer_sort_profile::push_next_attempts_calls.fetch_add(
+						1,
+						std::memory_order_relaxed
+					);
+					gc_standardizer_sort_profile::push_next_attempts_nanoseconds.fetch_add(
+						static_cast<unsigned long long>(
+							std::chrono::duration_cast<std::chrono::nanoseconds>(
+								push_next_attempts_stop - push_next_attempts_start
+							).count()
+						),
+						std::memory_order_relaxed
+					);
+#endif
 #if defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
 					gc_standardizer_sort_profile::attempts_created.fetch_add(
 						next_attempts.size(),
