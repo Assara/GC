@@ -98,22 +98,20 @@ Int N_VERTICES,
 			};
 
 			struct CanonBuilder2 {
-				GraphType& G;
 				array<hash_int_type, N_VERTICES> colors;
 				Permutation<N_VERTICES> vertex_permutation;
 				VertexBucket next_to_assign_bucket;
 
 
-				CanonBuilder2(GraphType& input_G)
-					: G(input_G), colors{}, vertex_permutation{} {
+				CanonBuilder2()
+					: colors{}, vertex_permutation{} {
 					vertex_permutation.p.fill(N_VERTICES);
 				}
 
 				struct EmptyBucketCopy {};
 
 				CanonBuilder2(const CanonBuilder2& other, EmptyBucketCopy)
-					: G(other.G),
-					  colors(other.colors),
+					: colors(other.colors),
 					  vertex_permutation(other.vertex_permutation),
 					  next_to_assign_bucket{} {}
 
@@ -121,7 +119,7 @@ Int N_VERTICES,
 					return CanonBuilder2(*this, EmptyBucketCopy{});
 				}
 
-				assign_type init_starter_colors() {
+				assign_type init_starter_colors(const GraphType& G) {
 					array<assign_type, (N_VERTICES > 0) ? (N_VERTICES - 1) : 0> valency_counts{};
 
 					for (Int e = 0; e < G.half_edges.size(); ++e) {
@@ -159,7 +157,7 @@ Int N_VERTICES,
 					return next_vertex_to_assign;
 				}
 
-				void update_colors() {
+				void update_colors(const GraphType& G) {
 					array<hash_int_type, N_VERTICES> next_colors;
 #if defined(GC_PROFILE_STANDARDIZER_SORT) || defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
 					unsigned long long hash_count = 0;
@@ -265,8 +263,9 @@ Int N_VERTICES,
 				vector<CanonBuilder2> attempts;
 				vector<CanonBuilder2> next_attempts;
 				vector<size_t> next_attempt_mask;
+				GraphType& G = input.getValue();
 
-				attempts.push_back(CanonBuilder2(input.getValue()));
+				attempts.emplace_back();
 #if defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
 				gc_standardizer_sort_profile::attempts_created.fetch_add(
 					1,
@@ -274,7 +273,7 @@ Int N_VERTICES,
 				);
 #endif
 
-				assign_type next_vertex_to_assign = attempts[0].init_starter_colors();
+				assign_type next_vertex_to_assign = attempts[0].init_starter_colors(G);
   
 				assign_type min_bucket_size;
 				hash_int_type max_color;
@@ -289,7 +288,7 @@ Int N_VERTICES,
 #if defined(GC_PROFILE_STANDARDIZER_SORT)
 							const auto color_update_start = std::chrono::steady_clock::now();
 #endif
-							attempts[i].update_colors();
+							attempts[i].update_colors(G);
 #if defined(GC_PROFILE_STANDARDIZER_SORT)
 							const auto color_update_stop = std::chrono::steady_clock::now();
 							gc_standardizer_sort_profile::vertex_color_update_calls.fetch_add(
@@ -341,16 +340,28 @@ Int N_VERTICES,
 							}
 						}
 
+						
+						if (next_attempt_mask.size() < attempts.size()) {
+							size_t write = 0;
+							for (size_t read : next_attempt_mask) {
+								if (write != read) {
+									attempts[write] = attempts[read];
+								}
+								++write;
+							}
+							attempts.resize(next_attempt_mask.size());
+							//cout << "test" << endl;
+						}
+
 						if (min_bucket_size == 1) {
 							break;
 						}
 					}
-
 					next_attempts.clear();
 					next_attempts.reserve(next_attempt_mask.size()*min_bucket_size);
 
-					for (size_t i : next_attempt_mask) {
-						attempts[i].push_next_attempts(next_attempts, next_vertex_to_assign);
+					for (auto& attempt: attempts) {
+						attempt.push_next_attempts(next_attempts, next_vertex_to_assign);
 					}
 #if defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
 					gc_standardizer_sort_profile::attempts_created.fetch_add(
