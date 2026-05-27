@@ -116,12 +116,6 @@ Int N_VERTICES,
 					vertex_permutation.p.fill(N_VERTICES);
 				}
 
-				struct EmptyBucketCopy {};
-
-				CanonBuilder2(const CanonBuilder2& other, EmptyBucketCopy)
-					: colors(other.colors),
-					  vertex_permutation(other.vertex_permutation) {}
-
 				assign_type init_starter_colors(const GraphType& G) {
 					array<assign_type, (N_VERTICES > 0) ? (N_VERTICES - 1) : 0> valency_counts{};
 
@@ -268,12 +262,12 @@ Int N_VERTICES,
 					assign_type v
 				) const {
 					if (branch_bucket.size == 2) {
-						collector.emplace_back(*this, EmptyBucketCopy{});
+						collector.emplace_back(*this);
 						collector.back().vertex_permutation.p[branch_bucket[0]] = v;
 						collector.back().vertex_permutation.p[branch_bucket[1]] = v+1;
 						++collector.back().colors[branch_bucket[0]];
 
-						collector.emplace_back(*this, EmptyBucketCopy{});
+						collector.emplace_back(*this);
 						collector.back().vertex_permutation.p[branch_bucket[1]] = v;
 						collector.back().vertex_permutation.p[branch_bucket[0]] = v+1;
 						++collector.back().colors[branch_bucket[1]];
@@ -282,7 +276,7 @@ Int N_VERTICES,
 					}
 
 					for (std::size_t i = 0; i < branch_bucket.size; ++i) {
-						collector.emplace_back(*this, EmptyBucketCopy{});
+						collector.emplace_back(*this);
 						collector.back().vertex_permutation.p[branch_bucket[i]] = v;
 						++collector.back().colors[branch_bucket[i]];
 					}
