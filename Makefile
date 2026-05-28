@@ -7,6 +7,7 @@ TARGET    := gc
 PLAYGROUND_TARGET := gc_contraction_playground
 SPLIT_WATERFALL_TARGET := gc_split_waterfall_playground
 STANDARDIZE_PERF_TARGET := standardize_perf
+STANDARDIZE3_PROFILE_TARGET := standardize3_profile
 GRAPH_STANDARDIZER_COMPARE_TARGET := graph_standardizer_compare
 SOLVER_COMPARE_TARGET := solver_compare
 TEST_TARGET := gc_test
@@ -45,6 +46,9 @@ SPLIT_WATERFALL_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(SPLIT_WATERFALL_SRCS
 STANDARDIZE_PERF_SRCS := tools/standardize_perf.cpp
 STANDARDIZE_PERF_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(STANDARDIZE_PERF_SRCS))
 
+STANDARDIZE3_PROFILE_SRCS := tools/standardize3_profile.cpp
+STANDARDIZE3_PROFILE_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(STANDARDIZE3_PROFILE_SRCS))
+
 GRAPH_STANDARDIZER_COMPARE_SRCS := tools/graph_standardizer_comparison.cpp
 GRAPH_STANDARDIZER_COMPARE_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(GRAPH_STANDARDIZER_COMPARE_SRCS))
 GRAPH_STANDARDIZER_COMPARE_NAUTY_OBJS := $(BUILD_DIR)/tools/graph_standardizer_comparison_nauty.o
@@ -58,7 +62,7 @@ TEST_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(TEST_SRCS))
 
 # ======= RULES =======
 
-.PHONY: all clean run playground split-waterfall run-split-waterfall standardize-perf run-standardize-perf graph-standardizer-compare graph-standardizer-compare-nauty run-graph-standardizer-compare solver-compare solver-compare-linbox run-solver-compare test
+.PHONY: all clean run playground split-waterfall run-split-waterfall standardize-perf standardize3-profile run-standardize-perf run-standardize3-profile graph-standardizer-compare graph-standardizer-compare-nauty run-graph-standardizer-compare solver-compare solver-compare-linbox run-solver-compare test
 
 all: $(TARGET)
 
@@ -80,6 +84,11 @@ $(SPLIT_WATERFALL_TARGET): $(SPLIT_WATERFALL_OBJS)
 $(STANDARDIZE_PERF_TARGET): $(STANDARDIZE_PERF_OBJS)
 	@echo "🚧 Linking $(STANDARDIZE_PERF_TARGET) with Clang + LLD..."
 	$(LD) $(STANDARDIZE_PERF_OBJS) $(LDFLAGS) -o $(STANDARDIZE_PERF_TARGET)
+	@echo "✅ Build complete."
+
+$(STANDARDIZE3_PROFILE_TARGET): $(STANDARDIZE3_PROFILE_OBJS)
+	@echo "🚧 Linking $(STANDARDIZE3_PROFILE_TARGET) with Clang + LLD..."
+	$(LD) $(STANDARDIZE3_PROFILE_OBJS) $(LDFLAGS) -o $(STANDARDIZE3_PROFILE_TARGET)
 	@echo "✅ Build complete."
 
 $(GRAPH_STANDARDIZER_COMPARE_TARGET): $(GRAPH_STANDARDIZER_COMPARE_OBJS)
@@ -110,7 +119,7 @@ $(TEST_TARGET): $(TEST_OBJS)
 $(BUILD_DIR)/%.o: %.cpp
 	@mkdir -p $(dir $@)
 	@echo "🔧 Compiling $<..."
-	$(CXX) $(CXXFLAGS) $(if $(filter tools/graph_standardizer_comparison.cpp,$<),-DGC_PROFILE_STANDARDIZER_SORT) -c $< -o $@
+	$(CXX) $(CXXFLAGS) $(if $(filter tools/graph_standardizer_comparison.cpp tools/standardize3_profile.cpp,$<),-DGC_PROFILE_STANDARDIZER_SORT) -c $< -o $@
 
 $(GRAPH_STANDARDIZER_COMPARE_NAUTY_OBJS): tools/graph_standardizer_comparison.cpp
 	@mkdir -p $(dir $@)
@@ -138,8 +147,13 @@ run-split-waterfall: $(SPLIT_WATERFALL_TARGET)
 
 standardize-perf: $(STANDARDIZE_PERF_TARGET)
 
+standardize3-profile: $(STANDARDIZE3_PROFILE_TARGET)
+
 run-standardize-perf: $(STANDARDIZE_PERF_TARGET)
 	@./$(STANDARDIZE_PERF_TARGET) $(or $(WHEEL),33) $(or $(REPEAT),1) $(or $(ITER),3)
+
+run-standardize3-profile: $(STANDARDIZE3_PROFILE_TARGET)
+	@./$(STANDARDIZE3_PROFILE_TARGET) $(or $(WHEEL),11) $(or $(ROUNDS),2) $(or $(REPEAT),1) $(or $(ITER),3) $(or $(WORKLOAD),split-contract)
 
 graph-standardizer-compare: $(GRAPH_STANDARDIZER_COMPARE_TARGET)
 
