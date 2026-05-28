@@ -555,12 +555,7 @@ int run_graph_standardizer_comparison(
 	const double labeling_search_total_seconds =
 		static_cast<double>(gc_standardizer_sort_profile::labeling_search_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
 	const double labeling_search_avg_seconds = labeling_search_total_seconds / static_cast<double>(iterations);
-	const auto labeling_search_calls = gc_standardizer_sort_profile::labeling_search_calls.load(std::memory_order_relaxed);
 	const auto attempts_created = gc_standardizer_sort_profile::attempts_created.load(std::memory_order_relaxed);
-	std::cout << "own labeling search average = " << labeling_search_avg_seconds << " s\n";
-	std::cout << "own labeling search share = " << (100.0 * labeling_search_avg_seconds / own_avg) << "%\n";
-	std::cout << "own labeling search calls = " << labeling_search_calls << '\n';
-	std::cout << "own total attempts created = " << attempts_created << '\n';
 #endif
 #if defined(GC_PROFILE_STANDARDIZER_SORT)
 	const double update_colors_total_seconds =
@@ -579,26 +574,17 @@ int run_graph_standardizer_comparison(
 		static_cast<double>(gc_standardizer_sort_profile::push_next_attempts_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
 	const double push_next_attempts_avg_seconds =
 		push_next_attempts_total_seconds / static_cast<double>(iterations);
-	std::cout << "update_colors average = " << update_colors_avg_seconds << " s\n";
-	std::cout << "update_colors share of labeling search = "
-	          << (100.0 * update_colors_avg_seconds / labeling_search_avg_seconds) << "%\n";
-	std::cout << "update_colors share of own standardizer = "
+	const double sign_and_filter_avg_seconds =
+		own_avg - update_colors_avg_seconds - init_bucket_avg_seconds;
+	(void)mask_maintenance_avg_seconds;
+	(void)push_next_attempts_avg_seconds;
+	std::cout << "update_colors share = "
 	          << (100.0 * update_colors_avg_seconds / own_avg) << "%\n";
-	std::cout << "init_bucket average = " << init_bucket_avg_seconds << " s\n";
-	std::cout << "init_bucket share of labeling search = "
-	          << (100.0 * init_bucket_avg_seconds / labeling_search_avg_seconds) << "%\n";
-	std::cout << "init_bucket share of own standardizer = "
+	std::cout << "update_groups share = "
 	          << (100.0 * init_bucket_avg_seconds / own_avg) << "%\n";
-	std::cout << "mask maintenance average = " << mask_maintenance_avg_seconds << " s\n";
-	std::cout << "mask maintenance share of labeling search = "
-	          << (100.0 * mask_maintenance_avg_seconds / labeling_search_avg_seconds) << "%\n";
-	std::cout << "mask maintenance share of own standardizer = "
-	          << (100.0 * mask_maintenance_avg_seconds / own_avg) << "%\n";
-	std::cout << "push_next_attempts average = " << push_next_attempts_avg_seconds << " s\n";
-	std::cout << "push_next_attempts share of labeling search = "
-	          << (100.0 * push_next_attempts_avg_seconds / labeling_search_avg_seconds) << "%\n";
-	std::cout << "push_next_attempts share of own standardizer = "
-	          << (100.0 * push_next_attempts_avg_seconds / own_avg) << "%\n";
+	std::cout << "sign/filter share = "
+	          << (100.0 * sign_and_filter_avg_seconds / own_avg) << "%\n";
+	std::cout << "attempts created = " << attempts_created << '\n';
 #endif
 
 #if defined(GC_PERF_WITH_NAUTY)
