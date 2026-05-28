@@ -162,7 +162,6 @@ OddGraphdegZero<N + 1> V_graph(vector<bool>& left_right_sequence) {
 	}
 	
 	Int arc_pos = left;
-	Int arc_end = right;
 
 	while (next_vertex< N + 1) {
 		V.setEdge(e++, arc_pos, next_vertex);
@@ -425,8 +424,6 @@ typename OddGraphdegZero<N + 1>::ContGraph V_con_graph(vector<bool>& left_right_
 	Int center = 2;
 	Int right = 3;
 
-	Int edge_to_contract;
-
 	Int next_vertex = 4;
 
 	for (Int i =0 ; i< left_right_sequence.size(); i++) {
@@ -451,7 +448,6 @@ typename OddGraphdegZero<N + 1>::ContGraph V_con_graph(vector<bool>& left_right_
 	}
 	
 	Int arc_pos = left;
-	Int arc_end = right;
 
 	while (next_vertex< N + 1) {
 		V.setEdge(e++, arc_pos, next_vertex);
@@ -508,7 +504,6 @@ typename OddGraphdegZero<N + 1>::SplitGraph U_graph(vector<bool>& left_right_seq
 	next_vertex++;
 	
 	Int arc_pos = left;
-	Int arc_end = right;
 
 	while (next_vertex< N + 2) {
 		U.setEdge(e++, arc_pos, next_vertex);

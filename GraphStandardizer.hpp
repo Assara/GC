@@ -276,20 +276,16 @@ Int N_VERTICES,
 				}
 
 				std::pair<assign_type, assign_type> branching_group_range() const {
-					if (group_separators.empty()) {
-						return {0, N_VERTICES};
-					}
-
-					if (group_separators[0] > 1) {
-						return {0, group_separators[0]};
-					}
-
-					for (size_t i = 0; i<group_separators.size -1; ++i ) {
-						if (group_separators[i+1] - group_separators[i] > 1) {
-							return {group_separators[i+1], group_separators[i]};
+					assign_type begin = 0;
+					for (std::size_t sep_i = 0; sep_i <= group_separators.size; ++sep_i) {
+						const assign_type end =
+							(sep_i < group_separators.size) ? group_separators[sep_i] : active_size;
+						if (end - begin > 1) {
+							return {begin, end};
 						}
+						begin = end;
 					}
-					return {group_separators[group_separators.size -1], N_VERTICES};
+					return {N_VERTICES, N_VERTICES};
 				}
 
 				void assign_singleton_groups() {
@@ -382,6 +378,11 @@ Int N_VERTICES,
 
 				void update_colors(const GraphType& G) {
 					array<hash_int_type, N_VERTICES> next_colors;
+
+					for (Int v = 0; v < N_VERTICES; ++v) {
+						next_colors[v] = hash(colors[v]);
+					}
+
 					for (Int e = G.N_HAIR; e < G.half_edges.size(); e += 2) {
 						next_colors[G.half_edges[e]] += colors[G.half_edges[e + 1]];
 						next_colors[G.half_edges[e + 1]] += colors[G.half_edges[e]];
@@ -403,18 +404,21 @@ Int N_VERTICES,
 
 #if defined(GC_PROFILE_STANDARDIZER_SORT) || defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
 				const auto labeling_search_start = std::chrono::steady_clock::now();
+				unsigned long long local_attempts_created = 1;
+#endif
+#if defined(GC_PROFILE_STANDARDIZER_SORT) || defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
+				unsigned long long local_update_colors_calls = 0;
+				unsigned long long local_update_groups_calls = 0;
+#endif
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+				unsigned long long local_update_colors_nanoseconds = 0;
+				unsigned long long local_update_groups_nanoseconds = 0;
 #endif
 				vector<CanonBuilder3> attempts;
 				vector<CanonBuilder3> next_attempts;
 				const GraphType& G = input.getValue();
 
 				attempts.emplace_back(CanonBuilder3());
-#if defined(GC_PROFILE_STANDARDIZER_SORT) || defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
-				gc_standardizer_sort_profile::attempts_created.fetch_add(
-					1,
-					std::memory_order_relaxed
-				);
-#endif
 				attempts[0].init_starter_colors(G);
 
 				signedInt cmp;
@@ -430,24 +434,17 @@ Int N_VERTICES,
 							attempts[i].update_colors(G);
 #if defined(GC_PROFILE_STANDARDIZER_SORT)
 							const auto update_colors_stop = std::chrono::steady_clock::now();
-							gc_standardizer_sort_profile::vertex_color_update_calls.fetch_add(
-								1,
-								std::memory_order_relaxed
-							);
-							gc_standardizer_sort_profile::vertex_color_update_nanoseconds.fetch_add(
-								static_cast<unsigned long long>(
-									std::chrono::duration_cast<std::chrono::nanoseconds>(
-										update_colors_stop - update_colors_start
-									).count()
-								),
-								std::memory_order_relaxed
+							local_update_colors_nanoseconds += static_cast<unsigned long long>(
+								std::chrono::duration_cast<std::chrono::nanoseconds>(
+									update_colors_stop - update_colors_start
+								).count()
 							);
 #endif
 #if defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
-							gc_standardizer_sort_profile::vertex_color_update_calls.fetch_add(
-								1,
-								std::memory_order_relaxed
-							);
+							++local_update_colors_calls;
+#endif
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+							++local_update_colors_calls;
 #endif
 #if defined(GC_PROFILE_STANDARDIZER_SORT)
 							const auto update_groups_start = std::chrono::steady_clock::now();
@@ -455,24 +452,17 @@ Int N_VERTICES,
 							attempts[i].update_vertex_groups();
 #if defined(GC_PROFILE_STANDARDIZER_SORT)
 							const auto update_groups_stop = std::chrono::steady_clock::now();
-							gc_standardizer_sort_profile::vertex_bucket_init_calls.fetch_add(
-								1,
-								std::memory_order_relaxed
-							);
-							gc_standardizer_sort_profile::vertex_bucket_init_nanoseconds.fetch_add(
-								static_cast<unsigned long long>(
-									std::chrono::duration_cast<std::chrono::nanoseconds>(
-										update_groups_stop - update_groups_start
-									).count()
-								),
-								std::memory_order_relaxed
+							local_update_groups_nanoseconds += static_cast<unsigned long long>(
+								std::chrono::duration_cast<std::chrono::nanoseconds>(
+									update_groups_stop - update_groups_start
+								).count()
 							);
 #endif
 #if defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
-							gc_standardizer_sort_profile::vertex_bucket_init_calls.fetch_add(
-								1,
-								std::memory_order_relaxed
-							);
+							++local_update_groups_calls;
+#endif
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+							++local_update_groups_calls;
 #endif
 
 							if (next_attempts.empty()) {
@@ -495,7 +485,7 @@ Int N_VERTICES,
 					}
 
 					const auto branch_range = attempts[0].branching_group_range();
-					if (branch_range.first == N_VERTICES-1) {
+					if (branch_range.first >= branch_range.second) {
 						for (auto& attempt : attempts) {
 							attempt.assign_remaining_groups_in_order();
 						}
@@ -511,15 +501,36 @@ Int N_VERTICES,
 						attempt.branch(branch_range, next_attempts);
 					}
 #if defined(GC_PROFILE_STANDARDIZER_SORT) || defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
-					gc_standardizer_sort_profile::attempts_created.fetch_add(
-						next_attempts.size(),
-						std::memory_order_relaxed
-					);
+					local_attempts_created += next_attempts.size();
 #endif
 
 					attempts.swap(next_attempts);
 				}
 
+#if defined(GC_PROFILE_STANDARDIZER_SORT) || defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
+				gc_standardizer_sort_profile::vertex_color_update_calls.fetch_add(
+					local_update_colors_calls,
+					std::memory_order_relaxed
+				);
+				gc_standardizer_sort_profile::vertex_bucket_init_calls.fetch_add(
+					local_update_groups_calls,
+					std::memory_order_relaxed
+				);
+				gc_standardizer_sort_profile::attempts_created.fetch_add(
+					local_attempts_created,
+					std::memory_order_relaxed
+				);
+#endif
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+				gc_standardizer_sort_profile::vertex_color_update_nanoseconds.fetch_add(
+					local_update_colors_nanoseconds,
+					std::memory_order_relaxed
+				);
+				gc_standardizer_sort_profile::vertex_bucket_init_nanoseconds.fetch_add(
+					local_update_groups_nanoseconds,
+					std::memory_order_relaxed
+				);
+#endif
 #if defined(GC_PROFILE_STANDARDIZER_SORT) || defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
 				const auto labeling_search_stop = std::chrono::steady_clock::now();
 				gc_standardizer_sort_profile::labeling_search_calls.fetch_add(

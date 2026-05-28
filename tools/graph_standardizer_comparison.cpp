@@ -107,8 +107,9 @@ std::vector<OddGraphdegZero<N + 1>> make_split_contract_workload_graphs(int roun
 						edge,
 						split_be.getCoefficient()
 					);
-					WorkGraph::std(contracted);
-					if (contracted.getCoefficient() != fieldType{}) {
+					auto& contracted_graph = contracted.getValue();
+					contracted_graph.directAndSortEdges();
+					if (!contracted_graph.has_double_edge()) {
 						next_graphs.emplace(contracted.getValue());
 					}
 				}
@@ -588,15 +589,12 @@ int run_graph_standardizer_comparison(
 #endif
 
 #if defined(GC_PERF_WITH_NAUTY)
-	check_nauty_sign_correctness(graphs);
 	const double nauty_avg = benchmark_nauty(graphs, iterations);
 	std::cout << "nauty labeling average = " << nauty_avg << " s\n";
 #if defined(GC_PROFILE_STANDARDIZER_SORT) || defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
 	std::cout << "labeling search / nauty labeling = " << (labeling_search_avg_seconds / nauty_avg) << "x\n";
 	std::cout << "nauty labeling / own labeling search = " << (nauty_avg / labeling_search_avg_seconds) << "x\n";
 #endif
-	const double nauty_full_avg = benchmark_nauty_standardizer(graphs, iterations);
-	std::cout << "nauty full standardizer average = " << nauty_full_avg << " s\n";
 #else
 	std::cout << "nauty average = disabled; rebuild this tool with GC_PERF_WITH_NAUTY\n";
 #endif
@@ -607,7 +605,7 @@ int run_graph_standardizer_comparison(
 void print_usage(const char* argv0) {
 	std::cerr << "usage: " << argv0 << " [wheel_N] [split_contract_rounds] [repeat] [iterations] [workload]\n";
 	std::cerr << "  workload: split-contract (default) or vmax\n";
-	std::cerr << "  wheel_N must be one of 9,11,13,15,17,21,25,27,29,31,33,35\n";
+	std::cerr << "  wheel_N must be one of 7,9,11,13,15,17,21,25,27,29,31,33,35\n";
 }
 
 } // namespace
@@ -632,6 +630,8 @@ int main(int argc, char** argv) {
 	}
 
 	switch (wheel_n) {
+	case 7:
+		return run_graph_standardizer_comparison<7>(expansion_rounds, repeat, iterations, workload_kind);
 	case 9:
 		return run_graph_standardizer_comparison<9>(expansion_rounds, repeat, iterations, workload_kind);
 	case 11:
