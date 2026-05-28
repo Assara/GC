@@ -78,8 +78,8 @@ std::vector<OddGraphdegZero<N + 1>> make_split_contract_workload_graphs(int roun
 						split_be.getCoefficient()
 					);
 					auto& contracted_graph = contracted.getValue();
-					contracted_graph.directAndSortEdges();
-					if (!contracted_graph.has_double_edge()) {
+					const signedInt sort_sign = contracted_graph.directAndSortEdges();
+					if (sort_sign != 0 && !contracted_graph.has_double_edge()) {
 						next_graphs.emplace(contracted.getValue());
 					}
 				}
@@ -113,6 +113,7 @@ std::string split_contract_cache_path(int rounds) {
 	return "/tmp/gc_standardizer_split_contract_W" + std::to_string(N)
 		+ "_rounds" + std::to_string(rounds)
 		+ "_int" + std::to_string(sizeof(Int))
+		+ "_v2"
 		+ ".bin";
 }
 
@@ -263,11 +264,28 @@ int run_standardize3_profile(
 		static_cast<double>(gc_standardizer_sort_profile::labeling_search_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
 	const double labeling_search_avg_seconds = labeling_search_total_seconds / static_cast<double>(iterations);
 	const auto attempts_created = gc_standardizer_sort_profile::attempts_created.load(std::memory_order_relaxed);
+	const auto true_final_attempts = gc_standardizer_sort_profile::true_final_attempts.load(std::memory_order_relaxed);
+	const auto false_final_attempts = gc_standardizer_sort_profile::false_final_attempts.load(std::memory_order_relaxed);
+	const auto total_final_attempts = true_final_attempts + false_final_attempts;
 	std::cout << "labeling search average = " << labeling_search_avg_seconds << " s\n";
 	std::cout << "attempts created = " << attempts_created << '\n';
+	std::cout << "true final attempts = " << true_final_attempts << '\n';
+	std::cout << "false final attempts = " << false_final_attempts << '\n';
+	if (total_final_attempts > 0) {
+		std::cout << "true/false final ratio = "
+		          << (static_cast<double>(true_final_attempts) / static_cast<double>(false_final_attempts == 0 ? 1 : false_final_attempts))
+		          << '\n';
+		std::cout << "true final share = "
+		          << (100.0 * static_cast<double>(true_final_attempts) / static_cast<double>(total_final_attempts))
+		          << "%\n";
+	}
 #endif
 
 #if defined(GC_PROFILE_STANDARDIZER_SORT)
+	const double init_colors_total_seconds =
+		static_cast<double>(gc_standardizer_sort_profile::init_colors_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
+	const double init_colors_avg_seconds =
+		init_colors_total_seconds / static_cast<double>(iterations);
 	const double update_colors_total_seconds =
 		static_cast<double>(gc_standardizer_sort_profile::vertex_color_update_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
 	const double update_colors_avg_seconds =
@@ -280,14 +298,53 @@ int run_standardize3_profile(
 		static_cast<double>(gc_standardizer_sort_profile::push_next_attempts_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
 	const double push_next_attempts_avg_seconds =
 		push_next_attempts_total_seconds / static_cast<double>(iterations);
-	const double sign_and_filter_avg_seconds = avg - update_colors_avg_seconds - update_groups_avg_seconds;
+	const double final_graph_build_total_seconds =
+		static_cast<double>(gc_standardizer_sort_profile::final_graph_build_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
+	const double final_graph_build_avg_seconds =
+		final_graph_build_total_seconds / static_cast<double>(iterations);
+	const double final_compare_total_seconds =
+		static_cast<double>(gc_standardizer_sort_profile::final_compare_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
+	const double final_compare_avg_seconds =
+		final_compare_total_seconds / static_cast<double>(iterations);
+	const double labeling_only_avg_seconds =
+		init_colors_avg_seconds + update_colors_avg_seconds + update_groups_avg_seconds + push_next_attempts_avg_seconds;
+	const double sign_and_filter_avg_seconds = avg - labeling_only_avg_seconds;
+	const double tracked_sign_and_filter_avg_seconds =
+		final_graph_build_avg_seconds +
+		final_compare_avg_seconds;
+	const double other_sign_and_filter_avg_seconds =
+		sign_and_filter_avg_seconds - tracked_sign_and_filter_avg_seconds;
+	std::cout << "init_colors average = " << init_colors_avg_seconds << " s\n";
+	std::cout << "init_colors share = "
+	          << (100.0 * init_colors_avg_seconds / avg) << "%\n";
 	std::cout << "update_colors share = "
 	          << (100.0 * update_colors_avg_seconds / avg) << "%\n";
 	std::cout << "update_groups share = "
 	          << (100.0 * update_groups_avg_seconds / avg) << "%\n";
 	std::cout << "push_next_attempts average = " << push_next_attempts_avg_seconds << " s\n";
+	std::cout << "push_next_attempts share = "
+	          << (100.0 * push_next_attempts_avg_seconds / avg) << "%\n";
+	std::cout << "final_graph_build average = " << final_graph_build_avg_seconds << " s\n";
+	std::cout << "final_graph_build share = "
+	          << (100.0 * final_graph_build_avg_seconds / avg) << "%\n";
+	std::cout << "final_compare average = " << final_compare_avg_seconds << " s\n";
+	std::cout << "final_compare share = "
+	          << (100.0 * final_compare_avg_seconds / avg) << "%\n";
 	std::cout << "sign/filter share = "
 	          << (100.0 * sign_and_filter_avg_seconds / avg) << "%\n";
+	if (sign_and_filter_avg_seconds > 0.0) {
+		std::cout << "  final_graph_build / sign-filter = "
+		          << (100.0 * final_graph_build_avg_seconds / sign_and_filter_avg_seconds) << "%\n";
+		std::cout << "  final_compare / sign-filter = "
+		          << (100.0 * final_compare_avg_seconds / sign_and_filter_avg_seconds) << "%\n";
+		std::cout << "  tracked / sign-filter = "
+		          << (100.0 * tracked_sign_and_filter_avg_seconds / sign_and_filter_avg_seconds) << "%\n";
+		std::cout << "  other / sign-filter = "
+		          << (100.0 * other_sign_and_filter_avg_seconds / sign_and_filter_avg_seconds) << "%\n";
+	}
+	std::cout << "other sign/filter average = " << other_sign_and_filter_avg_seconds << " s\n";
+	std::cout << "other sign/filter share = "
+	          << (100.0 * other_sign_and_filter_avg_seconds / avg) << "%\n";
 #endif
 
 	return EXIT_SUCCESS;

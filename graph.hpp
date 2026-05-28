@@ -974,8 +974,179 @@ Int N_VERTICES,
 				return overallSign;
 			}
 
+			struct EdgeRadixEntry {
+				Int u = 0;
+				Int v = 0;
+				Int original_index = 0;
+			};
+
+			template <typename KeyFn>
+			static void stable_bucket_pass(
+				const std::array<EdgeRadixEntry, N_EDGES>& input,
+				std::array<EdgeRadixEntry, N_EDGES>& output,
+				KeyFn key_fn
+			) {
+				std::array<Int, N_VERTICES> counts{};
+				for (const auto& entry : input) {
+					++counts[key_fn(entry)];
+				}
+
+				std::array<Int, N_VERTICES> offsets{};
+				Int next_offset = 0;
+				for (Int key = 0; key < N_VERTICES; ++key) {
+					offsets[key] = next_offset;
+					next_offset += counts[key];
+				}
+
+				std::array<Int, N_VERTICES> next_position = offsets;
+				for (const auto& entry : input) {
+					output[next_position[key_fn(entry)]++] = entry;
+				}
+			}
+
+			static signedInt permutation_sign_from_destinations(
+				const std::array<Int, N_EDGES>& destinations
+			) {
+				std::array<bool, N_EDGES> visited{};
+				signedInt sign = 1;
+
+				for (Int edge_index = 0; edge_index < N_EDGES; ++edge_index) {
+					if (visited[edge_index]) {
+						continue;
+					}
+
+					Int cycle_length = 0;
+					Int current = edge_index;
+					while (!visited[current]) {
+						visited[current] = true;
+						current = destinations[current];
+						++cycle_length;
+					}
+
+					if ((cycle_length & 1) == 0) {
+						sign *= -1;
+					}
+				}
+
+				return sign;
+			}
+
+			signedInt sortEdgesRadix() {
+				if constexpr (N_EDGES <= 1) {
+					return 1;
+				}
+
+				std::array<EdgeRadixEntry, N_EDGES> original_entries{};
+				for (Int edge_index = 0; edge_index < N_EDGES; ++edge_index) {
+					const Int base = N_HAIR + 2 * edge_index;
+					original_entries[edge_index] = EdgeRadixEntry{
+						.u = half_edges[base],
+						.v = half_edges[base + 1],
+						.original_index = edge_index
+					};
+				}
+
+				std::array<EdgeRadixEntry, N_EDGES> by_second{};
+				std::array<EdgeRadixEntry, N_EDGES> sorted_entries{};
+				stable_bucket_pass(original_entries, by_second, [](const EdgeRadixEntry& entry) {
+					return entry.v;
+				});
+				stable_bucket_pass(by_second, sorted_entries, [](const EdgeRadixEntry& entry) {
+					return entry.u;
+				});
+
+				if constexpr (SWAP_EDGE_SIGN == 1) {
+					for (Int sorted_index = 0; sorted_index < N_EDGES; ++sorted_index) {
+						const Int base = N_HAIR + 2 * sorted_index;
+						half_edges[base] = sorted_entries[sorted_index].u;
+						half_edges[base + 1] = sorted_entries[sorted_index].v;
+					}
+					return 1;
+				}
+
+				std::array<Int, N_EDGES> destinations{};
+				for (Int sorted_index = 0; sorted_index < N_EDGES; ++sorted_index) {
+					destinations[sorted_entries[sorted_index].original_index] = sorted_index;
+					const Int base = N_HAIR + 2 * sorted_index;
+					half_edges[base] = sorted_entries[sorted_index].u;
+					half_edges[base + 1] = sorted_entries[sorted_index].v;
+				}
+
+				return permutation_sign_from_destinations(destinations);
+			}
+
 			signedInt directAndSortEdges() {
-				return directEdges() * sortEdgesQuick();
+				signedInt sign = directEdges();
+				return sign * sortEdgesRadix();
+			}
+
+			signedInt sortEdgesActive() {
+				return sortEdgesRadix();
+			}
+
+			signedInt assignPermutedDirectedSortedEdges(
+				const ThisGraph& source,
+				const Permutation<N_VERTICES>& perm
+			) {
+				signedInt sign = 1;
+				if constexpr (SWAP_VERTICES_SIGN == -1) {
+					sign = perm.sign();
+				}
+
+				for (Int i = 0; i < N_HAIR; ++i) {
+					half_edges[i] = perm[source.half_edges[i]];
+				}
+
+				std::array<EdgeRadixEntry, N_EDGES> original_entries{};
+				for (Int edge_index = 0; edge_index < N_EDGES; ++edge_index) {
+					const Int base = N_HAIR + 2 * edge_index;
+					Int u = perm[source.half_edges[base]];
+					Int v = perm[source.half_edges[base + 1]];
+					if (u <= v) {
+						original_entries[edge_index] = EdgeRadixEntry{u, v, edge_index};
+					} else {
+						original_entries[edge_index] = EdgeRadixEntry{v, u, edge_index};
+						if constexpr (FLIP_EDGE_SIGN == -1) {
+							sign *= -1;
+						}
+					}
+				}
+
+				if constexpr (N_EDGES <= 1) {
+					if constexpr (N_EDGES == 1) {
+						half_edges[N_HAIR] = original_entries[0].u;
+						half_edges[N_HAIR + 1] = original_entries[0].v;
+					}
+					return sign;
+				}
+
+				std::array<EdgeRadixEntry, N_EDGES> by_second{};
+				std::array<EdgeRadixEntry, N_EDGES> sorted_entries{};
+				stable_bucket_pass(original_entries, by_second, [](const EdgeRadixEntry& entry) {
+					return entry.v;
+				});
+				stable_bucket_pass(by_second, sorted_entries, [](const EdgeRadixEntry& entry) {
+					return entry.u;
+				});
+
+				if constexpr (SWAP_EDGE_SIGN == 1) {
+					for (Int sorted_index = 0; sorted_index < N_EDGES; ++sorted_index) {
+						const Int base = N_HAIR + 2 * sorted_index;
+						half_edges[base] = sorted_entries[sorted_index].u;
+						half_edges[base + 1] = sorted_entries[sorted_index].v;
+					}
+					return sign;
+				}
+
+				std::array<Int, N_EDGES> destinations{};
+				for (Int sorted_index = 0; sorted_index < N_EDGES; ++sorted_index) {
+					destinations[sorted_entries[sorted_index].original_index] = sorted_index;
+					const Int base = N_HAIR + 2 * sorted_index;
+					half_edges[base] = sorted_entries[sorted_index].u;
+					half_edges[base + 1] = sorted_entries[sorted_index].v;
+				}
+				sign *= permutation_sign_from_destinations(destinations);
+				return sign;
 			}
 
 			signedInt permuteVertices(Permutation<N_VERTICES> perm) {

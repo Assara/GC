@@ -108,8 +108,8 @@ std::vector<OddGraphdegZero<N + 1>> make_split_contract_workload_graphs(int roun
 						split_be.getCoefficient()
 					);
 					auto& contracted_graph = contracted.getValue();
-					contracted_graph.directAndSortEdges();
-					if (!contracted_graph.has_double_edge()) {
+					const signedInt sort_sign = contracted_graph.directAndSortEdges();
+					if (sort_sign != 0 && !contracted_graph.has_double_edge()) {
 						next_graphs.emplace(contracted.getValue());
 					}
 				}
@@ -143,6 +143,7 @@ std::string split_contract_cache_path(int rounds) {
 	return "/tmp/gc_standardizer_split_contract_W" + std::to_string(N)
 		+ "_rounds" + std::to_string(rounds)
 		+ "_int" + std::to_string(sizeof(Int))
+		+ "_v2"
 		+ ".bin";
 }
 

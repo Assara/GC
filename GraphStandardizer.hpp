@@ -17,6 +17,8 @@ namespace gc_standardizer_sort_profile {
 	inline std::atomic<unsigned long long> insertion_sort_calls{0};
 	inline std::atomic<unsigned long long> insertion_sort_swaps{0};
 	inline std::atomic<unsigned long long> insertion_sort_nanoseconds{0};
+	inline std::atomic<unsigned long long> init_colors_calls{0};
+	inline std::atomic<unsigned long long> init_colors_nanoseconds{0};
 	inline std::atomic<unsigned long long> vertex_color_update_calls{0};
 	inline std::atomic<unsigned long long> vertex_color_update_nanoseconds{0};
 	inline std::atomic<unsigned long long> vertex_bucket_init_calls{0};
@@ -28,6 +30,16 @@ namespace gc_standardizer_sort_profile {
 	inline std::atomic<unsigned long long> labeling_search_calls{0};
 	inline std::atomic<unsigned long long> labeling_search_nanoseconds{0};
 	inline std::atomic<unsigned long long> attempts_created{0};
+	inline std::atomic<unsigned long long> true_final_attempts{0};
+	inline std::atomic<unsigned long long> false_final_attempts{0};
+	inline std::atomic<unsigned long long> final_graph_build_calls{0};
+	inline std::atomic<unsigned long long> final_graph_build_nanoseconds{0};
+	inline std::atomic<unsigned long long> direct_edges_calls{0};
+	inline std::atomic<unsigned long long> direct_edges_nanoseconds{0};
+	inline std::atomic<unsigned long long> sort_edges_calls{0};
+	inline std::atomic<unsigned long long> sort_edges_nanoseconds{0};
+	inline std::atomic<unsigned long long> final_compare_calls{0};
+	inline std::atomic<unsigned long long> final_compare_nanoseconds{0};
 	inline std::atomic<unsigned long long> hash_calls{0};
 	inline std::atomic<unsigned long long> hash_nanoseconds{0};
 
@@ -35,6 +47,8 @@ namespace gc_standardizer_sort_profile {
 		insertion_sort_calls.store(0, std::memory_order_relaxed);
 		insertion_sort_swaps.store(0, std::memory_order_relaxed);
 		insertion_sort_nanoseconds.store(0, std::memory_order_relaxed);
+		init_colors_calls.store(0, std::memory_order_relaxed);
+		init_colors_nanoseconds.store(0, std::memory_order_relaxed);
 		vertex_color_update_calls.store(0, std::memory_order_relaxed);
 		vertex_color_update_nanoseconds.store(0, std::memory_order_relaxed);
 		vertex_bucket_init_calls.store(0, std::memory_order_relaxed);
@@ -46,6 +60,16 @@ namespace gc_standardizer_sort_profile {
 		labeling_search_calls.store(0, std::memory_order_relaxed);
 		labeling_search_nanoseconds.store(0, std::memory_order_relaxed);
 		attempts_created.store(0, std::memory_order_relaxed);
+		true_final_attempts.store(0, std::memory_order_relaxed);
+		false_final_attempts.store(0, std::memory_order_relaxed);
+		final_graph_build_calls.store(0, std::memory_order_relaxed);
+		final_graph_build_nanoseconds.store(0, std::memory_order_relaxed);
+		direct_edges_calls.store(0, std::memory_order_relaxed);
+		direct_edges_nanoseconds.store(0, std::memory_order_relaxed);
+		sort_edges_calls.store(0, std::memory_order_relaxed);
+		sort_edges_nanoseconds.store(0, std::memory_order_relaxed);
+		final_compare_calls.store(0, std::memory_order_relaxed);
+		final_compare_nanoseconds.store(0, std::memory_order_relaxed);
 		hash_calls.store(0, std::memory_order_relaxed);
 		hash_nanoseconds.store(0, std::memory_order_relaxed);
 	}
@@ -202,38 +226,18 @@ Int N_VERTICES,
 				}
 
 				void init_starter_colors(const GraphType& G) {
-					array<assign_type, (N_VERTICES > 0) ? (N_VERTICES - 1) : 0> valency_counts{};
 					for (Int e = 0; e < G.half_edges.size(); ++e) {
 						++colors[G.half_edges[e]];
 					}
-
-					for (assign_type v = 0; v < N_VERTICES; ++v) {
-						if (colors[v] > 0 && colors[v] < N_VERTICES) {
-							++valency_counts[colors[v] - 1];
-						}
-					}
-
 					if constexpr (GraphType::N_HAIR > 0) {
 						for (Int i = 0; i < GraphType::N_HAIR; ++i) {
 							colors[G.half_edges[i]] += hash(i);
 						}
 					}
-
-					next_to_assign = 0;
-					for (std::size_t valency = N_VERTICES; valency-- > 1;) {
-						if (valency_counts[valency - 1] != 1) {
-							continue;
-						}
-
-						for (assign_type v = 0; v < N_VERTICES; ++v) {
-							if (colors[v] == valency) {
-								vertex_permutation.p[v] = next_to_assign;
-								++colors[v];
-								++next_to_assign;
-								break;
-							}
-						}
+					for (auto& color : colors) {
+						color = hash(color);
 					}
+
 				}
 
 				signedInt compare(const CanonBuilder3& other) const {
@@ -407,10 +411,12 @@ Int N_VERTICES,
 				unsigned long long local_attempts_created = 1;
 #endif
 #if defined(GC_PROFILE_STANDARDIZER_SORT) || defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
+				unsigned long long local_init_colors_calls = 0;
 				unsigned long long local_update_colors_calls = 0;
 				unsigned long long local_update_groups_calls = 0;
 #endif
 #if defined(GC_PROFILE_STANDARDIZER_SORT)
+				unsigned long long local_init_colors_nanoseconds = 0;
 				unsigned long long local_update_colors_nanoseconds = 0;
 				unsigned long long local_update_groups_nanoseconds = 0;
 #endif
@@ -419,7 +425,22 @@ Int N_VERTICES,
 				const GraphType& G = input.getValue();
 
 				attempts.emplace_back(CanonBuilder3());
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+				const auto init_colors_start = std::chrono::steady_clock::now();
+#endif
 				attempts[0].init_starter_colors(G);
+#if defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
+				++local_init_colors_calls;
+#endif
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+				const auto init_colors_stop = std::chrono::steady_clock::now();
+				++local_init_colors_calls;
+				local_init_colors_nanoseconds += static_cast<unsigned long long>(
+					std::chrono::duration_cast<std::chrono::nanoseconds>(
+						init_colors_stop - init_colors_start
+					).count()
+				);
+#endif
 
 				signedInt cmp;
 				while (attempts.back().next_to_assign < N_VERTICES) {
@@ -508,6 +529,10 @@ Int N_VERTICES,
 				}
 
 #if defined(GC_PROFILE_STANDARDIZER_SORT) || defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
+				gc_standardizer_sort_profile::init_colors_calls.fetch_add(
+					local_init_colors_calls,
+					std::memory_order_relaxed
+				);
 				gc_standardizer_sort_profile::vertex_color_update_calls.fetch_add(
 					local_update_colors_calls,
 					std::memory_order_relaxed
@@ -522,6 +547,10 @@ Int N_VERTICES,
 				);
 #endif
 #if defined(GC_PROFILE_STANDARDIZER_SORT)
+				gc_standardizer_sort_profile::init_colors_nanoseconds.fetch_add(
+					local_init_colors_nanoseconds,
+					std::memory_order_relaxed
+				);
 				gc_standardizer_sort_profile::vertex_color_update_nanoseconds.fetch_add(
 					local_update_colors_nanoseconds,
 					std::memory_order_relaxed
@@ -551,34 +580,112 @@ Int N_VERTICES,
 				bool have_best = false;
 				bool containsPlus = false;
 				bool containsMinus = false;
-				bool checked_double_edge = false;
+				unsigned long long matching_best_attempts = 0;
+
+				if (attempts.size() == 1) {
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+					const auto final_graph_build_start = std::chrono::steady_clock::now();
+#endif
+					GraphType graph;
+					const signedInt sign = graph.assignPermutedDirectedSortedEdges(
+						input.getValue(),
+						attempts[0].vertex_permutation
+					);
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+					const auto final_graph_build_stop = std::chrono::steady_clock::now();
+					gc_standardizer_sort_profile::final_graph_build_calls.fetch_add(
+						1,
+						std::memory_order_relaxed
+					);
+					gc_standardizer_sort_profile::final_graph_build_nanoseconds.fetch_add(
+						static_cast<unsigned long long>(
+							std::chrono::duration_cast<std::chrono::nanoseconds>(
+								final_graph_build_stop - final_graph_build_start
+							).count()
+						),
+						std::memory_order_relaxed
+					);
+#endif
+#if defined(GC_PROFILE_STANDARDIZER_SORT) || defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
+					gc_standardizer_sort_profile::true_final_attempts.fetch_add(
+						1,
+						std::memory_order_relaxed
+					);
+#endif
+					return BasisElement<GraphType, fieldType>(
+						graph,
+						sign > 0 ? input.getCoefficient() : -input.getCoefficient()
+					);
+				}
 
 				for (const CanonBuilder3& attempt : attempts) {
-					GraphType graph = input.getValue();
-					signedInt sign = graph.permuteVertices(attempt.vertex_permutation);
-					sign *= graph.directAndSortEdges();
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+					const auto final_graph_build_start = std::chrono::steady_clock::now();
+#endif
+					GraphType graph;
+					signedInt sign = graph.assignPermutedDirectedSortedEdges(
+						input.getValue(),
+						attempt.vertex_permutation
+					);
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+					const auto final_graph_build_stop = std::chrono::steady_clock::now();
+					gc_standardizer_sort_profile::final_graph_build_calls.fetch_add(
+						1,
+						std::memory_order_relaxed
+					);
+					gc_standardizer_sort_profile::final_graph_build_nanoseconds.fetch_add(
+						static_cast<unsigned long long>(
+							std::chrono::duration_cast<std::chrono::nanoseconds>(
+								final_graph_build_stop - final_graph_build_start
+							).count()
+						),
+						std::memory_order_relaxed
+					);
+#endif
 
-					if constexpr (GraphType::SWAP_EDGE_SIGN == -1) {
-						if (!checked_double_edge) {
-							checked_double_edge = true;
-							if (graph.has_double_edge()) {
-								return BasisElement<GraphType, fieldType>(graph, 0);
-							}
-						}
-					}
-
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+					const auto final_compare_start = std::chrono::steady_clock::now();
+#endif
 					const signedInt comparison = have_best ? graph.compare(best_graph) : -1;
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+					const auto final_compare_stop = std::chrono::steady_clock::now();
+					gc_standardizer_sort_profile::final_compare_calls.fetch_add(
+						1,
+						std::memory_order_relaxed
+					);
+					gc_standardizer_sort_profile::final_compare_nanoseconds.fetch_add(
+						static_cast<unsigned long long>(
+							std::chrono::duration_cast<std::chrono::nanoseconds>(
+								final_compare_stop - final_compare_start
+							).count()
+						),
+						std::memory_order_relaxed
+					);
+#endif
 
 					if (comparison < 0) {
 						best_graph = graph;
 						have_best = true;
 						containsPlus = sign > 0;
 						containsMinus = sign < 0;
+						matching_best_attempts = 1;
 					} else if (comparison == 0) {
 						containsPlus = containsPlus || sign > 0;
 						containsMinus = containsMinus || sign < 0;
+						++matching_best_attempts;
 					}
 				}
+
+#if defined(GC_PROFILE_STANDARDIZER_SORT) || defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
+				gc_standardizer_sort_profile::true_final_attempts.fetch_add(
+					matching_best_attempts,
+					std::memory_order_relaxed
+				);
+				gc_standardizer_sort_profile::false_final_attempts.fetch_add(
+					static_cast<unsigned long long>(attempts.size()) - matching_best_attempts,
+					std::memory_order_relaxed
+				);
+#endif
 
 				if (containsPlus && containsMinus) {
 					return BasisElement<GraphType, fieldType>(best_graph, 0);
