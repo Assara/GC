@@ -610,6 +610,108 @@ class GC {
 					});
 		}
 
+		std::vector<ContGraphType> split_contract_primitive_candidates(int rounds) const {
+			std::unordered_set<ContGraphType> seen;
+			std::vector<ContGraphType> frontier;
+			std::vector<ContGraphType> candidates;
+
+			for (auto contracted : d_contraction_without_sort()) {
+				ContGraphType::std(contracted);
+				if (contracted.getCoefficient() == fieldType{}) {
+					continue;
+				}
+				if (seen.insert(contracted.getValue()).second) {
+					frontier.push_back(contracted.getValue());
+					candidates.push_back(contracted.getValue());
+				}
+			}
+
+			std::cout << "generated primitive candidates round 0: frontier = "
+			          << frontier.size() << ", cumulative = " << candidates.size() << '\n';
+
+			for (int round = 1; round <= rounds; ++round) {
+				std::unordered_set<ContGraphType> next_seen;
+				std::size_t raw_splits = 0;
+				std::size_t raw_contracts = 0;
+				std::size_t nonzero_contracts = 0;
+
+				for (const ContGraphType& graph : frontier) {
+					const auto splits = graph.unsorted_splits(fieldType{1});
+					for (const auto& split_be : splits.raw_elements()) {
+						if (split_be.getCoefficient() == fieldType{}) {
+							continue;
+						}
+						++raw_splits;
+
+						for (Int edge = 0; edge < ContGraphType::SplitGraph::N_EDGES_; ++edge) {
+							auto contracted = split_be.getValue().contract_edge(edge, split_be.getCoefficient());
+							++raw_contracts;
+							ContGraphType::std(contracted);
+							if (contracted.getCoefficient() == fieldType{}) {
+								continue;
+							}
+							++nonzero_contracts;
+
+							const ContGraphType& candidate = contracted.getValue();
+							if (!seen.contains(candidate)) {
+								next_seen.insert(candidate);
+							}
+						}
+					}
+				}
+
+				frontier.assign(next_seen.begin(), next_seen.end());
+				std::sort(frontier.begin(), frontier.end());
+				for (const ContGraphType& graph : frontier) {
+					seen.insert(graph);
+					candidates.push_back(graph);
+				}
+				std::sort(candidates.begin(), candidates.end());
+
+				std::cout << "generated primitive candidates round " << round
+				          << ": raw_splits = " << raw_splits
+				          << ", raw_contracts = " << raw_contracts
+				          << ", nonzero_contracts = " << nonzero_contracts
+				          << ", frontier = " << frontier.size()
+				          << ", cumulative = " << candidates.size() << '\n';
+
+				if (frontier.empty()) {
+					break;
+				}
+			}
+
+			return candidates;
+		}
+
+		std::optional<ContGC> try_find_split_primitive_generated(int rounds) const {
+			const auto candidates = split_contract_primitive_candidates(rounds);
+			std::unordered_map<ContGraphType, L> coboundary_map;
+			coboundary_map.reserve(candidates.size());
+
+			for (const ContGraphType& graph : candidates) {
+				auto column = ContGC(graph, AssumeBasisOrderTag{}).delta().data();
+				if (!column.empty()) {
+					coboundary_map.emplace(graph, std::move(column));
+				}
+			}
+
+			std::cout << "created generated coboundary map. domain size = "
+			          << coboundary_map.size() << '\n';
+
+			VectorSpace::wiedemann_primitive_finder solver(coboundary_map);
+			std::optional<ContL> primitive_optional = solver.find_primitive_or_empty(this->data());
+
+			if (!primitive_optional.has_value()) {
+				std::cout << "generated split-contract primitive search found no solution\n";
+				return std::nullopt;
+			}
+
+			std::cout << "generated split-contract primitive solved\n";
+			return primitive_optional.transform([](ContL lin_comb) {
+				return ContGC(lin_comb);
+			});
+		}
+
 		bigInt size() {
 			return vec.size();
 		}

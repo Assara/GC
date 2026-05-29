@@ -20,6 +20,35 @@ push_down_the_waterfall(GC<N_VERTICES, N_EDGES, 0, 0, 0, 1> gamma) {
 	return with_edge_diff.try_find_split_primitive();
 }
 
+template <
+	Int N_VERTICES,
+	Int N_EDGES
+>
+std::optional<GC<N_VERTICES - 1, N_EDGES, 0, 0, 0, 1>>
+push_down_with_generated_split_contract_support(
+	GC<N_VERTICES, N_EDGES, 0, 0, 0, 1> gamma,
+	int generated_rounds
+) {
+	cout << "using generated split-contract support: ";
+	auto with_edge_diff = gamma.add_edge_differential();
+	return with_edge_diff.try_find_split_primitive_generated(generated_rounds);
+}
+
+template <
+	Int N_VERTICES,
+	Int N_EDGES
+>
+std::optional<GC<N_VERTICES - 1, N_EDGES, 0, 0, 0, 1>>
+push_down_by_selected_method(
+	GC<N_VERTICES, N_EDGES, 0, 0, 0, 1> gamma,
+	int generated_rounds
+) {
+	if (generated_rounds >= 0) {
+		return push_down_with_generated_split_contract_support(gamma, generated_rounds);
+	}
+	return push_down_the_waterfall(gamma);
+}
+
 template <typename GCType>
 void print_missing_step(const char* label) {
 	cout << "Could not find primitive for " << label << "!!" << endl;
@@ -45,13 +74,13 @@ filter_to_wheel_component(OddGCdegZero<WheelN + 1> wheel_class) {
 	return filtered;
 }
 
-std::optional<OddGCdegZero<4>> tryFindFullWheel3ClassByWaterfall() {
+std::optional<OddGCdegZero<4>> tryFindFullWheel3Class(int generated_rounds) {
 	GC loop(loop_graph<5>());
 
 	cout << "loop: ";
 	loop.print();
 
-	auto step1 = push_down_the_waterfall(loop);
+	auto step1 = push_down_by_selected_method(loop, generated_rounds);
 	if (!step1) {
 		print_missing_step<decltype(loop)>("step 1");
 		return std::nullopt;
@@ -63,25 +92,25 @@ std::optional<OddGCdegZero<4>> tryFindFullWheel3ClassByWaterfall() {
 	return W3_class;
 }
 
-std::optional<OddGCdegZero<6>> tryFindFullWheel5ClassByWaterfall() {
+std::optional<OddGCdegZero<6>> tryFindFullWheel5Class(int generated_rounds) {
 	GC loop(loop_graph<9>());
 
 	cout << "loop: ";
 	loop.print();
 
-	auto step1 = push_down_the_waterfall(loop);
+	auto step1 = push_down_by_selected_method(loop, generated_rounds);
 	if (!step1) {
 		print_missing_step<decltype(loop)>("step 1");
 		return std::nullopt;
 	}
 
-	auto step2 = push_down_the_waterfall(*step1);
+	auto step2 = push_down_by_selected_method(*step1, generated_rounds);
 	if (!step2) {
 		print_missing_step<decltype(*step1)>("step 2");
 		return std::nullopt;
 	}
 
-	auto step3 = push_down_the_waterfall(*step2);
+	auto step3 = push_down_by_selected_method(*step2, generated_rounds);
 	if (!step3) {
 		print_missing_step<decltype(*step2)>("step 3");
 		return std::nullopt;
@@ -93,38 +122,38 @@ std::optional<OddGCdegZero<6>> tryFindFullWheel5ClassByWaterfall() {
 	return W5_class;
 }
 
-std::optional<OddGCdegZero<8>> tryFindFullWheel7ClassByWaterfall() {
+std::optional<OddGCdegZero<8>> tryFindFullWheel7Class(int generated_rounds) {
 	GC loop(loop_graph<13>());
 
 	cout << "loop: ";
 	loop.print();
 
-	auto step1 = push_down_the_waterfall(loop);
+	auto step1 = push_down_by_selected_method(loop, generated_rounds);
 	if (!step1) {
 		print_missing_step<decltype(loop)>("step 1");
 		return std::nullopt;
 	}
 
-	auto step2 = push_down_the_waterfall(*step1);
+	auto step2 = push_down_by_selected_method(*step1, generated_rounds);
 	if (!step2) {
 		print_missing_step<decltype(*step1)>("step 2");
 		return std::nullopt;
 	}
 
-	auto step3 = push_down_the_waterfall(*step2);
+	auto step3 = push_down_by_selected_method(*step2, generated_rounds);
 	if (!step3) {
 		print_missing_step<decltype(*step2)>("step 3");
 		return std::nullopt;
 	}
 
-	auto step4 = push_down_the_waterfall(*step3);
+	auto step4 = push_down_by_selected_method(*step3, generated_rounds);
 	if (!step4) {
 		print_missing_step<decltype(*step3)>("step 4");
 		step3->print();
 		return std::nullopt;
 	}
 
-	auto step5 = push_down_the_waterfall(*step4);
+	auto step5 = push_down_by_selected_method(*step4, generated_rounds);
 	if (!step5) {
 		print_missing_step<decltype(*step4)>("step 5");
 		return std::nullopt;
@@ -134,56 +163,56 @@ std::optional<OddGCdegZero<8>> tryFindFullWheel7ClassByWaterfall() {
 	return filter_to_wheel_component<7>(W7_class);
 }
 
-std::optional<OddGCdegZero<10>> tryFindFullWheel9ClassByWaterfall() {
+std::optional<OddGCdegZero<10>> tryFindFullWheel9Class(int generated_rounds) {
 	GC loop(loop_graph<17>());
 
 	cout << "loop: ";
 	loop.print();
 
 	cout << "are we getting step 1?" << endl;
-	auto step1 = push_down_the_waterfall(loop);
+	auto step1 = push_down_by_selected_method(loop, generated_rounds);
 	if (!step1) {
 		print_missing_step<decltype(loop)>("step 1");
 		return std::nullopt;
 	}
 
 	cout << "step 2" << endl;
-	auto step2 = push_down_the_waterfall(*step1);
+	auto step2 = push_down_by_selected_method(*step1, generated_rounds);
 	if (!step2) {
 		print_missing_step<decltype(*step1)>("step 2");
 		return std::nullopt;
 	}
 
 	cout << "step 3" << endl;
-	auto step3 = push_down_the_waterfall(*step2);
+	auto step3 = push_down_by_selected_method(*step2, generated_rounds);
 	if (!step3) {
 		print_missing_step<decltype(*step2)>("step 3");
 		return std::nullopt;
 	}
 
 	cout << "trying step 4. step3.size() = " << step3->size() << endl;
-	auto step4 = push_down_the_waterfall(*step3);
+	auto step4 = push_down_by_selected_method(*step3, generated_rounds);
 	if (!step4) {
 		print_missing_step<decltype(*step3)>("step 4");
 		return std::nullopt;
 	}
 
 	cout << "step 5" << endl;
-	auto step5 = push_down_the_waterfall(*step4);
+	auto step5 = push_down_by_selected_method(*step4, generated_rounds);
 	if (!step5) {
 		print_missing_step<decltype(*step4)>("step 5");
 		return std::nullopt;
 	}
 
 	cout << "step 6" << endl;
-	auto step6 = push_down_the_waterfall(*step5);
+	auto step6 = push_down_by_selected_method(*step5, generated_rounds);
 	if (!step6) {
 		print_missing_step<decltype(*step5)>("step 6");
 		return std::nullopt;
 	}
 
 	cout << "step 7" << endl;
-	auto step7 = push_down_the_waterfall(*step6);
+	auto step7 = push_down_by_selected_method(*step6, generated_rounds);
 	if (!step7) {
 		print_missing_step<decltype(*step6)>("step 7");
 		return std::nullopt;
@@ -216,18 +245,19 @@ int write_split_waterfall_class(
 int main(int argc, char** argv) {
 	const int wheel_n = argc >= 2 ? std::stoi(argv[1]) : 7;
 	const string output_path = argc >= 3 ? argv[2] : "W" + std::to_string(wheel_n) + ".txt";
+	const int generated_rounds = argc >= 4 ? std::stoi(argv[3]) : -1;
 
 	switch (wheel_n) {
 	case 3:
-		return write_split_waterfall_class<3>(output_path, tryFindFullWheel3ClassByWaterfall());
+		return write_split_waterfall_class<3>(output_path, tryFindFullWheel3Class(generated_rounds));
 	case 5:
-		return write_split_waterfall_class<5>(output_path, tryFindFullWheel5ClassByWaterfall());
+		return write_split_waterfall_class<5>(output_path, tryFindFullWheel5Class(generated_rounds));
 	case 7:
-		return write_split_waterfall_class<7>(output_path, tryFindFullWheel7ClassByWaterfall());
+		return write_split_waterfall_class<7>(output_path, tryFindFullWheel7Class(generated_rounds));
 	case 9:
-		return write_split_waterfall_class<9>(output_path, tryFindFullWheel9ClassByWaterfall());
+		return write_split_waterfall_class<9>(output_path, tryFindFullWheel9Class(generated_rounds));
 	default:
-		cerr << "usage: " << argv[0] << " [3|5|7|9] [output_path]" << endl;
+		cerr << "usage: " << argv[0] << " [3|5|7|9] [output_path] [generated_rounds]" << endl;
 		return EXIT_FAILURE;
 	}
 }

@@ -9,6 +9,7 @@ SPLIT_WATERFALL_TARGET := gc_split_waterfall_playground
 STANDARDIZE_PERF_TARGET := standardize_perf
 STANDARDIZE3_PROFILE_TARGET := standardize3_profile
 GRAPH_STANDARDIZER_COMPARE_TARGET := graph_standardizer_compare
+WHEEL_SPLIT_CONTRACT_REPS_TARGET := wheel_split_contract_reps
 SOLVER_COMPARE_TARGET := solver_compare
 TEST_TARGET := gc_test
 BUILD_DIR := build
@@ -53,6 +54,9 @@ GRAPH_STANDARDIZER_COMPARE_SRCS := tools/graph_standardizer_comparison.cpp
 GRAPH_STANDARDIZER_COMPARE_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(GRAPH_STANDARDIZER_COMPARE_SRCS))
 GRAPH_STANDARDIZER_COMPARE_NAUTY_OBJS := $(BUILD_DIR)/tools/graph_standardizer_comparison_nauty.o
 
+WHEEL_SPLIT_CONTRACT_REPS_SRCS := tools/wheel_split_contract_reps.cpp
+WHEEL_SPLIT_CONTRACT_REPS_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(WHEEL_SPLIT_CONTRACT_REPS_SRCS))
+
 SOLVER_COMPARE_SRCS := tools/solver_comparison.cpp
 SOLVER_COMPARE_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(SOLVER_COMPARE_SRCS))
 SOLVER_COMPARE_LINBOX_OBJS := $(BUILD_DIR)/tools/solver_comparison_linbox.o
@@ -62,7 +66,7 @@ TEST_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(TEST_SRCS))
 
 # ======= RULES =======
 
-.PHONY: all clean run playground split-waterfall run-split-waterfall standardize-perf standardize3-profile run-standardize-perf run-standardize3-profile graph-standardizer-compare graph-standardizer-compare-nauty run-graph-standardizer-compare solver-compare solver-compare-linbox run-solver-compare test
+.PHONY: all clean run playground split-waterfall run-split-waterfall standardize-perf standardize3-profile run-standardize-perf run-standardize3-profile graph-standardizer-compare graph-standardizer-compare-nauty run-graph-standardizer-compare wheel-split-contract-reps run-wheel-split-contract-reps solver-compare solver-compare-linbox run-solver-compare test
 
 all: $(TARGET)
 
@@ -101,6 +105,11 @@ $(GRAPH_STANDARDIZER_COMPARE_TARGET)-nauty: $(GRAPH_STANDARDIZER_COMPARE_NAUTY_O
 	$(LD) $(GRAPH_STANDARDIZER_COMPARE_NAUTY_OBJS) $(LDFLAGS) $(NAUTY_LDLIBS) -o $(GRAPH_STANDARDIZER_COMPARE_TARGET)-nauty
 	@echo "✅ Build complete."
 
+$(WHEEL_SPLIT_CONTRACT_REPS_TARGET): $(WHEEL_SPLIT_CONTRACT_REPS_OBJS)
+	@echo "🚧 Linking $(WHEEL_SPLIT_CONTRACT_REPS_TARGET) with Clang + LLD..."
+	$(LD) $(WHEEL_SPLIT_CONTRACT_REPS_OBJS) $(LDFLAGS) -o $(WHEEL_SPLIT_CONTRACT_REPS_TARGET)
+	@echo "✅ Build complete."
+
 $(SOLVER_COMPARE_TARGET): $(SOLVER_COMPARE_OBJS)
 	@echo "🚧 Linking $(SOLVER_COMPARE_TARGET) with Clang + LLD..."
 	$(LD) $(SOLVER_COMPARE_OBJS) $(LDFLAGS) -o $(SOLVER_COMPARE_TARGET)
@@ -133,7 +142,7 @@ $(SOLVER_COMPARE_LINBOX_OBJS): tools/solver_comparison.cpp
 
 clean:
 	@echo "🧹 Cleaning build files..."
-	rm -rf $(BUILD_DIR) $(TARGET) $(PLAYGROUND_TARGET) $(SPLIT_WATERFALL_TARGET) $(STANDARDIZE_PERF_TARGET) $(GRAPH_STANDARDIZER_COMPARE_TARGET) $(GRAPH_STANDARDIZER_COMPARE_TARGET)-nauty $(SOLVER_COMPARE_TARGET) $(SOLVER_COMPARE_TARGET)-linbox $(TEST_TARGET)
+	rm -rf $(BUILD_DIR) $(TARGET) $(PLAYGROUND_TARGET) $(SPLIT_WATERFALL_TARGET) $(STANDARDIZE_PERF_TARGET) $(GRAPH_STANDARDIZER_COMPARE_TARGET) $(GRAPH_STANDARDIZER_COMPARE_TARGET)-nauty $(WHEEL_SPLIT_CONTRACT_REPS_TARGET) $(SOLVER_COMPARE_TARGET) $(SOLVER_COMPARE_TARGET)-linbox $(TEST_TARGET)
 
 run: all
 	@./$(TARGET)
@@ -161,6 +170,11 @@ graph-standardizer-compare-nauty: $(GRAPH_STANDARDIZER_COMPARE_TARGET)-nauty
 
 run-graph-standardizer-compare: $(GRAPH_STANDARDIZER_COMPARE_TARGET)
 	@./$(GRAPH_STANDARDIZER_COMPARE_TARGET) $(or $(WHEEL),25) $(or $(REPEAT),1) $(or $(ITER),3)
+
+wheel-split-contract-reps: $(WHEEL_SPLIT_CONTRACT_REPS_TARGET)
+
+run-wheel-split-contract-reps: $(WHEEL_SPLIT_CONTRACT_REPS_TARGET)
+	@./$(WHEEL_SPLIT_CONTRACT_REPS_TARGET) $(or $(WHEEL),11) $(or $(ROUNDS),2) $(OUT)
 
 solver-compare: $(SOLVER_COMPARE_TARGET)
 
