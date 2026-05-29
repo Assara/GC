@@ -14,6 +14,13 @@ SOLVER_COMPARE_TARGET := solver_compare
 TEST_TARGET := gc_test
 BUILD_DIR := build
 
+WHEEL ?= 9
+SPLIT_CONTRACT_ROUNDS ?= $(shell echo $$((($(WHEEL) - 3) / 2)))
+SPLIT_CONTRACT_DIR ?= output/split_contract
+SPLIT_CONTRACT_CANDIDATES ?= $(SPLIT_CONTRACT_DIR)/W$(WHEEL)_candidates.txt
+SPLIT_CONTRACT_MAP_PREFIX ?= $(SPLIT_CONTRACT_DIR)/maps/W$(WHEEL)_rounds$(SPLIT_CONTRACT_ROUNDS)_split_map
+CHECKPOINT_INTERVAL ?= 32
+
 # Include directories
 INC       := -I. -IVectorSpace
 
@@ -66,7 +73,7 @@ TEST_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(TEST_SRCS))
 
 # ======= RULES =======
 
-.PHONY: all clean run playground split-waterfall run-split-waterfall standardize-perf standardize3-profile run-standardize-perf run-standardize3-profile graph-standardizer-compare graph-standardizer-compare-nauty run-graph-standardizer-compare wheel-split-contract-reps run-wheel-split-contract-reps solver-compare solver-compare-linbox run-solver-compare test
+.PHONY: all clean run playground split-waterfall run-split-waterfall standardize-perf standardize3-profile run-standardize-perf run-standardize3-profile graph-standardizer-compare graph-standardizer-compare-nauty run-graph-standardizer-compare wheel-split-contract-reps run-wheel-split-contract-reps run-split-contract-files run-split-contract-solver solver-compare solver-compare-linbox run-solver-compare test
 
 all: $(TARGET)
 
@@ -175,6 +182,17 @@ wheel-split-contract-reps: $(WHEEL_SPLIT_CONTRACT_REPS_TARGET)
 
 run-wheel-split-contract-reps: $(WHEEL_SPLIT_CONTRACT_REPS_TARGET)
 	@./$(WHEEL_SPLIT_CONTRACT_REPS_TARGET) $(or $(WHEEL),11) $(or $(ROUNDS),2) $(OUT)
+
+run-split-contract-files: $(WHEEL_SPLIT_CONTRACT_REPS_TARGET)
+	@echo "Generating split-contract files for W$(WHEEL), rounds $(SPLIT_CONTRACT_ROUNDS)"
+	@./$(WHEEL_SPLIT_CONTRACT_REPS_TARGET) $(WHEEL) $(SPLIT_CONTRACT_ROUNDS) $(SPLIT_CONTRACT_CANDIDATES) unused enumerate
+	@./$(WHEEL_SPLIT_CONTRACT_REPS_TARGET) $(WHEEL) $(SPLIT_CONTRACT_ROUNDS) $(SPLIT_CONTRACT_CANDIDATES) $(SPLIT_CONTRACT_MAP_PREFIX) split-map
+
+run-split-contract-solver: $(WHEEL_SPLIT_CONTRACT_REPS_TARGET)
+	@echo "Solving from generated split-contract files for W$(WHEEL), rounds $(SPLIT_CONTRACT_ROUNDS)"
+	@echo "Checkpoint prefix: $(SPLIT_CONTRACT_MAP_PREFIX)_wiedemann_checkpoint.bin"
+	@echo "Checkpoint interval: $(CHECKPOINT_INTERVAL) MMT iterations"
+	@./$(WHEEL_SPLIT_CONTRACT_REPS_TARGET) $(WHEEL) $(SPLIT_CONTRACT_ROUNDS) unused $(SPLIT_CONTRACT_MAP_PREFIX) split-map-solve $(CHECKPOINT_INTERVAL)
 
 solver-compare: $(SOLVER_COMPARE_TARGET)
 
