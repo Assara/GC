@@ -259,92 +259,21 @@ int run_standardize3_profile(
 	const double avg = benchmark_standardize3(graphs, iterations);
 	std::cout << "standardize3 average = " << avg << " s\n";
 
-#if defined(GC_PROFILE_STANDARDIZER_SORT) || defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
-	const double labeling_search_total_seconds =
-		static_cast<double>(gc_standardizer_sort_profile::labeling_search_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
-	const double labeling_search_avg_seconds = labeling_search_total_seconds / static_cast<double>(iterations);
-	const auto attempts_created = gc_standardizer_sort_profile::attempts_created.load(std::memory_order_relaxed);
-	const auto true_final_attempts = gc_standardizer_sort_profile::true_final_attempts.load(std::memory_order_relaxed);
-	const auto false_final_attempts = gc_standardizer_sort_profile::false_final_attempts.load(std::memory_order_relaxed);
-	const auto total_final_attempts = true_final_attempts + false_final_attempts;
-	std::cout << "labeling search average = " << labeling_search_avg_seconds << " s\n";
-	std::cout << "attempts created = " << attempts_created << '\n';
-	std::cout << "true final attempts = " << true_final_attempts << '\n';
-	std::cout << "false final attempts = " << false_final_attempts << '\n';
-	if (total_final_attempts > 0) {
-		std::cout << "true/false final ratio = "
-		          << (static_cast<double>(true_final_attempts) / static_cast<double>(false_final_attempts == 0 ? 1 : false_final_attempts))
-		          << '\n';
-		std::cout << "true final share = "
-		          << (100.0 * static_cast<double>(true_final_attempts) / static_cast<double>(total_final_attempts))
-		          << "%\n";
-	}
-#endif
-
 #if defined(GC_PROFILE_STANDARDIZER_SORT)
-	const double init_colors_total_seconds =
-		static_cast<double>(gc_standardizer_sort_profile::init_colors_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
-	const double init_colors_avg_seconds =
-		init_colors_total_seconds / static_cast<double>(iterations);
-	const double update_colors_total_seconds =
-		static_cast<double>(gc_standardizer_sort_profile::vertex_color_update_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
-	const double update_colors_avg_seconds =
-		update_colors_total_seconds / static_cast<double>(iterations);
-	const double update_groups_total_seconds =
-		static_cast<double>(gc_standardizer_sort_profile::vertex_bucket_init_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
-	const double update_groups_avg_seconds =
-		update_groups_total_seconds / static_cast<double>(iterations);
-	const double push_next_attempts_total_seconds =
-		static_cast<double>(gc_standardizer_sort_profile::push_next_attempts_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
-	const double push_next_attempts_avg_seconds =
-		push_next_attempts_total_seconds / static_cast<double>(iterations);
-	const double final_graph_build_total_seconds =
-		static_cast<double>(gc_standardizer_sort_profile::final_graph_build_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
-	const double final_graph_build_avg_seconds =
-		final_graph_build_total_seconds / static_cast<double>(iterations);
-	const double final_compare_total_seconds =
-		static_cast<double>(gc_standardizer_sort_profile::final_compare_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
-	const double final_compare_avg_seconds =
-		final_compare_total_seconds / static_cast<double>(iterations);
-	const double labeling_only_avg_seconds =
-		init_colors_avg_seconds + update_colors_avg_seconds + update_groups_avg_seconds + push_next_attempts_avg_seconds;
-	const double sign_and_filter_avg_seconds = avg - labeling_only_avg_seconds;
-	const double tracked_sign_and_filter_avg_seconds =
-		final_graph_build_avg_seconds +
-		final_compare_avg_seconds;
-	const double other_sign_and_filter_avg_seconds =
-		sign_and_filter_avg_seconds - tracked_sign_and_filter_avg_seconds;
-	std::cout << "init_colors average = " << init_colors_avg_seconds << " s\n";
-	std::cout << "init_colors share = "
-	          << (100.0 * init_colors_avg_seconds / avg) << "%\n";
-	std::cout << "update_colors share = "
-	          << (100.0 * update_colors_avg_seconds / avg) << "%\n";
-	std::cout << "update_groups share = "
-	          << (100.0 * update_groups_avg_seconds / avg) << "%\n";
-	std::cout << "push_next_attempts average = " << push_next_attempts_avg_seconds << " s\n";
-	std::cout << "push_next_attempts share = "
-	          << (100.0 * push_next_attempts_avg_seconds / avg) << "%\n";
-	std::cout << "final_graph_build average = " << final_graph_build_avg_seconds << " s\n";
-	std::cout << "final_graph_build share = "
-	          << (100.0 * final_graph_build_avg_seconds / avg) << "%\n";
-	std::cout << "final_compare average = " << final_compare_avg_seconds << " s\n";
-	std::cout << "final_compare share = "
-	          << (100.0 * final_compare_avg_seconds / avg) << "%\n";
-	std::cout << "sign/filter share = "
-	          << (100.0 * sign_and_filter_avg_seconds / avg) << "%\n";
-	if (sign_and_filter_avg_seconds > 0.0) {
-		std::cout << "  final_graph_build / sign-filter = "
-		          << (100.0 * final_graph_build_avg_seconds / sign_and_filter_avg_seconds) << "%\n";
-		std::cout << "  final_compare / sign-filter = "
-		          << (100.0 * final_compare_avg_seconds / sign_and_filter_avg_seconds) << "%\n";
-		std::cout << "  tracked / sign-filter = "
-		          << (100.0 * tracked_sign_and_filter_avg_seconds / sign_and_filter_avg_seconds) << "%\n";
-		std::cout << "  other / sign-filter = "
-		          << (100.0 * other_sign_and_filter_avg_seconds / sign_and_filter_avg_seconds) << "%\n";
-	}
-	std::cout << "other sign/filter average = " << other_sign_and_filter_avg_seconds << " s\n";
-	std::cout << "other sign/filter share = "
-	          << (100.0 * other_sign_and_filter_avg_seconds / avg) << "%\n";
+	const double create_final_attempts_total_seconds =
+		static_cast<double>(gc_standardizer_sort_profile::create_final_attempts_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
+	const double create_final_attempts_avg_seconds =
+		create_final_attempts_total_seconds / static_cast<double>(iterations);
+	const double sort_and_filter_total_seconds =
+		static_cast<double>(gc_standardizer_sort_profile::sort_and_filter_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
+	const double sort_and_filter_avg_seconds =
+		sort_and_filter_total_seconds / static_cast<double>(iterations);
+	std::cout << "create final attempts average = " << create_final_attempts_avg_seconds << " s\n";
+	std::cout << "create final attempts share = "
+	          << (100.0 * create_final_attempts_avg_seconds / avg) << "%\n";
+	std::cout << "sort/filter average = " << sort_and_filter_avg_seconds << " s\n";
+	std::cout << "sort/filter share = "
+	          << (100.0 * sort_and_filter_avg_seconds / avg) << "%\n";
 #endif
 
 	return EXIT_SUCCESS;

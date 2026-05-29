@@ -8,10 +8,6 @@
 #include <unordered_set>
 #include <iostream>
 #include <algorithm>
-#if defined(GC_PROFILE_STANDARDIZER_SORT)
-#include <atomic>
-#include <chrono>
-#endif
 #include "types.hpp"
 #include "permutation.hpp"
 #include "CombinatorialUtils.hpp"
@@ -892,10 +888,6 @@ Int N_VERTICES,
 			}
 
 			signedInt sortEdgesQuick() {
-#if defined(GC_PROFILE_STANDARDIZER_SORT)
-				const auto sort_start = std::chrono::steady_clock::now();
-				unsigned long long swap_count = 0;
-#endif
 				signedInt overallSign = 1;
 
 				auto insertion_sort_range = [&](int left, int right) {
@@ -903,9 +895,6 @@ Int N_VERTICES,
 						int j = i;
 						while (j > left && compareEdge(static_cast<Int>(j - 1), static_cast<Int>(j)) > 0) {
 							overallSign *= swapEdges(static_cast<Int>(j - 1), static_cast<Int>(j));
-#if defined(GC_PROFILE_STANDARDIZER_SORT)
-							++swap_count;
-#endif
 							--j;
 						}
 					}
@@ -934,9 +923,6 @@ Int N_VERTICES,
 							if (i <= j) {
 								if (i < j && compareEdge(static_cast<Int>(i), static_cast<Int>(j)) != 0) {
 									overallSign *= swapEdges(static_cast<Int>(i), static_cast<Int>(j));
-#if defined(GC_PROFILE_STANDARDIZER_SORT)
-									++swap_count;
-#endif
 								}
 								++i;
 								--j;
@@ -963,14 +949,6 @@ Int N_VERTICES,
 				if constexpr (N_EDGES > 1) {
 					quick_sort(quick_sort, 0, N_EDGES - 1);
 				}
-
-#if defined(GC_PROFILE_STANDARDIZER_SORT)
-				const auto sort_stop = std::chrono::steady_clock::now();
-				const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(sort_stop - sort_start).count();
-				gc_standardizer_sort_profile::insertion_sort_calls.fetch_add(1, std::memory_order_relaxed);
-				gc_standardizer_sort_profile::insertion_sort_swaps.fetch_add(swap_count, std::memory_order_relaxed);
-				gc_standardizer_sort_profile::insertion_sort_nanoseconds.fetch_add(static_cast<unsigned long long>(elapsed), std::memory_order_relaxed);
-#endif
 				return overallSign;
 			}
 

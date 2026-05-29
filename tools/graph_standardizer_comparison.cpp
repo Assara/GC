@@ -274,22 +274,47 @@ struct NautyLabeling {
 };
 
 template <typename GraphType>
-NautyLabeling<GraphType> nauty_labeling(const GraphType& input_graph, bool collect_automorphisms) {
-	const int n = GraphType::N_VERTICES_;
-	const int m = SETWORDSNEEDED(n);
+struct PreparedNautyGraph {
+	static constexpr int n = GraphType::N_VERTICES_;
+	static constexpr int m = SETWORDSNEEDED(n);
+	std::vector<graph> g = std::vector<graph>(static_cast<std::size_t>(m * n), 0);
+};
 
-	DYNALLSTAT(graph, g, g_sz);
-	DYNALLSTAT(graph, cg, cg_sz);
-	DYNALLOC2(graph, g, g_sz, m, n, "malloc");
-	DYNALLOC2(graph, cg, cg_sz, m, n, "malloc");
-	EMPTYGRAPH(g, m, n);
+template <typename GraphType>
+NautyLabeling<GraphType> nauty_labeling(const PreparedNautyGraph<GraphType>& prepared_graph, bool collect_automorphisms);
+
+template <typename GraphType>
+PreparedNautyGraph<GraphType> prepare_nauty_graph(const GraphType& input_graph) {
+	PreparedNautyGraph<GraphType> prepared;
+	EMPTYGRAPH(prepared.g.data(), PreparedNautyGraph<GraphType>::m, PreparedNautyGraph<GraphType>::n);
 
 	for (Int e = 0; e < GraphType::N_EDGES_; ++e) {
 		auto [u, v] = input_graph.getEdge(e);
 		if (u != v) {
-			ADDONEEDGE(g, static_cast<int>(u), static_cast<int>(v), m);
+			ADDONEEDGE(
+				prepared.g.data(),
+				static_cast<int>(u),
+				static_cast<int>(v),
+				PreparedNautyGraph<GraphType>::m
+			);
 		}
 	}
+
+	return prepared;
+}
+
+template <typename GraphType>
+NautyLabeling<GraphType> nauty_labeling(const GraphType& input_graph, bool collect_automorphisms) {
+	return nauty_labeling(prepare_nauty_graph(input_graph), collect_automorphisms);
+}
+
+template <typename GraphType>
+NautyLabeling<GraphType> nauty_labeling(const PreparedNautyGraph<GraphType>& prepared_graph, bool collect_automorphisms) {
+	const int n = PreparedNautyGraph<GraphType>::n;
+	const int m = PreparedNautyGraph<GraphType>::m;
+
+	DYNALLSTAT(graph, cg, cg_sz);
+	DYNALLOC2(graph, cg, cg_sz, m, n, "malloc");
 
 	std::vector<int> lab(n);
 	std::vector<int> ptn(n);
@@ -305,7 +330,7 @@ NautyLabeling<GraphType> nauty_labeling(const GraphType& input_graph, bool colle
 	}
 
 	densenauty(
-		g,
+		const_cast<graph*>(prepared_graph.g.data()),
 		lab.data(),
 		ptn.data(),
 		orbits.data(),
@@ -324,7 +349,6 @@ NautyLabeling<GraphType> nauty_labeling(const GraphType& input_graph, bool colle
 		result.lab_new_to_old[i] = static_cast<Int>(lab[i]);
 	}
 
-	DYNFREE(g, g_sz);
 	DYNFREE(cg, cg_sz);
 	return result;
 }
@@ -481,17 +505,23 @@ void check_nauty_sign_correctness(const std::vector<GraphType>& graphs) {
 }
 
 template <typename GraphType>
-void nauty_canonicalize_once(const GraphType& input_graph) {
-	(void)nauty_labeling(input_graph, false);
+void nauty_canonicalize_once(const PreparedNautyGraph<GraphType>& prepared_graph) {
+	(void)nauty_labeling(prepared_graph, false);
 }
 
 template <typename GraphType>
 double benchmark_nauty(const std::vector<GraphType>& graphs, int iterations) {
+	std::vector<PreparedNautyGraph<GraphType>> prepared_graphs;
+	prepared_graphs.reserve(graphs.size());
+	for (const auto& graph : graphs) {
+		prepared_graphs.push_back(prepare_nauty_graph(graph));
+	}
+
 	double total = 0.0;
 	for (int i = 0; i < iterations; ++i) {
 		total += time_seconds([&]() {
-			for (const auto& graph : graphs) {
-				nauty_canonicalize_once(graph);
+			for (const auto& prepared_graph : prepared_graphs) {
+				nauty_canonicalize_once<GraphType>(prepared_graph);
 			}
 		});
 	}

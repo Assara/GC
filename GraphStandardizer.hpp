@@ -3,26 +3,23 @@
 #include <cstring>
 #include <cstdint>
 #include <algorithm>
-#if defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
+#if defined(GC_PROFILE_STANDARDIZER_SORT) || defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
 #include <atomic>
+#include <chrono>
 #endif
 #include <vector>
 #include <utility>
 #include "VectorSpace/BasisElement.hpp"
 #include "GraphIsomorphism.hpp"
 
-#if defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
+#if defined(GC_PROFILE_STANDARDIZER_SORT) || defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
 namespace gc_standardizer_sort_profile {
-	inline std::atomic<unsigned long long> labeling_search_calls{0};
-	inline std::atomic<unsigned long long> attempts_created{0};
-	inline std::atomic<unsigned long long> true_final_attempts{0};
-	inline std::atomic<unsigned long long> false_final_attempts{0};
+	inline std::atomic<unsigned long long> create_final_attempts_nanoseconds{0};
+	inline std::atomic<unsigned long long> sort_and_filter_nanoseconds{0};
 
 	inline void reset() {
-		labeling_search_calls.store(0, std::memory_order_relaxed);
-		attempts_created.store(0, std::memory_order_relaxed);
-		true_final_attempts.store(0, std::memory_order_relaxed);
-		false_final_attempts.store(0, std::memory_order_relaxed);
+		create_final_attempts_nanoseconds.store(0, std::memory_order_relaxed);
+		sort_and_filter_nanoseconds.store(0, std::memory_order_relaxed);
 	}
 }
 #endif
@@ -356,98 +353,122 @@ Int N_VERTICES,
 
 			BasisElement<GraphType, fieldType> standardize3(const BasisElement<GraphType, fieldType>& input) const {
 				static constexpr Int RELOAD_ITERATIONS = (N_VERTICES > 2) ? (N_VERTICES / 3) : 1;
-
-#if defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
-				unsigned long long local_attempts_created = 1;
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+				const auto create_final_attempts_start = std::chrono::steady_clock::now();
 #endif
 				vector<CanonBuilder3> attempts;
 				vector<CanonBuilder3> next_attempts;
+				vector<std::size_t> valid_attempts;
+				vector<std::size_t> next_valid_attempts;
 				const GraphType& G = input.getValue();
 
 				attempts.emplace_back(CanonBuilder3());
 				attempts[0].init_starter_colors(G);
+				valid_attempts.push_back(0);
 
 				signedInt cmp;
-				while (attempts.back().next_to_assign < N_VERTICES) {
+
+			
+				while (attempts[valid_attempts[0]].next_to_assign < N_VERTICES) {
 					for (Int reload = 0; reload < RELOAD_ITERATIONS; ++reload) {
-						next_attempts.clear();
-						next_attempts.reserve(attempts.size());
+						next_valid_attempts.clear();
+						next_valid_attempts.reserve(valid_attempts.size());
 
-						for (size_t i = 0; i < attempts.size(); ++i) {
-							attempts[i].update_colors(G);
-							attempts[i].update_vertex_groups();
+						if (valid_attempts.size() == 1) {
+							CanonBuilder3& attempt = attempts[valid_attempts[0]];
+							attempt.update_colors(G);
+							attempt.update_vertex_groups();
+							continue;
+						}
 
-							if (next_attempts.empty()) {
-								next_attempts.push_back(attempts[i]);
+						for (const std::size_t attempt_index : valid_attempts) {
+							attempts[attempt_index].update_colors(G);
+							attempts[attempt_index].update_vertex_groups();
+
+							if (next_valid_attempts.empty()) {
+								next_valid_attempts.push_back(attempt_index);
 							} else {
-								cmp = attempts[i].compare(next_attempts.back());
+								cmp = attempts[attempt_index].compare(attempts[next_valid_attempts.back()]);
 								if (cmp > 0) {
-									next_attempts[0] = attempts[i];
-									next_attempts.resize(1);
+									next_valid_attempts[0] = attempt_index;
+									next_valid_attempts.resize(1);
 								} else if (cmp == 0) {
-									next_attempts.push_back(attempts[i]);
+									next_valid_attempts.push_back(attempt_index);
 								}
 							}
 						}
-						std::swap(attempts, next_attempts);
+						valid_attempts.swap(next_valid_attempts);
 					}
 
-					if (attempts[0].next_to_assign >= N_VERTICES) {
+					if (attempts[valid_attempts[0]].next_to_assign >= N_VERTICES) {
 						break;
 					}
 
-					const auto branch_range = attempts[0].branching_group_range();
+					const auto branch_range = attempts[valid_attempts[0]].branching_group_range();
 					if (branch_range.first >= branch_range.second) {
-						for (auto& attempt : attempts) {
-							attempt.assign_remaining_groups_in_order();
+						for (const std::size_t attempt_index : valid_attempts) {
+							attempts[attempt_index].assign_remaining_groups_in_order();
 						}
 						break;
 					}
 
 					next_attempts.clear();
 					next_attempts.reserve(
-						static_cast<std::size_t>(branch_range.second - branch_range.first) * attempts.size()
+						static_cast<std::size_t>(branch_range.second - branch_range.first) * valid_attempts.size()
 					);
 
-					for (const auto& attempt : attempts) {
-						attempt.branch(branch_range, next_attempts);
+					for (const std::size_t attempt_index : valid_attempts) {
+						attempts[attempt_index].branch(branch_range, next_attempts);
 					}
-#if defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
-					local_attempts_created += next_attempts.size();
-#endif
 
 					attempts.swap(next_attempts);
+					valid_attempts.resize(attempts.size());
+					for (std::size_t i = 0; i < attempts.size(); ++i) {
+						valid_attempts[i] = i;
+					}
 				}
 
-#if defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
-				gc_standardizer_sort_profile::attempts_created.fetch_add(
-					local_attempts_created,
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+				const auto create_final_attempts_stop = std::chrono::steady_clock::now();
+				gc_standardizer_sort_profile::create_final_attempts_nanoseconds.fetch_add(
+					static_cast<unsigned long long>(
+						std::chrono::duration_cast<std::chrono::nanoseconds>(
+							create_final_attempts_stop - create_final_attempts_start
+						).count()
+					),
 					std::memory_order_relaxed
 				);
-#endif
-#if defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
-				gc_standardizer_sort_profile::labeling_search_calls.fetch_add(
-					1,
-					std::memory_order_relaxed
-				);
+				const auto sort_and_filter_start = std::chrono::steady_clock::now();
+				const auto record_sort_and_filter_stop = [&]() {
+					const auto sort_and_filter_stop = std::chrono::steady_clock::now();
+					gc_standardizer_sort_profile::sort_and_filter_nanoseconds.fetch_add(
+						static_cast<unsigned long long>(
+							std::chrono::duration_cast<std::chrono::nanoseconds>(
+								sort_and_filter_stop - sort_and_filter_start
+							).count()
+						),
+						std::memory_order_relaxed
+					);
+				};
 #endif
 
 				typename GraphType::Basis best_basis = GraphType::assignPermutedDirectedSortedEdgesBasis(
 						input,
-						attempts[0].vertex_permutation
+						attempts[valid_attempts[0]].vertex_permutation
 				);
 
-				if (attempts.size() == 1 || best_basis.getCoefficient() == fieldType{0}) {
+				if (valid_attempts.size() == 1 || best_basis.getCoefficient() == fieldType{0}) {
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+					record_sort_and_filter_stop();
+#endif
 					return best_basis;
 				}
 
-
 				typename GraphType::Basis attempt_basis;
 				signedInt comparison;
-				
-
-
-				for (std::size_t attempt_index = 1; attempt_index < attempts.size(); ++attempt_index) {
+			
+				for (std::size_t i = 1; i < valid_attempts.size(); ++i) {
+					const std::size_t attempt_index = valid_attempts[i];
 					attempt_basis = GraphType::assignPermutedDirectedSortedEdgesBasis(
 						input,
 						attempts[attempt_index].vertex_permutation);
@@ -456,6 +477,9 @@ Int N_VERTICES,
 					if  (comparison == 0) {
 						if (attempt_basis.getCoefficient() == -best_basis.getCoefficient()) {
 							best_basis.set_coefficient(fieldType(0));
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+							record_sort_and_filter_stop();
+#endif
 							return best_basis;
 						}
 
@@ -464,10 +488,11 @@ Int N_VERTICES,
 					} 					
 				}
 
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+				record_sort_and_filter_stop();
+#endif
 				return best_basis;
 			}
-
-
 
 			struct CanonBuilder2 {
 				array<hash_int_type, N_VERTICES> colors;
