@@ -494,332 +494,13 @@ Int N_VERTICES,
 				return best_basis;
 			}
 
-			struct CanonBuilder2 {
-				array<hash_int_type, N_VERTICES> colors;
-				Permutation<N_VERTICES> vertex_permutation;
-
-				CanonBuilder2()
-					: colors{}, vertex_permutation{} {
-					vertex_permutation.p.fill(N_VERTICES);
-				}
-
-				assign_type init_starter_colors(const GraphType& G) {
-					array<assign_type, (N_VERTICES > 0) ? (N_VERTICES - 1) : 0> valency_counts{};
-
-					for (Int e = 0; e < G.half_edges.size(); ++e) {
-						++colors[G.half_edges[e]];
-					}
-
-					for (assign_type v = 0; v < N_VERTICES; ++v) {
-						if (colors[v] > 0 && colors[v] < N_VERTICES) {
-							++valency_counts[colors[v] - 1];
-						}
-					}
-
-					if constexpr (GraphType::N_HAIR > 0) {
-						for (Int i = 0; i < GraphType::N_HAIR; ++i) {
-							colors[G.half_edges[i]] += hash(i);
-						}
-					}
-
-					assign_type next_vertex_to_assign = 0;
-					for (std::size_t valency = N_VERTICES; valency-- > 1;) {
-						if (valency_counts[valency - 1] != 1) {
-							continue;
-						}
-
-						for (assign_type v = 0; v < N_VERTICES; ++v) {
-							if (colors[v] == valency) {
-								vertex_permutation.p[v] = next_vertex_to_assign;
-								++colors[v];
-								++next_vertex_to_assign;
-								break;
-							}
-						}
-					}
-
-					return next_vertex_to_assign;
-				}
-
-				void update_colors(const GraphType& G) {
-					array<hash_int_type, N_VERTICES> next_colors;
-					for (Int v = 0; v < N_VERTICES; ++v) {
-						next_colors[v] = hash(colors[v]);
-					}
-					for (Int e = G.N_HAIR; e<G.half_edges.size(); e+=2) {
-						next_colors[G.half_edges[e]] += colors[G.half_edges[e+1]];
-						next_colors[G.half_edges[e+1]] += colors[G.half_edges[e]];
-					}
-					colors = next_colors;
-				}
-
-				struct CanonicalBucketAnalysis {
-					VertexBucket branch_bucket{};
-					assign_type unique_count = 0;
-					hash_int_type prune_hash = 0;
-				};
-
-				CanonicalBucketAnalysis assign_unique_colors_and_make_bucket(assign_type next_vertex_to_assign) {
-					array<std::pair<hash_int_type, assign_type>, N_VERTICES> unassigned_colors{};
-					std::size_t n_unassigned = 0;
-					for (assign_type v = 0; v < N_VERTICES; ++v) {
-						if (vertex_permutation[v] == N_VERTICES) {
-							unassigned_colors[n_unassigned++] = {colors[v], v};
-						}
-					}
-
-					std::sort(
-						unassigned_colors.begin(),
-						unassigned_colors.begin() + n_unassigned,
-						[](const auto& lhs, const auto& rhs) {
-							if (lhs.first != rhs.first) {
-								return lhs.first > rhs.first;
-							}
-							return lhs.second < rhs.second;
-						}
-					);
-
-					CanonicalBucketAnalysis analysis;
-					for (std::size_t begin = 0; begin < n_unassigned;) {
-						std::size_t end = begin + 1;
-						while (end < n_unassigned && unassigned_colors[end].first == unassigned_colors[begin].first) {
-							++end;
-						}
-
-						const assign_type run_size = static_cast<assign_type>(end - begin);
-						if (run_size == 1) {
-							const assign_type vertex = unassigned_colors[begin].second;
-							vertex_permutation.p[vertex] = next_vertex_to_assign + analysis.unique_count;
-							++colors[vertex];
-							++analysis.unique_count;
-						} else {
-							for (std::size_t i = begin; i < end; ++i) {
-								analysis.prune_hash = hash(analysis.prune_hash ^ unassigned_colors[i].first);
-							}
-							if (
-								analysis.branch_bucket.empty() ||
-								run_size < static_cast<assign_type>(analysis.branch_bucket.size)
-							) {
-								analysis.branch_bucket.size = 0;
-								for (std::size_t i = begin; i < end; ++i) {
-									analysis.branch_bucket.push_back(unassigned_colors[i].second);
-								}
-							}
-						}
-
-						begin = end;
-					}
-
-					return analysis;
-				}
-
-				void push_next_attempts(
-					vector<CanonBuilder2>& collector,
-					const VertexBucket& branch_bucket,
-					assign_type v
-				) const {
-					if (branch_bucket.size == 2) {
-						collector.emplace_back(*this);
-						collector.back().vertex_permutation.p[branch_bucket[0]] = v;
-						collector.back().vertex_permutation.p[branch_bucket[1]] = v+1;
-						++collector.back().colors[branch_bucket[0]];
-
-						collector.emplace_back(*this);
-						collector.back().vertex_permutation.p[branch_bucket[1]] = v;
-						collector.back().vertex_permutation.p[branch_bucket[0]] = v+1;
-						++collector.back().colors[branch_bucket[1]];
-
-						return;
-					}
-
-					for (std::size_t i = 0; i < branch_bucket.size; ++i) {
-						collector.emplace_back(*this);
-						collector.back().vertex_permutation.p[branch_bucket[i]] = v;
-						++collector.back().colors[branch_bucket[i]];
-					}
-				}
-
-
-
-				static hash_int_type hash(hash_int_type n) noexcept {
-					n += 0x9e3779b97f4a7c15ULL;
-					n = (n ^ (n >> 30)) * 0xbf58476d1ce4e5b9ULL;
-					n = (n ^ (n >> 27)) * 0x94d049bb133111ebULL;
-					return n ^ (n >> 31);
-				}
-			};
-
-			BasisElement<GraphType, fieldType> standardize2(BasisElement<GraphType, fieldType>& input) const {
-				static constexpr Int RELOAD_ITERATIONS = (N_VERTICES > 2) ? (N_VERTICES / 3) : 1;
-
-				vector<CanonBuilder2> attempts;
-				vector<CanonBuilder2> next_attempts;
-				vector<typename CanonBuilder2::CanonicalBucketAnalysis> analyses;
-				vector<size_t> next_attempt_mask;
-				GraphType& G = input.getValue();
-
-				attempts.emplace_back();
-				analyses.resize(1);
-#if defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
-				gc_standardizer_sort_profile::attempts_created.fetch_add(
-					1,
-					std::memory_order_relaxed
-				);
-#endif
-
-				assign_type next_vertex_to_assign = attempts[0].init_starter_colors(G);
-  
-				assign_type unique_count;
-				assign_type min_bucket_size;
-				hash_int_type max_color;
-
-				while (next_vertex_to_assign < N_VERTICES) {
-					unique_count = 0;
-					for (Int reload = 0; reload < RELOAD_ITERATIONS; ++reload) {
-						analyses.resize(attempts.size());
-						unique_count = 0;
-						min_bucket_size = N_VERTICES + 1;
-						max_color = 0;
-						next_attempt_mask.clear();
-
-						for (size_t i = 0; i < attempts.size(); ++i) {
-							attempts[i].update_colors(G);
-							analyses[i] = attempts[i].assign_unique_colors_and_make_bucket(next_vertex_to_assign);
-
-							if (analyses[i].unique_count > unique_count) {
-								unique_count = analyses[i].unique_count;
-								min_bucket_size = analyses[i].branch_bucket.size;
-								max_color = analyses[i].prune_hash;
-								next_attempt_mask.clear();
-								next_attempt_mask.push_back(i);
-							} else if (analyses[i].unique_count == unique_count) {
-								if (analyses[i].branch_bucket.size < min_bucket_size) {
-									min_bucket_size = analyses[i].branch_bucket.size;
-									max_color = analyses[i].prune_hash;
-									next_attempt_mask.clear();
-									next_attempt_mask.push_back(i);
-								} else if (analyses[i].branch_bucket.size == min_bucket_size) {
-									if (max_color < analyses[i].prune_hash) {
-										max_color = analyses[i].prune_hash;
-										next_attempt_mask.clear();
-										next_attempt_mask.push_back(i);
-									} else if (max_color == analyses[i].prune_hash) {
-										next_attempt_mask.push_back(i);
-									}
-								}
-							}
-						}
-
-						
-						if (next_attempt_mask.size() < attempts.size()) {
-							size_t write = 0;
-							for (size_t read : next_attempt_mask) {
-								if (write != read) {
-									attempts[write] = attempts[read];
-									analyses[write] = analyses[read];
-								}
-								++write;
-							}
-							attempts.resize(next_attempt_mask.size());
-							analyses.resize(next_attempt_mask.size());
-						}
-
-						if (unique_count > 0) {
-							break;
-						}
-					}
-
-						if (unique_count > 0) {
-							next_vertex_to_assign += unique_count;
-							continue;
-						}
-
-					if (min_bucket_size == 0) {
-						break;
-					}
-
-					next_attempts.clear();
-					next_attempts.reserve(next_attempt_mask.size()*min_bucket_size);
-					for (size_t i = 0; i < attempts.size(); ++i) {
-						attempts[i].push_next_attempts(
-							next_attempts,
-							analyses[i].branch_bucket,
-							next_vertex_to_assign
-						);
-					}
-#if defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
-					gc_standardizer_sort_profile::attempts_created.fetch_add(
-						next_attempts.size(),
-						std::memory_order_relaxed
-					);
-#endif
-
-					if (min_bucket_size == 2) {
-						next_vertex_to_assign += 2;
-					} else {
-						++next_vertex_to_assign;
-					}
-
-					attempts.swap(next_attempts);
-				}
-
-#if defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
-				gc_standardizer_sort_profile::labeling_search_calls.fetch_add(
-					1,
-					std::memory_order_relaxed
-				);
-#endif
-
-				GraphType best_graph = input.getValue();
-				bool have_best = false;
-				bool containsPlus = false;
-				bool containsMinus = false;
-				bool checked_double_edge = false;
-
-				for (const CanonBuilder2& attempt : attempts) {
-					GraphType graph = input.getValue();
-					signedInt sign = graph.permuteVertices(attempt.vertex_permutation);
-					sign *= graph.directAndSortEdges();
-
-					if constexpr (GraphType::SWAP_EDGE_SIGN == -1) {
-						if (!checked_double_edge) {
-							checked_double_edge = true;
-							if (graph.has_double_edge()) {
-								return BasisElement<GraphType, fieldType>(graph, 0);
-							}
-						}
-					}
-
-					const signedInt comparison = have_best ? graph.compare(best_graph) : -1;
-					if (comparison < 0) {
-						best_graph = graph;
-						have_best = true;
-						containsPlus = sign > 0;
-						containsMinus = sign < 0;
-					} else if (comparison == 0) {
-						containsPlus = containsPlus || sign > 0;
-						containsMinus = containsMinus || sign < 0;
-					}
-
-					if (containsPlus && containsMinus) {
-						return BasisElement<GraphType, fieldType>(best_graph, 0);
-					}
-				}
-
-				return BasisElement<GraphType, fieldType>(
-					best_graph,
-					containsPlus ? input.getCoefficient() : -input.getCoefficient()
-				);
-			}
-
-
-			class CanonBuilder {
+			class LexicographicalBuilder {
 				public:
 					GraphType G;
 					Int n_assignedVertices;
 					signedInt sign;
 
-					CanonBuilder(const GraphType& initialGraph, Int n, signedInt s)
+					LexicographicalBuilder(const GraphType& initialGraph, Int n, signedInt s)
 						: G(initialGraph), n_assignedVertices(n) {
 							n_assignedVertices = n;
 
@@ -860,15 +541,15 @@ Int N_VERTICES,
 						return fakeGraph;
 					}
 
-					int compare(const CanonBuilder& other) {
+					int compare(const LexicographicalBuilder& other) {
 						return combutils::compareHalfEdges(vertex_values_graph().half_edges, other.vertex_values_graph().half_edges);
 					} 
 
 					//we are assigning j <- n_assignedVertices
-					CanonBuilder with_assigned_next(Int j) {
+					LexicographicalBuilder with_assigned_next(Int j) {
 						GraphType copied_graph = G;
 						signedInt s = copied_graph.swapVertices(j, n_assignedVertices);
-						return CanonBuilder(copied_graph, n_assignedVertices +1, sign*s);
+						return LexicographicalBuilder(copied_graph, n_assignedVertices +1, sign*s);
 					}
 			};
 
@@ -959,8 +640,8 @@ Int N_VERTICES,
 					}
 			};
 
-			BasisElement<GraphType, fieldType> standardize(BasisElement<GraphType, fieldType>& input) {
-				return standardize(input.getValue(), input.getCoefficient());
+			BasisElement<GraphType, fieldType> lexicographical_standardize(BasisElement<GraphType, fieldType>& input) {
+				return lexicographical_standardize(input.getValue(), input.getCoefficient());
 			}    
 
 			bigInt automorphism_group_size(const GraphType& input_graph) const {
@@ -981,7 +662,7 @@ Int N_VERTICES,
 			}
 
 
-			BasisElement<GraphType, fieldType> standardize(GraphType& graph, fieldType k) const {
+			BasisElement<GraphType, fieldType> lexicographical_standardize(GraphType& graph, fieldType k) const {
 				if (GraphType::SWAP_EDGE_SIGN == -1 ) {
 					k *= graph.directAndSortEdges();
 					if (graph.has_double_edge()) {
@@ -989,8 +670,8 @@ Int N_VERTICES,
 					}
 				}
 
-				CanonBuilder G = assignHair(graph);
-				vector<CanonBuilder> attempts[2];
+				LexicographicalBuilder G = assignHair(graph);
+				vector<LexicographicalBuilder> attempts[2];
 
 				attempts[G.n_assignedVertices%2].push_back(G);
 
@@ -998,9 +679,9 @@ Int N_VERTICES,
 
 					attempts[(n+1)%2].clear();
 					attempts[(n+1)%2].reserve(attempts[n%2].size() * (N_VERTICES - n));
-					for (CanonBuilder attempt : attempts[n%2]) {
+					for (LexicographicalBuilder attempt : attempts[n%2]) {
 						for (Int l = attempt.n_assignedVertices; l < N_VERTICES; ++l) {
-							CanonBuilder next = attempt.with_assigned_next(l);
+							LexicographicalBuilder next = attempt.with_assigned_next(l);
 							if (attempts[(n+1)%2].empty()) {
 								attempts[(n+1)%2].push_back(next);
 								continue;
@@ -1048,7 +729,7 @@ Int N_VERTICES,
 				return final_form;
 			}
 
-			CanonBuilder assignHair(GraphType G) const {
+			LexicographicalBuilder assignHair(GraphType G) const {
 				Int n_assigned = 0;
 				signedInt sign = 1;
 				for (Int i = 0; i < G.N_HAIR ; ++i) {
@@ -1057,7 +738,7 @@ Int N_VERTICES,
 						n_assigned ++;
 					} 
 				}
-				return CanonBuilder(G, n_assigned, sign);
+				return LexicographicalBuilder(G, n_assigned, sign);
 			}
 
 			IsoCanonBuilder assignHair_with_isomorphisms(GraphType G) const {

@@ -471,7 +471,7 @@ void check_nauty_sign_correctness(const std::vector<GraphType>& graphs) {
 				GraphType::C_,
 				GraphType::D_,
 				fieldType
-			>{}.standardize(graph_to_standardize, nauty.getCoefficient());
+			>{}.lexicographical_standardize(graph_to_standardize, nauty.getCoefficient());
 			if (adjusted.getValue() != own.getValue()) {
 				++canonical_mismatches;
 			}
@@ -583,49 +583,22 @@ int run_graph_standardizer_comparison(
 #endif
 	const double own_avg = benchmark_own_standardizer(graphs, iterations);
 	std::cout << "own standardizer average = " << own_avg << " s\n";
-#if defined(GC_PROFILE_STANDARDIZER_SORT) || defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
-	const double labeling_search_total_seconds =
-		static_cast<double>(gc_standardizer_sort_profile::labeling_search_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
-	const double labeling_search_avg_seconds = labeling_search_total_seconds / static_cast<double>(iterations);
-	const auto attempts_created = gc_standardizer_sort_profile::attempts_created.load(std::memory_order_relaxed);
-#endif
 #if defined(GC_PROFILE_STANDARDIZER_SORT)
-	const double update_colors_total_seconds =
-		static_cast<double>(gc_standardizer_sort_profile::vertex_color_update_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
-	const double update_colors_avg_seconds =
-		update_colors_total_seconds / static_cast<double>(iterations);
-	const double init_bucket_total_seconds =
-		static_cast<double>(gc_standardizer_sort_profile::vertex_bucket_init_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
-	const double init_bucket_avg_seconds =
-		init_bucket_total_seconds / static_cast<double>(iterations);
-	const double mask_maintenance_total_seconds =
-		static_cast<double>(gc_standardizer_sort_profile::mask_maintenance_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
-	const double mask_maintenance_avg_seconds =
-		mask_maintenance_total_seconds / static_cast<double>(iterations);
-	const double push_next_attempts_total_seconds =
-		static_cast<double>(gc_standardizer_sort_profile::push_next_attempts_nanoseconds.load(std::memory_order_relaxed)) / 1'000'000'000.0;
-	const double push_next_attempts_avg_seconds =
-		push_next_attempts_total_seconds / static_cast<double>(iterations);
-	const double sign_and_filter_avg_seconds =
-		own_avg - update_colors_avg_seconds - init_bucket_avg_seconds;
-	(void)mask_maintenance_avg_seconds;
-	(void)push_next_attempts_avg_seconds;
-	std::cout << "update_colors share = "
-	          << (100.0 * update_colors_avg_seconds / own_avg) << "%\n";
-	std::cout << "update_groups share = "
-	          << (100.0 * init_bucket_avg_seconds / own_avg) << "%\n";
-	std::cout << "sign/filter share = "
-	          << (100.0 * sign_and_filter_avg_seconds / own_avg) << "%\n";
-	std::cout << "attempts created = " << attempts_created << '\n';
+	const double create_final_attempts_avg_seconds =
+		static_cast<double>(gc_standardizer_sort_profile::create_final_attempts_nanoseconds.load(std::memory_order_relaxed))
+		/ (1'000'000'000.0 * static_cast<double>(iterations));
+	const double sort_and_filter_avg_seconds =
+		static_cast<double>(gc_standardizer_sort_profile::sort_and_filter_nanoseconds.load(std::memory_order_relaxed))
+		/ (1'000'000'000.0 * static_cast<double>(iterations));
+	std::cout << "create final attempts share = "
+	          << (100.0 * create_final_attempts_avg_seconds / own_avg) << "%\n";
+	std::cout << "sort/filter share = "
+	          << (100.0 * sort_and_filter_avg_seconds / own_avg) << "%\n";
 #endif
 
 #if defined(GC_PERF_WITH_NAUTY)
 	const double nauty_avg = benchmark_nauty(graphs, iterations);
 	std::cout << "nauty labeling average = " << nauty_avg << " s\n";
-#if defined(GC_PROFILE_STANDARDIZER_SORT) || defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
-	std::cout << "labeling search / nauty labeling = " << (labeling_search_avg_seconds / nauty_avg) << "x\n";
-	std::cout << "nauty labeling / own labeling search = " << (nauty_avg / labeling_search_avg_seconds) << "x\n";
-#endif
 #else
 	std::cout << "nauty average = disabled; rebuild this tool with GC_PERF_WITH_NAUTY\n";
 #endif
