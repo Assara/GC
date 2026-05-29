@@ -351,24 +351,21 @@ Int N_VERTICES,
 				}
 			};
 
-			BasisElement<GraphType, fieldType> standardize3(const BasisElement<GraphType, fieldType>& input) const {
+			using FinalAttemptSet = std::pair<vector<CanonBuilder3>, vector<std::size_t>>;
+
+			FinalAttemptSet create_final_attempts(const GraphType& G) const {
 				static constexpr Int RELOAD_ITERATIONS = (N_VERTICES > 2) ? (N_VERTICES / 3) : 1;
-#if defined(GC_PROFILE_STANDARDIZER_SORT)
-				const auto create_final_attempts_start = std::chrono::steady_clock::now();
-#endif
+
 				vector<CanonBuilder3> attempts;
 				vector<CanonBuilder3> next_attempts;
 				vector<std::size_t> valid_attempts;
 				vector<std::size_t> next_valid_attempts;
-				const GraphType& G = input.getValue();
-
 				attempts.emplace_back(CanonBuilder3());
 				attempts[0].init_starter_colors(G);
 				valid_attempts.push_back(0);
 
 				signedInt cmp;
 
-			
 				while (attempts[valid_attempts[0]].next_to_assign < N_VERTICES) {
 					for (Int reload = 0; reload < RELOAD_ITERATIONS; ++reload) {
 						next_valid_attempts.clear();
@@ -427,6 +424,16 @@ Int N_VERTICES,
 						valid_attempts[i] = i;
 					}
 				}
+
+				return {std::move(attempts), std::move(valid_attempts)};
+			}
+
+			BasisElement<GraphType, fieldType> standardize3(const BasisElement<GraphType, fieldType>& input) const {
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+				const auto create_final_attempts_start = std::chrono::steady_clock::now();
+#endif
+				const GraphType& G = input.getValue();
+				auto [attempts, valid_attempts] = create_final_attempts(G);
 
 #if defined(GC_PROFILE_STANDARDIZER_SORT)
 				const auto create_final_attempts_stop = std::chrono::steady_clock::now();
@@ -649,16 +656,46 @@ Int N_VERTICES,
 			}
 
 			std::vector<IsomorphismType> minimizing_isomorphisms(const GraphType& input_graph) const {
-				GraphType graph = input_graph;
-				auto attempts = canonical_attempts_with_isomorphisms(graph);
-				const auto& minimizers = attempts[N_VERTICES % 2];
+				const typename GraphType::Basis input(input_graph, fieldType{1});
+				auto [attempts, valid_attempts] = create_final_attempts(input_graph);
 
-				std::vector<IsomorphismType> result;
-				result.reserve(minimizers.size());
-				for (const auto& attempt : minimizers) {
-					result.push_back(attempt.iso);
+				std::vector<IsomorphismType> minimizers;
+				minimizers.reserve(valid_attempts.size());
+				typename GraphType::Basis best_basis;
+				bool have_best = false;
+
+				for (const std::size_t attempt_index : valid_attempts) {
+					typename GraphType::ThisGraph graph;
+					IsomorphismType iso;
+					const signedInt sign = graph.assignPermutedDirectedSortedEdgesWithIsomorphism(
+						input_graph,
+						attempts[attempt_index].vertex_permutation,
+						iso
+					);
+					if (sign == 0) {
+						continue;
+					}
+
+					typename GraphType::Basis attempt_basis(std::move(graph), fieldType(sign) * input.getCoefficient());
+					if (!have_best) {
+						best_basis = attempt_basis;
+						minimizers.clear();
+						minimizers.push_back(iso);
+						have_best = true;
+						continue;
+					}
+
+					const signedInt comparison = best_basis.compare(attempt_basis);
+					if (comparison < 0) {
+						best_basis = attempt_basis;
+						minimizers.clear();
+						minimizers.push_back(iso);
+					} else if (comparison == 0) {
+						minimizers.push_back(iso);
+					}
 				}
-				return result;
+
+				return minimizers;
 			}
 
 

@@ -1163,6 +1163,94 @@ Int N_VERTICES,
 				return sign;
 			}
 
+			signedInt assignPermutedDirectedSortedEdgesWithIsomorphism(
+				const ThisGraph& source,
+				const Permutation<N_VERTICES>& perm,
+				GraphIsomorphism<N_VERTICES, N_EDGES>& iso
+			) {
+				iso = GraphIsomorphism<N_VERTICES, N_EDGES>{};
+				iso.vertex_permutation_data() = perm.p;
+
+				signedInt sign = 1;
+				if constexpr (SWAP_VERTICES_SIGN == -1) {
+					sign = perm.sign();
+				}
+
+				for (Int i = 0; i < N_HAIR; ++i) {
+					half_edges[i] = perm[source.half_edges[i]];
+				}
+
+				std::array<EdgeRadixEntry, N_EDGES> original_entries{};
+				for (Int edge_index = 0; edge_index < N_EDGES; ++edge_index) {
+					const Int base = N_HAIR + 2 * edge_index;
+					Int u = perm[source.half_edges[base]];
+					Int v = perm[source.half_edges[base + 1]];
+					if (u <= v) {
+						original_entries[edge_index] = EdgeRadixEntry{u, v, edge_index};
+					} else {
+						original_entries[edge_index] = EdgeRadixEntry{v, u, edge_index};
+						iso.edge_flip_data()[edge_index] = true;
+						if constexpr (FLIP_EDGE_SIGN == -1) {
+							sign *= -1;
+						}
+					}
+				}
+
+				if constexpr (N_EDGES <= 1) {
+					if constexpr (N_EDGES == 1) {
+						half_edges[N_HAIR] = original_entries[0].u;
+						half_edges[N_HAIR + 1] = original_entries[0].v;
+					}
+					iso.template compute_signs<N_OUT_HAIR, N_IN_HAIR, c, d, fieldType>();
+					return sign;
+				}
+
+				std::array<EdgeRadixEntry, N_EDGES> by_second{};
+				std::array<EdgeRadixEntry, N_EDGES> sorted_entries{};
+				stable_bucket_pass(original_entries, by_second, [](const EdgeRadixEntry& entry) {
+					return entry.v;
+				});
+				stable_bucket_pass(by_second, sorted_entries, [](const EdgeRadixEntry& entry) {
+					return entry.u;
+				});
+
+				bool has_duplicate_edges = false;
+				for (Int edge_index = 0; edge_index + 1 < N_EDGES; ++edge_index) {
+					if (
+						sorted_entries[edge_index].u == sorted_entries[edge_index + 1].u &&
+						sorted_entries[edge_index].v == sorted_entries[edge_index + 1].v
+					) {
+						has_duplicate_edges = true;
+						break;
+					}
+				}
+
+				for (Int sorted_index = 0; sorted_index < N_EDGES; ++sorted_index) {
+					iso.edge_permutation_data()[sorted_entries[sorted_index].original_index] = sorted_index;
+					const Int base = N_HAIR + 2 * sorted_index;
+					half_edges[base] = sorted_entries[sorted_index].u;
+					half_edges[base + 1] = sorted_entries[sorted_index].v;
+				}
+
+				iso.template compute_signs<N_OUT_HAIR, N_IN_HAIR, c, d, fieldType>();
+
+				if constexpr (SWAP_EDGE_SIGN == 1) {
+					return sign;
+				}
+
+				if (has_duplicate_edges) {
+					return 0;
+				}
+
+				std::array<Int, N_EDGES> destinations{};
+				for (Int sorted_index = 0; sorted_index < N_EDGES; ++sorted_index) {
+					destinations[sorted_entries[sorted_index].original_index] = sorted_index;
+				}
+
+				sign *= permutation_sign_from_destinations(destinations);
+				return sign;
+			}
+
 			static Basis assignPermutedDirectedSortedEdgesBasis(
 				const Basis& input,
 				const Permutation<N_VERTICES>& perm
