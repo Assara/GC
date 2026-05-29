@@ -1055,6 +1055,17 @@ Int N_VERTICES,
 					return entry.u;
 				});
 
+				bool has_duplicate_edges = false;
+				for (Int edge_index = 0; edge_index + 1 < N_EDGES; ++edge_index) {
+					if (
+						sorted_entries[edge_index].u == sorted_entries[edge_index + 1].u &&
+						sorted_entries[edge_index].v == sorted_entries[edge_index + 1].v
+					) {
+						has_duplicate_edges = true;
+						break;
+					}
+				}
+
 				if constexpr (SWAP_EDGE_SIGN == 1) {
 					for (Int sorted_index = 0; sorted_index < N_EDGES; ++sorted_index) {
 						const Int base = N_HAIR + 2 * sorted_index;
@@ -1062,6 +1073,10 @@ Int N_VERTICES,
 						half_edges[base + 1] = sorted_entries[sorted_index].v;
 					}
 					return 1;
+				}
+
+				if (has_duplicate_edges) {
+					return sortEdgesQuick();
 				}
 
 				std::array<Int, N_EDGES> destinations{};
@@ -1129,6 +1144,17 @@ Int N_VERTICES,
 					return entry.u;
 				});
 
+				bool has_duplicate_edges = false;
+				for (Int edge_index = 0; edge_index + 1 < N_EDGES; ++edge_index) {
+					if (
+						sorted_entries[edge_index].u == sorted_entries[edge_index + 1].u &&
+						sorted_entries[edge_index].v == sorted_entries[edge_index + 1].v
+					) {
+						has_duplicate_edges = true;
+						break;
+					}
+				}
+
 				if constexpr (SWAP_EDGE_SIGN == 1) {
 					for (Int sorted_index = 0; sorted_index < N_EDGES; ++sorted_index) {
 						const Int base = N_HAIR + 2 * sorted_index;
@@ -1138,6 +1164,15 @@ Int N_VERTICES,
 					return sign;
 				}
 
+				if (has_duplicate_edges) {
+					for (Int sorted_index = 0; sorted_index < N_EDGES; ++sorted_index) {
+						const Int base = N_HAIR + 2 * sorted_index;
+						half_edges[base] = sorted_entries[sorted_index].u;
+						half_edges[base + 1] = sorted_entries[sorted_index].v;
+					}
+					return 0;
+				}
+
 				std::array<Int, N_EDGES> destinations{};
 				for (Int sorted_index = 0; sorted_index < N_EDGES; ++sorted_index) {
 					destinations[sorted_entries[sorted_index].original_index] = sorted_index;
@@ -1145,8 +1180,18 @@ Int N_VERTICES,
 					half_edges[base] = sorted_entries[sorted_index].u;
 					half_edges[base + 1] = sorted_entries[sorted_index].v;
 				}
+
 				sign *= permutation_sign_from_destinations(destinations);
 				return sign;
+			}
+
+			static Basis assignPermutedDirectedSortedEdgesBasis(
+				const Basis& input,
+				const Permutation<N_VERTICES>& perm
+			) {
+				ThisGraph graph;
+				const signedInt sign = graph.assignPermutedDirectedSortedEdges(input.getValue(), perm);
+				return Basis(std::move(graph), fieldType(sign) * input.getCoefficient());
 			}
 
 			signedInt permuteVertices(Permutation<N_VERTICES> perm) {
