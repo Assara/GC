@@ -1009,6 +1009,12 @@ Int N_VERTICES,
 				return sign;
 			}
 
+			static constexpr std::size_t upper_triangular_edge_slot(Int u, Int v) {
+				return static_cast<std::size_t>(u) * N_VERTICES
+					- (static_cast<std::size_t>(u) * static_cast<std::size_t>(u - 1)) / 2
+					+ static_cast<std::size_t>(v - u);
+			}
+
 			signedInt sortEdgesRadix() {
 				if constexpr (N_EDGES <= 1) {
 					return 1;
@@ -1090,77 +1096,66 @@ Int N_VERTICES,
 					half_edges[i] = perm[source.half_edges[i]];
 				}
 
-				std::array<EdgeRadixEntry, N_EDGES> original_entries{};
+				static constexpr std::size_t TRIANGULAR_EDGE_SLOTS =
+					static_cast<std::size_t>(N_VERTICES) * (N_VERTICES + 1) / 2;
+				std::array<int32_t, TRIANGULAR_EDGE_SLOTS> edge_matrix;
+				edge_matrix.fill(-1);
+
 				for (Int edge_index = 0; edge_index < N_EDGES; ++edge_index) {
 					const Int base = N_HAIR + 2 * edge_index;
 					Int u = perm[source.half_edges[base]];
 					Int v = perm[source.half_edges[base + 1]];
-					if (u <= v) {
-						original_entries[edge_index] = EdgeRadixEntry{u, v, edge_index};
-					} else {
-						original_entries[edge_index] = EdgeRadixEntry{v, u, edge_index};
+
+					if (u > v) {
+						std::swap(u, v);
 						if constexpr (FLIP_EDGE_SIGN == -1) {
 							sign *= -1;
 						}
 					}
-				}
 
-				if constexpr (N_EDGES <= 1) {
-					if constexpr (N_EDGES == 1) {
-						half_edges[N_HAIR] = original_entries[0].u;
-						half_edges[N_HAIR + 1] = original_entries[0].v;
+					const std::size_t key = upper_triangular_edge_slot(u, v);
+					if (edge_matrix[key] != -1) {
+						if constexpr (SWAP_EDGE_SIGN == -1) {
+							return 0;
+						} else {
+							for (Int i = 0; i < SIZE; ++i) {
+								half_edges[i] = perm[source.half_edges[i]];
+							}
+							return ((SWAP_VERTICES_SIGN == -1) ? perm.sign() : 1)
+								* directEdges()
+								* sortEdgesRadix();
+						}
 					}
-					return sign;
-				}
-
-				std::array<EdgeRadixEntry, N_EDGES> by_second{};
-				std::array<EdgeRadixEntry, N_EDGES> sorted_entries{};
-				stable_bucket_pass(original_entries, by_second, [](const EdgeRadixEntry& entry) {
-					return entry.v;
-				});
-				stable_bucket_pass(by_second, sorted_entries, [](const EdgeRadixEntry& entry) {
-					return entry.u;
-				});
-
-				bool has_duplicate_edges = false;
-				for (Int edge_index = 0; edge_index + 1 < N_EDGES; ++edge_index) {
-					if (
-						sorted_entries[edge_index].u == sorted_entries[edge_index + 1].u &&
-						sorted_entries[edge_index].v == sorted_entries[edge_index + 1].v
-					) {
-						has_duplicate_edges = true;
-						break;
-					}
-				}
-
-				if constexpr (SWAP_EDGE_SIGN == 1) {
-					for (Int sorted_index = 0; sorted_index < N_EDGES; ++sorted_index) {
-						const Int base = N_HAIR + 2 * sorted_index;
-						half_edges[base] = sorted_entries[sorted_index].u;
-						half_edges[base + 1] = sorted_entries[sorted_index].v;
-					}
-					return sign;
-				}
-
-				if (has_duplicate_edges) {
-					for (Int sorted_index = 0; sorted_index < N_EDGES; ++sorted_index) {
-						const Int base = N_HAIR + 2 * sorted_index;
-						half_edges[base] = sorted_entries[sorted_index].u;
-						half_edges[base + 1] = sorted_entries[sorted_index].v;
-					}
-					return 0;
+					edge_matrix[key] = edge_index;
 				}
 
 				std::array<Int, N_EDGES> destinations{};
-				for (Int sorted_index = 0; sorted_index < N_EDGES; ++sorted_index) {
-					destinations[sorted_entries[sorted_index].original_index] = sorted_index;
-					const Int base = N_HAIR + 2 * sorted_index;
-					half_edges[base] = sorted_entries[sorted_index].u;
-					half_edges[base + 1] = sorted_entries[sorted_index].v;
+				Int sorted_index = 0;
+				for (Int u = 0; u < N_VERTICES; ++u) {
+					for (Int v = u; v < N_VERTICES; ++v) {
+						const std::size_t key = upper_triangular_edge_slot(u, v);
+						const int32_t original_index = edge_matrix[key];
+						if (original_index == -1) {
+							continue;
+						}
+
+						const Int base = N_HAIR + 2 * sorted_index;
+						half_edges[base] = u;
+						half_edges[base + 1] = v;
+
+						if constexpr (SWAP_EDGE_SIGN == -1) {
+							destinations[static_cast<std::size_t>(original_index)] = sorted_index;
+						}
+						++sorted_index;
+					}
 				}
 
-				sign *= permutation_sign_from_destinations(destinations);
+				if constexpr (SWAP_EDGE_SIGN == -1) {
+					sign *= permutation_sign_from_destinations(destinations);
+				}
+
 				return sign;
+
 			}
 
 			signedInt assignPermutedDirectedSortedEdgesWithIsomorphism(

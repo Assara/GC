@@ -8,6 +8,7 @@ PLAYGROUND_TARGET := gc_contraction_playground
 SPLIT_WATERFALL_TARGET := gc_split_waterfall_playground
 STANDARDIZE_PERF_TARGET := standardize_perf
 STANDARDIZE3_PROFILE_TARGET := standardize3_profile
+ASSIGN_PERMUTED_SORT_COMPARE_TARGET := assign_permuted_sort_compare
 GRAPH_STANDARDIZER_COMPARE_TARGET := graph_standardizer_compare
 WHEEL_SPLIT_CONTRACT_REPS_TARGET := wheel_split_contract_reps
 SOLVER_COMPARE_TARGET := solver_compare
@@ -57,6 +58,9 @@ STANDARDIZE_PERF_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(STANDARDIZE_PERF_SR
 STANDARDIZE3_PROFILE_SRCS := tools/standardize3_profile.cpp
 STANDARDIZE3_PROFILE_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(STANDARDIZE3_PROFILE_SRCS))
 
+ASSIGN_PERMUTED_SORT_COMPARE_SRCS := tools/assign_permuted_sort_compare.cpp
+ASSIGN_PERMUTED_SORT_COMPARE_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(ASSIGN_PERMUTED_SORT_COMPARE_SRCS))
+
 GRAPH_STANDARDIZER_COMPARE_SRCS := tools/graph_standardizer_comparison.cpp
 GRAPH_STANDARDIZER_COMPARE_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(GRAPH_STANDARDIZER_COMPARE_SRCS))
 GRAPH_STANDARDIZER_COMPARE_NAUTY_OBJS := $(BUILD_DIR)/tools/graph_standardizer_comparison_nauty.o
@@ -73,7 +77,7 @@ TEST_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(TEST_SRCS))
 
 # ======= RULES =======
 
-.PHONY: all clean run playground split-waterfall run-split-waterfall standardize-perf standardize3-profile run-standardize-perf run-standardize3-profile graph-standardizer-compare graph-standardizer-compare-nauty run-graph-standardizer-compare wheel-split-contract-reps run-wheel-split-contract-reps run-split-contract-files run-split-contract-solver solver-compare solver-compare-linbox run-solver-compare test
+.PHONY: all clean run playground split-waterfall run-split-waterfall standardize-perf standardize3-profile assign-permuted-sort-compare run-standardize-perf run-standardize3-profile run-assign-permuted-sort-compare graph-standardizer-compare graph-standardizer-compare-nauty run-graph-standardizer-compare wheel-split-contract-reps run-wheel-split-contract-reps run-split-contract-files run-split-contract-solver solver-compare solver-compare-linbox run-solver-compare test
 
 all: $(TARGET)
 
@@ -100,6 +104,11 @@ $(STANDARDIZE_PERF_TARGET): $(STANDARDIZE_PERF_OBJS)
 $(STANDARDIZE3_PROFILE_TARGET): $(STANDARDIZE3_PROFILE_OBJS)
 	@echo "🚧 Linking $(STANDARDIZE3_PROFILE_TARGET) with Clang + LLD..."
 	$(LD) $(STANDARDIZE3_PROFILE_OBJS) $(LDFLAGS) -o $(STANDARDIZE3_PROFILE_TARGET)
+	@echo "✅ Build complete."
+
+$(ASSIGN_PERMUTED_SORT_COMPARE_TARGET): $(ASSIGN_PERMUTED_SORT_COMPARE_OBJS)
+	@echo "🚧 Linking $(ASSIGN_PERMUTED_SORT_COMPARE_TARGET) with Clang + LLD..."
+	$(LD) $(ASSIGN_PERMUTED_SORT_COMPARE_OBJS) $(LDFLAGS) -o $(ASSIGN_PERMUTED_SORT_COMPARE_TARGET)
 	@echo "✅ Build complete."
 
 $(GRAPH_STANDARDIZER_COMPARE_TARGET): $(GRAPH_STANDARDIZER_COMPARE_OBJS)
@@ -149,7 +158,7 @@ $(SOLVER_COMPARE_LINBOX_OBJS): tools/solver_comparison.cpp
 
 clean:
 	@echo "🧹 Cleaning build files..."
-	rm -rf $(BUILD_DIR) $(TARGET) $(PLAYGROUND_TARGET) $(SPLIT_WATERFALL_TARGET) $(STANDARDIZE_PERF_TARGET) $(GRAPH_STANDARDIZER_COMPARE_TARGET) $(GRAPH_STANDARDIZER_COMPARE_TARGET)-nauty $(WHEEL_SPLIT_CONTRACT_REPS_TARGET) $(SOLVER_COMPARE_TARGET) $(SOLVER_COMPARE_TARGET)-linbox $(TEST_TARGET)
+	rm -rf $(BUILD_DIR) $(TARGET) $(PLAYGROUND_TARGET) $(SPLIT_WATERFALL_TARGET) $(STANDARDIZE_PERF_TARGET) $(STANDARDIZE3_PROFILE_TARGET) $(ASSIGN_PERMUTED_SORT_COMPARE_TARGET) $(GRAPH_STANDARDIZER_COMPARE_TARGET) $(GRAPH_STANDARDIZER_COMPARE_TARGET)-nauty $(WHEEL_SPLIT_CONTRACT_REPS_TARGET) $(SOLVER_COMPARE_TARGET) $(SOLVER_COMPARE_TARGET)-linbox $(TEST_TARGET)
 
 run: all
 	@./$(TARGET)
@@ -165,11 +174,16 @@ standardize-perf: $(STANDARDIZE_PERF_TARGET)
 
 standardize3-profile: $(STANDARDIZE3_PROFILE_TARGET)
 
+assign-permuted-sort-compare: $(ASSIGN_PERMUTED_SORT_COMPARE_TARGET)
+
 run-standardize-perf: $(STANDARDIZE_PERF_TARGET)
 	@./$(STANDARDIZE_PERF_TARGET) $(or $(WHEEL),33) $(or $(REPEAT),1) $(or $(ITER),3)
 
 run-standardize3-profile: $(STANDARDIZE3_PROFILE_TARGET)
 	@./$(STANDARDIZE3_PROFILE_TARGET) $(or $(WHEEL),11) $(or $(ROUNDS),2) $(or $(REPEAT),1) $(or $(ITER),3) $(or $(WORKLOAD),split-contract)
+
+run-assign-permuted-sort-compare: $(ASSIGN_PERMUTED_SORT_COMPARE_TARGET)
+	@./$(ASSIGN_PERMUTED_SORT_COMPARE_TARGET) $(or $(WHEEL),25) $(or $(ROUNDS),0) $(or $(ITER),3) $(or $(WORKLOAD),vmax)
 
 graph-standardizer-compare: $(GRAPH_STANDARDIZER_COMPARE_TARGET)
 
