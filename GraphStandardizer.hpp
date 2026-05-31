@@ -55,7 +55,7 @@ Int N_VERTICES,
 
 
 			struct VertexBucket {
-				array<assign_type, N_VERTICES+1> data{};
+				array<assign_type, N_VERTICES - 1> data{};
 				std::size_t size = 0;
 
 				assign_type operator[](std::size_t i) const {
@@ -115,33 +115,39 @@ Int N_VERTICES,
 				}
 
 				void update_vertex_groups2() {
-						VertexBucket new_group_separators;
+					VertexBucket new_group_separators;
 
-						for (size_t i = 1; i< group_separators.size; ++i) {
-							auto begin_i = group_separators[i - 1];
-							auto end_i = group_separators[i];
+					for (std::size_t sep_i = 0; sep_i <= group_separators.size; ++sep_i) {
+						const assign_type begin_i =
+							(sep_i == 0) ? assign_type{0} : group_separators[sep_i - 1];
+						const assign_type end_i =
+							(sep_i < group_separators.size) ? group_separators[sep_i] : active_size;
+
+						if (sep_i > 0) {
 							new_group_separators.push_back(begin_i);
-							if (begin_i + 1 == end_i) continue;
+						}
+						if (begin_i + 1 >= end_i) {
+							continue;
+						}
 
-							auto begin = vertex_groups.begin() + begin_i;
-							auto end = vertex_groups.begin() + end_i;
-							std::sort(
-								begin,
-								end,
-								[this](assign_type a, assign_type b) {
-									return colors[a] > colors[b];
-								}
-							);
+						auto begin = vertex_groups.begin() + begin_i;
+						auto end = vertex_groups.begin() + end_i;
+						std::sort(
+							begin,
+							end,
+							[this](assign_type a, assign_type b) {
+								return colors[a] > colors[b];
+							}
+						);
 
-							for (auto new_separator = begin_i + 1; new_separator < end_i; ++new_separator) {
-								if (colors[vertex_groups[new_separator]] != colors[vertex_groups[new_separator-1]]) {
-									new_group_separators.push_back(new_separator);
-								}
+						for (auto new_separator = begin_i + 1; new_separator < end_i; ++new_separator) {
+							if (colors[vertex_groups[new_separator]] != colors[vertex_groups[new_separator - 1]]) {
+								new_group_separators.push_back(new_separator);
 							}
 						}
-						group_separators = new_group_separators;
-						group_separators.push_back(N_VERTICES);
 					}
+					group_separators = new_group_separators;
+				}
 
 	
 
@@ -157,10 +163,7 @@ Int N_VERTICES,
 					for (auto& color : colors) {
 						color = hash(color);
 					}
-					group_separators[0]=0;
-					group_separators[1]=N_VERTICES;
-					group_separators.size = 2;
-
+					group_separators.size = 0;
 				}
 
 				signedInt compare(const CanonBuilder3& other) const {
@@ -218,13 +221,29 @@ Int N_VERTICES,
 						return;
 					}
 
-					const assign_type branch_size = end - begin;
-					collector.reserve(collector.size() + branch_size);
 
 					for (assign_type chosen = begin; chosen < end; ++chosen) {
 						collector.emplace_back(*this);
 						CanonBuilder3& child = collector.back();
-						++child.colors[child.vertex_groups[chosen]];
+						if (chosen != begin) {
+							std::swap(child.vertex_groups[begin], child.vertex_groups[chosen]);
+						}
+						bool inserted_separator = false;
+						for (std::size_t sep_i = 0; sep_i < child.group_separators.size; ++sep_i) {
+							if (child.group_separators[sep_i] >= begin + 1) {
+								for (std::size_t move_i = child.group_separators.size; move_i > sep_i; --move_i) {
+									child.group_separators[move_i] = child.group_separators[move_i - 1];
+								}
+								child.group_separators[sep_i] = begin + 1;
+								++child.group_separators.size;
+								inserted_separator = true;
+								break;
+							}
+						}
+						if (!inserted_separator) {
+							child.group_separators.push_back(begin + 1);
+						}
+						++child.colors[child.vertex_groups[begin]];
 					}
 				}
 
@@ -274,9 +293,11 @@ Int N_VERTICES,
 				attempts[0].init_starter_colors(G);
 				valid_attempts.push_back(0);
 
+				attempts[0].update_vertex_groups2();
+
 				signedInt cmp;
 
-				while (attempts[valid_attempts[0]].group_separators.size <= N_VERTICES) {
+				while (attempts[valid_attempts[0]].group_separators.size < N_VERTICES - 1) {
 					for (Int reload = 0; reload < RELOAD_ITERATIONS; ++reload) {
 						next_valid_attempts.clear();
 						next_valid_attempts.reserve(valid_attempts.size());
@@ -307,7 +328,7 @@ Int N_VERTICES,
 						valid_attempts.swap(next_valid_attempts);
 					}
 
-					if (attempts[valid_attempts[0]].group_separators.size > N_VERTICES) {
+					if (attempts[valid_attempts[0]].group_separators.size >= N_VERTICES - 1) {
 						break;
 					}
 
