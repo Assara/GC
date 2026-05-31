@@ -20,6 +20,10 @@ class Permutation {
 			: p(arr)
 		{}
 
+		Int& operator[](Int i) {
+			return p[i];
+		}
+
 		const Int& operator[](Int i) const {
 			return p[i];
 		}
@@ -42,6 +46,14 @@ class Permutation {
 			Permutation inv;
 			for (Int i = 0; i < n; ++i) {
 				inv.p[p[i]] = i;
+			}
+			return inv;
+		}
+
+		static Permutation inverse_of(const std::array<Int, n>& arr) {
+			Permutation inv;
+			for (Int i = 0; i < n; ++i) {
+				inv.p[arr[i]] = i;
 			}
 			return inv;
 		}
