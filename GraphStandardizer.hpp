@@ -11,16 +11,21 @@
 #include <utility>
 #include "VectorSpace/BasisElement.hpp"
 #include "GraphIsomorphism.hpp"
-#include <iostream>
 
 #if defined(GC_PROFILE_STANDARDIZER_SORT) || defined(GC_PROFILE_STANDARDIZER_LABELING_ONLY)
 namespace gc_standardizer_sort_profile {
 	inline std::atomic<unsigned long long> create_final_attempts_nanoseconds{0};
 	inline std::atomic<unsigned long long> sort_and_filter_nanoseconds{0};
+	inline std::atomic<unsigned long long> attempts_created{0};
+	inline std::atomic<unsigned long long> final_attempts_total{0};
+	inline std::atomic<unsigned long long> false_final_attempts{0};
 
 	inline void reset() {
 		create_final_attempts_nanoseconds.store(0, std::memory_order_relaxed);
 		sort_and_filter_nanoseconds.store(0, std::memory_order_relaxed);
+		attempts_created.store(0, std::memory_order_relaxed);
+		final_attempts_total.store(0, std::memory_order_relaxed);
+		false_final_attempts.store(0, std::memory_order_relaxed);
 	}
 }
 #endif
@@ -86,7 +91,6 @@ Int N_VERTICES,
 					if (size > other.size) {
 						return 1;
 					}
-
 					return std::memcmp(
 						data.data(),
 						other.data.data(),
@@ -174,8 +178,6 @@ Int N_VERTICES,
 					active_size = static_cast<assign_type>(write);
 				}
 
-	
-
 				void init_starter_colors(const GraphType& G) {
 					for (Int e = 0; e < G.half_edges.size(); ++e) {
 						++colors[G.half_edges[e]];
@@ -188,6 +190,7 @@ Int N_VERTICES,
 					for (auto& color : colors) {
 						color = hash(color);
 					}
+
 				}
 
 				signedInt compare(const CanonBuilder3& other) const {
@@ -225,7 +228,6 @@ Int N_VERTICES,
 						begin = end;
 						other_begin = other_end;
 					}
-
 					return 0;
 				}
 
@@ -355,7 +357,6 @@ Int N_VERTICES,
 
 			using FinalAttemptSet = std::pair<vector<CanonBuilder3>, vector<std::size_t>>;
 
-
 			FinalAttemptSet create_final_attempts(const GraphType& G) const {
 				static constexpr Int RELOAD_ITERATIONS = (N_VERTICES > 2) ? (N_VERTICES / 3) : 1;
 
@@ -366,6 +367,9 @@ Int N_VERTICES,
 				attempts.emplace_back(CanonBuilder3());
 				attempts[0].init_starter_colors(G);
 				valid_attempts.push_back(0);
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+				unsigned long long local_attempts_created = 1;
+#endif
 
 				signedInt cmp;
 
@@ -420,6 +424,9 @@ Int N_VERTICES,
 					for (const std::size_t attempt_index : valid_attempts) {
 						attempts[attempt_index].branch(branch_range, next_attempts);
 					}
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+					local_attempts_created += static_cast<unsigned long long>(next_attempts.size());
+#endif
 
 					attempts.swap(next_attempts);
 					valid_attempts.resize(attempts.size());
@@ -428,6 +435,12 @@ Int N_VERTICES,
 					}
 				}
 
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+				gc_standardizer_sort_profile::attempts_created.fetch_add(
+					local_attempts_created,
+					std::memory_order_relaxed
+				);
+#endif
 				return {std::move(attempts), std::move(valid_attempts)};
 			}
 
@@ -469,6 +482,30 @@ Int N_VERTICES,
 
 				if (valid_attempts.size() == 1 || best_basis.getCoefficient() == fieldType{0}) {
 #if defined(GC_PROFILE_STANDARDIZER_SORT)
+					const unsigned long long final_attempt_count =
+						static_cast<unsigned long long>(valid_attempts.size());
+					unsigned long long true_final_attempt_count = final_attempt_count;
+					if (valid_attempts.size() > 1 && best_basis.getCoefficient() == fieldType{0}) {
+						true_final_attempt_count = 1;
+						typename GraphType::Basis attempt_basis;
+						for (std::size_t i = 1; i < valid_attempts.size(); ++i) {
+							attempt_basis = GraphType::assignPermutedDirectedSortedEdgesBasis(
+								input,
+								attempts[valid_attempts[i]].vertex_permutation
+							);
+							if (best_basis.compare(attempt_basis) == 0) {
+								++true_final_attempt_count;
+							}
+						}
+					}
+					gc_standardizer_sort_profile::final_attempts_total.fetch_add(
+						final_attempt_count,
+						std::memory_order_relaxed
+					);
+					gc_standardizer_sort_profile::false_final_attempts.fetch_add(
+						final_attempt_count - true_final_attempt_count,
+						std::memory_order_relaxed
+					);
 					record_sort_and_filter_stop();
 #endif
 					return best_basis;
@@ -476,6 +513,7 @@ Int N_VERTICES,
 
 				typename GraphType::Basis attempt_basis;
 				signedInt comparison;
+				unsigned long long true_final_attempt_count = 1;
 			
 				for (std::size_t i = 1; i < valid_attempts.size(); ++i) {
 					const std::size_t attempt_index = valid_attempts[i];
@@ -485,20 +523,380 @@ Int N_VERTICES,
 					
 					comparison = best_basis.compare(attempt_basis);	
 					if  (comparison == 0) {
+						++true_final_attempt_count;
 						if (attempt_basis.getCoefficient() == -best_basis.getCoefficient()) {
 							best_basis.set_coefficient(fieldType(0));
-#if defined(GC_PROFILE_STANDARDIZER_SORT)
-							record_sort_and_filter_stop();
-#endif
-							return best_basis;
 						}
-
 					} else if (comparison < 0) {
 						best_basis = attempt_basis;
+						true_final_attempt_count = 1;
 					} 					
 				}
 
 #if defined(GC_PROFILE_STANDARDIZER_SORT)
+				const unsigned long long final_attempt_count =
+					static_cast<unsigned long long>(valid_attempts.size());
+				gc_standardizer_sort_profile::final_attempts_total.fetch_add(
+					final_attempt_count,
+					std::memory_order_relaxed
+				);
+				gc_standardizer_sort_profile::false_final_attempts.fetch_add(
+					final_attempt_count - true_final_attempt_count,
+					std::memory_order_relaxed
+				);
+				record_sort_and_filter_stop();
+#endif
+				return best_basis;
+			}
+
+			struct CanonBuilder4 {
+				array<hash_int_type, N_VERTICES> colors;
+				Permutation<N_VERTICES> vertex_permutation;
+				array<assign_type, N_VERTICES> vertex_groups;
+				VertexBucket group_separators;
+				assign_type next_to_assign = 0;
+				assign_type active_size = N_VERTICES;
+
+				CanonBuilder4()
+					: colors{},
+					  vertex_permutation{},
+					  vertex_groups{},
+					  group_separators{},
+					  next_to_assign(0),
+					  active_size(N_VERTICES) {
+					vertex_permutation.p.fill(N_VERTICES);
+					std::iota(vertex_groups.begin(), vertex_groups.end(), 0);
+				}
+
+				void update_vertex_groups2() {
+					VertexBucket new_group_separators;
+
+					for (std::size_t sep_i = 0; sep_i <= group_separators.size; ++sep_i) {
+						const assign_type begin_i =
+							(sep_i == 0) ? assign_type{0} : group_separators[sep_i - 1];
+						const assign_type end_i =
+							(sep_i < group_separators.size) ? group_separators[sep_i] : active_size;
+
+						if (sep_i > 0) {
+							new_group_separators.push_back(begin_i);
+						}
+						if (begin_i + 1 >= end_i) {
+							continue;
+						}
+
+						auto begin = vertex_groups.begin() + begin_i;
+						auto end = vertex_groups.begin() + end_i;
+						std::sort(
+							begin,
+							end,
+							[this](assign_type a, assign_type b) {
+								return colors[a] > colors[b];
+							}
+						);
+
+						for (auto new_separator = begin_i + 1; new_separator < end_i; ++new_separator) {
+							if (colors[vertex_groups[new_separator]] != colors[vertex_groups[new_separator - 1]]) {
+								new_group_separators.push_back(new_separator);
+							}
+						}
+					}
+					group_separators = new_group_separators;
+				}
+
+				void init_starter_colors(const GraphType& G) {
+					for (Int e = 0; e < G.half_edges.size(); ++e) {
+						++colors[G.half_edges[e]];
+					}
+					if constexpr (GraphType::N_HAIR > 0) {
+						for (Int i = 0; i < GraphType::N_HAIR; ++i) {
+							colors[G.half_edges[i]] += hash(i);
+						}
+					}
+					for (auto& color : colors) {
+						color = hash(color);
+					}
+					group_separators.size = 0;
+				}
+
+				signedInt compare(const CanonBuilder4& other) const {
+					const signedInt separator_comparison = group_separators.compare(other.group_separators);
+					if (separator_comparison != 0) {
+						return separator_comparison;
+					}
+
+					assign_type begin = 0;
+					assign_type other_begin = 0;
+					for (std::size_t sep_i = 0; sep_i <= group_separators.size; ++sep_i) {
+						const assign_type end =
+							(sep_i < group_separators.size) ? group_separators[sep_i] : active_size;
+						const assign_type other_end =
+							(sep_i < other.group_separators.size) ? other.group_separators[sep_i] : other.active_size;
+
+						if (end > begin && other_end > other_begin) {
+							const hash_int_type color = colors[vertex_groups[begin]];
+							const hash_int_type other_color = other.colors[other.vertex_groups[other_begin]];
+							if (color < other_color) {
+								return -1;
+							}
+							if (color > other_color) {
+								return 1;
+							}
+						}
+
+						begin = end;
+						other_begin = other_end;
+					}
+					return 0;
+				}
+
+				std::pair<assign_type, assign_type> branching_group_range() const {
+					assign_type begin = 0;
+					for (std::size_t sep_i = 0; sep_i <= group_separators.size; ++sep_i) {
+						const assign_type end =
+							(sep_i < group_separators.size) ? group_separators[sep_i] : active_size;
+						if (end - begin > 1) {
+							return {begin, end};
+						}
+						begin = end;
+					}
+					return {N_VERTICES, N_VERTICES};
+				}
+
+				void branch(
+					std::pair<assign_type, assign_type> branch_range,
+					vector<CanonBuilder4>& collector
+				) const {
+					const assign_type begin = branch_range.first;
+					const assign_type end = branch_range.second;
+					if (begin >= end || end > active_size) {
+						return;
+					}
+
+					const assign_type branch_size = end - begin;
+					collector.reserve(collector.size() + branch_size);
+
+					for (assign_type chosen = begin; chosen < end; ++chosen) {
+						collector.emplace_back(*this);
+						CanonBuilder4& child = collector.back();
+						++child.colors[child.vertex_groups[chosen]];
+					}
+				}
+
+				void update_colors(const GraphType& G) {
+					array<hash_int_type, N_VERTICES> next_colors;
+
+					for (Int v = 0; v < N_VERTICES; ++v) {
+						next_colors[v] = hash(colors[v]);
+					}
+
+					for (Int e = G.N_HAIR; e < G.half_edges.size(); e += 2) {
+						next_colors[G.half_edges[e]] += colors[G.half_edges[e + 1]];
+						next_colors[G.half_edges[e + 1]] += colors[G.half_edges[e]];
+					}
+
+					colors = next_colors;
+				}
+
+				static hash_int_type hash(hash_int_type n) noexcept {
+					n += 0x9e3779b97f4a7c15ULL;
+					n = (n ^ (n >> 30)) * 0xbf58476d1ce4e5b9ULL;
+					n = (n ^ (n >> 27)) * 0x94d049bb133111ebULL;
+					return n ^ (n >> 31);
+				}
+
+				Permutation<N_VERTICES> create_vertex_permutation() {
+					Permutation<N_VERTICES> perm;
+
+					for (Int i = 0; i< N_VERTICES; ++i) {
+						perm[vertex_groups[i]] = i;
+					}
+					return perm;
+				}
+			};
+
+			using FinalAttemptSet4 = std::pair<vector<CanonBuilder4>, vector<std::size_t>>;
+
+			FinalAttemptSet4 create_final_attempts4(const GraphType& G) const {
+				static constexpr Int RELOAD_ITERATIONS = (N_VERTICES > 2) ? (N_VERTICES / 3) : 1;
+
+				vector<CanonBuilder4> attempts;
+				vector<CanonBuilder4> next_attempts;
+				vector<std::size_t> valid_attempts;
+				vector<std::size_t> next_valid_attempts;
+				attempts.emplace_back(CanonBuilder4());
+				attempts[0].init_starter_colors(G);
+				valid_attempts.push_back(0);
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+				unsigned long long local_attempts_created = 1;
+#endif
+
+				signedInt cmp;
+
+				while (attempts[valid_attempts[0]].group_separators.size < N_VERTICES - 1) {
+					for (Int reload = 0; reload < RELOAD_ITERATIONS; ++reload) {
+						next_valid_attempts.clear();
+						next_valid_attempts.reserve(valid_attempts.size());
+
+						if (valid_attempts.size() == 1) {
+							CanonBuilder4& attempt = attempts[valid_attempts[0]];
+							attempt.update_colors(G);
+							attempt.update_vertex_groups2();
+							continue;
+						}
+
+						for (const std::size_t attempt_index : valid_attempts) {
+							attempts[attempt_index].update_colors(G);
+							attempts[attempt_index].update_vertex_groups2();
+
+							if (next_valid_attempts.empty()) {
+								next_valid_attempts.push_back(attempt_index);
+							} else {
+								cmp = attempts[attempt_index].compare(attempts[next_valid_attempts.back()]);
+								if (cmp > 0) {
+									next_valid_attempts[0] = attempt_index;
+									next_valid_attempts.resize(1);
+								} else if (cmp == 0) {
+									next_valid_attempts.push_back(attempt_index);
+								}
+							}
+						}
+						valid_attempts.swap(next_valid_attempts);
+					}
+
+					if (attempts[valid_attempts[0]].group_separators.size >= N_VERTICES - 1) {
+						break;
+					}
+
+					const auto branch_range = attempts[valid_attempts[0]].branching_group_range();
+
+					next_attempts.clear();
+					next_attempts.reserve(
+						static_cast<std::size_t>(branch_range.second - branch_range.first) * valid_attempts.size()
+					);
+
+					for (const std::size_t attempt_index : valid_attempts) {
+						attempts[attempt_index].branch(branch_range, next_attempts);
+					}
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+					local_attempts_created += static_cast<unsigned long long>(next_attempts.size());
+#endif
+
+					attempts.swap(next_attempts);
+					valid_attempts.resize(attempts.size());
+					for (std::size_t i = 0; i < attempts.size(); ++i) {
+						valid_attempts[i] = i;
+					}
+				}
+
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+				gc_standardizer_sort_profile::attempts_created.fetch_add(
+					local_attempts_created,
+					std::memory_order_relaxed
+				);
+#endif
+				return {std::move(attempts), std::move(valid_attempts)};
+			}
+
+			BasisElement<GraphType, fieldType> standardize4(const BasisElement<GraphType, fieldType>& input) const {
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+				const auto create_final_attempts_start = std::chrono::steady_clock::now();
+#endif
+				const GraphType& G = input.getValue();
+				auto [attempts, valid_attempts] = create_final_attempts4(G);
+
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+				const auto create_final_attempts_stop = std::chrono::steady_clock::now();
+				gc_standardizer_sort_profile::create_final_attempts_nanoseconds.fetch_add(
+					static_cast<unsigned long long>(
+						std::chrono::duration_cast<std::chrono::nanoseconds>(
+							create_final_attempts_stop - create_final_attempts_start
+						).count()
+					),
+					std::memory_order_relaxed
+				);
+				const auto sort_and_filter_start = std::chrono::steady_clock::now();
+				const auto record_sort_and_filter_stop = [&]() {
+					const auto sort_and_filter_stop = std::chrono::steady_clock::now();
+					gc_standardizer_sort_profile::sort_and_filter_nanoseconds.fetch_add(
+						static_cast<unsigned long long>(
+							std::chrono::duration_cast<std::chrono::nanoseconds>(
+								sort_and_filter_stop - sort_and_filter_start
+							).count()
+						),
+						std::memory_order_relaxed
+					);
+				};
+#endif
+
+				typename GraphType::Basis best_basis = GraphType::assignPermutedDirectedSortedEdgesBasis(
+						input,
+						attempts[valid_attempts[0]].create_vertex_permutation()
+				);
+
+				if (valid_attempts.size() == 1 || best_basis.getCoefficient() == fieldType{0}) {
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+					const unsigned long long final_attempt_count =
+						static_cast<unsigned long long>(valid_attempts.size());
+					unsigned long long true_final_attempt_count = final_attempt_count;
+					if (valid_attempts.size() > 1 && best_basis.getCoefficient() == fieldType{0}) {
+						true_final_attempt_count = 1;
+						typename GraphType::Basis attempt_basis;
+						for (std::size_t i = 1; i < valid_attempts.size(); ++i) {
+							attempt_basis = GraphType::assignPermutedDirectedSortedEdgesBasis(
+								input,
+								attempts[valid_attempts[i]].create_vertex_permutation()
+							);
+							if (best_basis.compare(attempt_basis) == 0) {
+								++true_final_attempt_count;
+							}
+						}
+					}
+					gc_standardizer_sort_profile::final_attempts_total.fetch_add(
+						final_attempt_count,
+						std::memory_order_relaxed
+					);
+					gc_standardizer_sort_profile::false_final_attempts.fetch_add(
+						final_attempt_count - true_final_attempt_count,
+						std::memory_order_relaxed
+					);
+					record_sort_and_filter_stop();
+#endif
+					return best_basis;
+				}
+
+				typename GraphType::Basis attempt_basis;
+				signedInt comparison;
+				unsigned long long true_final_attempt_count = 1;
+
+				for (std::size_t i = 1; i < valid_attempts.size(); ++i) {
+					const std::size_t attempt_index = valid_attempts[i];
+					attempt_basis = GraphType::assignPermutedDirectedSortedEdgesBasis(
+						input,
+						attempts[attempt_index].create_vertex_permutation());
+
+					comparison = best_basis.compare(attempt_basis);
+					if  (comparison == 0) {
+						++true_final_attempt_count;
+						if (attempt_basis.getCoefficient() == -best_basis.getCoefficient()) {
+							best_basis.set_coefficient(fieldType(0));
+						}
+					} else if (comparison < 0) {
+						best_basis = attempt_basis;
+						true_final_attempt_count = 1;
+					}
+				}
+
+#if defined(GC_PROFILE_STANDARDIZER_SORT)
+				const unsigned long long final_attempt_count =
+					static_cast<unsigned long long>(valid_attempts.size());
+				gc_standardizer_sort_profile::final_attempts_total.fetch_add(
+					final_attempt_count,
+					std::memory_order_relaxed
+				);
+				gc_standardizer_sort_profile::false_final_attempts.fetch_add(
+					final_attempt_count - true_final_attempt_count,
+					std::memory_order_relaxed
+				);
 				record_sort_and_filter_stop();
 #endif
 				return best_basis;
