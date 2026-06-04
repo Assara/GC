@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "examplegraphs.hpp"
+#include "GraphStandardizer.hpp"
 #include "VectorSpace/row_based_lil_matrix.hpp"
 
 namespace {
@@ -25,6 +26,7 @@ enum class ExperimentMode {
 	SplitMap,
 	SplitMapInfo,
 	SplitMapSolve,
+	SplitMapDual,
 	Krylov,
 	KrylovDual,
 	KrylovConstrained,
@@ -128,6 +130,60 @@ void write_graph_record(std::ofstream& out, const GraphType& graph) {
 		reinterpret_cast<const char*>(graph.half_edges.data()),
 		static_cast<std::streamsize>(graph.half_edges.size() * sizeof(Int))
 	);
+}
+
+template <typename GraphType>
+bigInt automorphism_group_size4(const GraphType& input_graph) {
+	using Standardizer = GraphStandardizer<
+		GraphType::N_VERTICES_,
+		GraphType::N_EDGES_,
+		GraphType::N_OUT_HAIR_,
+		GraphType::N_IN_HAIR_,
+		GraphType::C_,
+		GraphType::D_,
+		fieldType
+	>;
+	using IsomorphismType = typename Standardizer::IsomorphismType;
+
+	Standardizer standardizer;
+	auto [attempts, valid_attempts] = standardizer.create_final_attempts4(input_graph);
+
+	std::vector<IsomorphismType> minimizers;
+	typename GraphType::Basis best_basis;
+	bool have_best = false;
+
+	for (const std::size_t attempt_index : valid_attempts) {
+		typename GraphType::ThisGraph graph;
+		IsomorphismType iso;
+		const signedInt sign = graph.assignPermutedDirectedSortedEdgesWithIsomorphism(
+			input_graph,
+			attempts[attempt_index].create_vertex_permutation(),
+			iso
+		);
+		if (sign == 0) {
+			continue;
+		}
+
+		typename GraphType::Basis attempt_basis(std::move(graph), fieldType{sign});
+		if (!have_best) {
+			best_basis = attempt_basis;
+			minimizers.clear();
+			minimizers.push_back(iso);
+			have_best = true;
+			continue;
+		}
+
+		const signedInt comparison = best_basis.compare(attempt_basis);
+		if (comparison < 0) {
+			best_basis = attempt_basis;
+			minimizers.clear();
+			minimizers.push_back(iso);
+		} else if (comparison == 0) {
+			minimizers.push_back(iso);
+		}
+	}
+
+	return minimizers.size();
 }
 
 std::uint32_t coefficient_to_u32(const fieldType& coefficient) {
@@ -259,6 +315,64 @@ load_split_map_columns_as_compressed_matrix(
 	}
 	return matrix;
 }
+
+compressed_sparse_matrix<fieldType> build_scaled_adjoint_matrix(
+	const compressed_sparse_matrix<fieldType>& matrix,
+	const std::vector<fieldType>& image_aut,
+	const std::vector<fieldType>& domain_aut
+) {
+	using Matrix = compressed_sparse_matrix<fieldType>;
+	using Basis = typename Matrix::Basis;
+
+	std::vector<std::vector<Basis>> columns(static_cast<std::size_t>(matrix.image_dim()));
+	for (std::uint32_t domain_col = 0; domain_col < matrix.domain_dim(); ++domain_col) {
+		const fieldType domain_scale = domain_aut[domain_col];
+		for (const auto& be : matrix.get_column(domain_col)) {
+			const std::size_t image_row = static_cast<std::size_t>(be.getValue());
+			columns[image_row].emplace_back(
+				domain_col,
+				be.getCoefficient() * image_aut[image_row] / domain_scale
+			);
+		}
+	}
+
+	Matrix adjoint(matrix.domain_dim());
+	for (auto& column : columns) {
+		adjoint.add_col(column);
+	}
+	return adjoint;
+}
+
+template <typename SparseColumn>
+std::vector<typename compressed_sparse_matrix<fieldType>::Basis>
+apply_compressed_matrix_to_sparse_column(
+	const compressed_sparse_matrix<fieldType>& matrix,
+	const SparseColumn& column
+) {
+	using Matrix = compressed_sparse_matrix<fieldType>;
+	using Basis = typename Matrix::Basis;
+
+	std::unordered_map<std::uint32_t, fieldType> accum;
+	for (const auto& be : column) {
+		const fieldType scale = be.getCoefficient();
+		for (const auto& image_be : matrix.get_column(static_cast<std::uint32_t>(be.getValue()))) {
+			accum[image_be.getValue()] += image_be.getCoefficient() * scale;
+		}
+	}
+
+	std::vector<Basis> result;
+	result.reserve(accum.size());
+	for (const auto& [index, coefficient] : accum) {
+		if (coefficient != fieldType{}) {
+			result.emplace_back(index, coefficient);
+		}
+	}
+	std::sort(result.begin(), result.end());
+	return result;
+}
+
+template <typename GCType>
+typename GCType::ContGC contraction_of(GCType gamma);
 
 compressed_sparse_matrix<fieldType> transpose_compressed_matrix(
 	const compressed_sparse_matrix<fieldType>& matrix
@@ -1555,6 +1669,213 @@ int run_split_map_solve_case(
 	return EXIT_SUCCESS;
 }
 
+template <Int N>
+int run_split_map_dual_case(
+	int rounds,
+	const std::filesystem::path* correction_output_path,
+	const std::filesystem::path* map_output_prefix,
+	std::size_t checkpoint_interval
+) {
+	using GCType = OddGCdegZero<N + 1>;
+	using GraphType = typename GCType::GraphType;
+	using SplitGraph = typename GCType::SplitGraphType;
+
+	const std::filesystem::path prefix = map_output_prefix != nullptr
+		? *map_output_prefix
+		: split_map_prefix<N>(rounds);
+	const std::filesystem::path columns_path = prefix.string() + "_columns.bin";
+	const std::filesystem::path image_basis_path = prefix.string() + "_image_basis.bin";
+	const std::filesystem::path checkpoint_path = prefix.string() + "_dual_wiedemann_checkpoint.bin";
+
+	SplitMapHeader header;
+	auto split_matrix = load_split_map_columns_as_compressed_matrix(columns_path, &header);
+	if (!split_matrix.has_value()) {
+		return EXIT_FAILURE;
+	}
+
+	std::vector<GraphType> all_domain_graphs;
+	if (!load_graph_cache(cache_path<N>(rounds), all_domain_graphs)) {
+		std::cerr << "failed to load domain graph cache = "
+		          << cache_path<N>(rounds) << '\n';
+		return EXIT_FAILURE;
+	}
+
+	typename GraphType::Basis wheel_basis(wheel_graph<N>(), fieldType{1});
+	GraphType::std(wheel_basis);
+	const GraphType wheel = wheel_basis.getValue();
+
+	std::vector<GraphType> domain_graphs;
+	domain_graphs.reserve(all_domain_graphs.size());
+	for (const auto& graph : all_domain_graphs) {
+		if (!(graph == wheel)) {
+			domain_graphs.push_back(graph);
+		}
+	}
+	if (domain_graphs.size() != static_cast<std::size_t>(header.domain_dim)) {
+		if (all_domain_graphs.size() == static_cast<std::size_t>(header.domain_dim) + 1) {
+			domain_graphs.assign(all_domain_graphs.begin() + 1, all_domain_graphs.end());
+		}
+	}
+	if (domain_graphs.size() != static_cast<std::size_t>(header.domain_dim)) {
+		std::cerr << "domain graph count mismatch: filtered cache has "
+		          << domain_graphs.size() << ", header has "
+		          << header.domain_dim << '\n';
+		return EXIT_FAILURE;
+	}
+
+	std::vector<SplitGraph> image_basis;
+	if (!load_graph_cache(image_basis_path.string(), image_basis)) {
+		std::cerr << "failed to load image basis = "
+		          << image_basis_path.string() << '\n';
+		return EXIT_FAILURE;
+	}
+	if (image_basis.size() != static_cast<std::size_t>(header.image_dim)) {
+		std::cerr << "image basis size mismatch: file has "
+		          << image_basis.size() << ", header has "
+		          << header.image_dim << '\n';
+		return EXIT_FAILURE;
+	}
+
+	std::unordered_map<SplitGraph, std::uint32_t> image_index;
+	image_index.reserve(image_basis.size());
+	for (std::uint32_t i = 0; i < image_basis.size(); ++i) {
+		image_index.emplace(image_basis[i], i);
+	}
+
+	std::vector<fieldType> domain_aut(domain_graphs.size(), fieldType{});
+	std::vector<fieldType> image_aut(image_basis.size(), fieldType{});
+	for (std::size_t i = 0; i < domain_graphs.size(); ++i) {
+		domain_aut[i] = fieldType{automorphism_group_size4(domain_graphs[i])};
+	}
+	for (std::size_t i = 0; i < image_basis.size(); ++i) {
+		image_aut[i] = fieldType{automorphism_group_size4(image_basis[i])};
+	}
+
+	auto adjoint_matrix = build_scaled_adjoint_matrix(*split_matrix, image_aut, domain_aut);
+
+	const auto split_target = GCType(wheel, AssumeBasisOrderTag{}).delta().data();
+	std::size_t missing_target_terms = 0;
+	std::vector<typename compressed_sparse_matrix<fieldType>::Basis> indexed_split_target;
+	indexed_split_target.reserve(split_target.size());
+	for (const auto& be : split_target) {
+		const auto it = image_index.find(be.getValue());
+		if (it == image_index.end()) {
+			++missing_target_terms;
+			continue;
+		}
+		indexed_split_target.emplace_back(it->second, be.getCoefficient());
+	}
+	if (missing_target_terms != 0) {
+		std::cout << "target terms missing from image basis = "
+		          << missing_target_terms << '\n';
+		return EXIT_FAILURE;
+	}
+
+	auto normal_rhs_sparse = apply_compressed_matrix_to_sparse_column(adjoint_matrix, indexed_split_target);
+	compressed_sparse_matrix<fieldType> normal_matrix(
+		static_cast<std::uint32_t>(domain_graphs.size())
+	);
+	for (std::uint32_t col = 0; col < split_matrix->domain_dim(); ++col) {
+		normal_matrix.add_col(
+			apply_compressed_matrix_to_sparse_column(adjoint_matrix, split_matrix->get_column(col))
+		);
+	}
+
+	auto dense_target = normal_matrix.reserve_dense_image_vec();
+	for (std::size_t i = 0; i < normal_matrix.image_dim(); ++i) {
+		dense_target[i] = fieldType{};
+	}
+	for (const auto& be : normal_rhs_sparse) {
+		dense_target[be.getValue()] += be.getCoefficient();
+	}
+
+	std::cout << "loaded split map = " << columns_path.string() << '\n';
+	std::cout << "loaded image basis = " << image_basis_path.string() << '\n';
+	std::cout << "wheel = W" << +N << '\n';
+	std::cout << "rounds = " << rounds << '\n';
+	std::cout << "domain graphs = " << domain_graphs.size() << '\n';
+	std::cout << "split image basis = " << image_basis.size() << '\n';
+	std::cout << "split map entries = " << split_matrix->rows_and_coeffs_.size() << '\n';
+	std::cout << "normal matrix entries = " << normal_matrix.rows_and_coeffs_.size() << '\n';
+	std::cout << "target d_split(W) terms = " << split_target.size() << '\n';
+	std::cout << "adjoint target terms = " << normal_rhs_sparse.size() << '\n';
+
+	compressed_wiedemann_solver solver(std::move(normal_matrix));
+	std::optional<compressed_wiedemann_solver::DenseDomainVec> correction_coefficients;
+	const double solve_seconds = time_seconds([&]() {
+		correction_coefficients = solver.solve_MX_equals_y(
+			dense_target,
+			&checkpoint_path,
+			checkpoint_interval
+		);
+	});
+	std::cout << "solve time = " << solve_seconds << " s\n";
+
+	if (!correction_coefficients.has_value()) {
+		std::cout << "dual correction found = no\n";
+		return EXIT_FAILURE;
+	}
+
+	GCType graph_correction;
+	std::size_t nonzero_coefficients = 0;
+	for (std::size_t i = 0; i < domain_graphs.size(); ++i) {
+		const fieldType coefficient = (*correction_coefficients)[i];
+		if (coefficient == fieldType{}) {
+			continue;
+		}
+		++nonzero_coefficients;
+		GCType scaled(domain_graphs[i], AssumeBasisOrderTag{});
+		scaled.scalar_multiply(coefficient);
+		graph_correction += scaled;
+	}
+	graph_correction.standardize_all();
+	graph_correction.sort_elements();
+
+	const auto correction_split = graph_correction.delta();
+	auto split_target_copy = split_target;
+	typename GCType::SplitL split_witness =
+		split_target_copy.add_scaled(correction_split.data(), fieldType{-1});
+	split_witness.standardize_and_sort();
+	typename GCType::SplitGC split_witness_gc(split_witness);
+	const auto witness_contract = contraction_of(split_witness_gc);
+
+	std::cout << "dual correction found = yes\n";
+	std::cout << "graph correction coefficients = " << nonzero_coefficients << '\n';
+	std::cout << "graph correction terms = " << graph_correction.data().size() << '\n';
+	std::cout << "d_split(graph correction) terms = "
+	          << correction_split.data().size() << '\n';
+	std::cout << "split witness terms = " << split_witness.size() << '\n';
+	std::cout << "d_contraction(split witness) terms = "
+	          << witness_contract.data().size() << '\n';
+	std::cout << "split witness contraction-closed = "
+	          << (witness_contract.data().empty() ? "yes" : "no") << '\n';
+
+	if (correction_output_path != nullptr) {
+		if (!write_class_file(*correction_output_path, graph_correction)) {
+			std::cerr << "failed to write " << correction_output_path->string() << '\n';
+			return EXIT_FAILURE;
+		}
+		write_class_file(
+			related_output_path<typename GCType::SplitGC>(correction_output_path, "_dual_witness"),
+			split_witness_gc
+		);
+		write_class_file(
+			related_output_path<typename GCType::ContGC>(correction_output_path, "_dual_witness_contract"),
+			witness_contract
+		);
+		std::cout << "saved graph correction = "
+		          << correction_output_path->string() << '\n';
+		std::cout << "saved split witness = "
+		          << related_output_path<typename GCType::SplitGC>(correction_output_path, "_dual_witness").string()
+		          << '\n';
+		std::cout << "saved witness contraction = "
+		          << related_output_path<typename GCType::ContGC>(correction_output_path, "_dual_witness_contract").string()
+		          << '\n';
+	}
+
+	return witness_contract.data().empty() ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+
 template <typename GCType>
 GCType split_contract_krylov_step(const GCType& gamma) {
 	GCType next = gamma.delta().d_contraction();
@@ -2093,7 +2414,7 @@ std::optional<OddGCdegZero<N + 1>> solve_generated_constrained_representative(
 	}
 
 	CombinedSplitContractIndex<GCType> image_index;
-	row_based_lil_matrix<fieldType> matrix;
+	lil_matrix<fieldType> matrix;
 	std::size_t split_entries = 0;
 	std::size_t contraction_entries = 0;
 
@@ -2120,7 +2441,7 @@ std::optional<OddGCdegZero<N + 1>> solve_generated_constrained_representative(
 				);
 			}
 		}
-		matrix.sort_rows();
+		matrix.sort_cols();
 	});
 
 	VectorSpace::LinComb<std::size_t, fieldType> target;
@@ -2153,20 +2474,41 @@ std::optional<OddGCdegZero<N + 1>> solve_generated_constrained_representative(
 		return std::nullopt;
 	}
 
-	std::optional<VectorSpace::LinComb<std::size_t, fieldType>> correction_coefficients;
+	auto compressed_matrix = matrix.to_compressed_sparse_matrix();
+	std::cout << "created sparse solver: domain_dim = " << compressed_matrix.domain_dim() << '\n';
+	std::cout << "image_space_dim = " << compressed_matrix.image_dim() << '\n';
+	std::cout << "number of matrix entries =" << compressed_matrix.rows_and_coeffs_.size() << '\n';
+
+	auto dense_target = compressed_matrix.reserve_dense_image_vec();
+	for (std::size_t i = 0; i < compressed_matrix.image_dim(); ++i) {
+		dense_target[i] = fieldType{};
+	}
+	for (const auto& be : target) {
+		dense_target[be.getValue()] += be.getCoefficient();
+	}
+
+	compressed_wiedemann_solver solver(std::move(compressed_matrix));
+	std::optional<compressed_wiedemann_solver::DenseDomainVec> correction_coefficients;
 	const double solve_seconds = time_seconds([&]() {
-		correction_coefficients = matrix.solve_MX_equals_y(target);
+		correction_coefficients = solver.solve_MX_equals_y(dense_target);
 	});
 	std::cout << "solve time = " << solve_seconds << " s\n";
 
 	if (!correction_coefficients.has_value()) {
+		std::cout << "compressed Wiedemann returned no solution\n";
 		return std::nullopt;
 	}
 
 	GCType correction;
-	for (const auto& be : *correction_coefficients) {
-		GCType scaled(domain_graphs[be.getValue()], AssumeBasisOrderTag{});
-		scaled.scalar_multiply(be.getCoefficient());
+	std::size_t nonzero_correction_coefficients = 0;
+	for (std::size_t i = 0; i < matrix.domain_dim(); ++i) {
+		const fieldType coefficient = (*correction_coefficients)[i];
+		if (coefficient == fieldType{}) {
+			continue;
+		}
+		++nonzero_correction_coefficients;
+		GCType scaled(domain_graphs[i], AssumeBasisOrderTag{});
+		scaled.scalar_multiply(coefficient);
 		correction += scaled;
 	}
 	correction.standardize_all();
@@ -2184,7 +2526,7 @@ std::optional<OddGCdegZero<N + 1>> solve_generated_constrained_representative(
 	const auto representative_split = representative.delta();
 
 	std::cout << "correction coefficients = "
-	          << correction_coefficients->size() << '\n';
+	          << nonzero_correction_coefficients << '\n';
 	std::cout << "correction graph terms = " << correction.data().size() << '\n';
 	std::cout << "d_split(correction) terms = "
 	          << correction_split.data().size() << '\n';
@@ -2440,7 +2782,7 @@ int run_constrained_krylov_dual_case(
 
 void print_usage(const char* argv0) {
 	std::cerr << "usage: " << argv0 << " wheel_N rounds [representatives_output_path] [cycle_output_path] [mode] [checkpoint_interval]\n";
-	std::cerr << "  mode defaults to generated-support; use enumerate, split-map, split-map-info, split-map-solve, generated-constrained, krylov, krylov-dual, krylov-constrained, or krylov-constrained-dual\n";
+	std::cerr << "  mode defaults to generated-support; use enumerate, split-map, split-map-info, split-map-solve, split-map-dual, generated-constrained, krylov, krylov-dual, krylov-constrained, or krylov-constrained-dual\n";
 	std::cerr << "  wheel_N must be one of 3,5,7,9,11,13,15,17,19,21,25,27\n";
 }
 
@@ -2484,6 +2826,8 @@ int main(int argc, char** argv) {
 			mode = ExperimentMode::SplitMapInfo;
 		} else if (mode_arg == "split-map-solve") {
 			mode = ExperimentMode::SplitMapSolve;
+		} else if (mode_arg == "split-map-dual") {
+			mode = ExperimentMode::SplitMapDual;
 		} else if (mode_arg == "krylov") {
 			mode = ExperimentMode::Krylov;
 		} else if (mode_arg == "krylov-dual") {
@@ -2525,6 +2869,9 @@ int main(int argc, char** argv) {
 		} \
 		if (mode == ExperimentMode::SplitMapSolve) { \
 			return run_split_map_solve_case<N_VALUE>(rounds, cycle_output_path_ptr, checkpoint_interval); \
+		} \
+		if (mode == ExperimentMode::SplitMapDual) { \
+			return run_split_map_dual_case<N_VALUE>(rounds, representatives_output_path_ptr, cycle_output_path_ptr, checkpoint_interval); \
 		} \
 		if (mode == ExperimentMode::GeneratedConstrained) { \
 			return run_generated_constrained_case<N_VALUE>(rounds, representatives_output_path_ptr, cycle_output_path_ptr); \

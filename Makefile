@@ -81,7 +81,7 @@ TEST_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(TEST_SRCS))
 
 # ======= RULES =======
 
-.PHONY: all clean run playground split-waterfall run-split-waterfall standardize-perf standardize3-profile compare-standardize3-commits assign-permuted-sort-compare randomize-split-contract-graphs run-standardize-perf run-standardize3-profile run-compare-standardize3-commits run-assign-permuted-sort-compare run-randomize-split-contract-graphs graph-standardizer-compare graph-standardizer-compare-nauty run-graph-standardizer-compare wheel-split-contract-reps run-wheel-split-contract-reps run-split-contract-files run-split-contract-solver solver-compare solver-compare-linbox run-solver-compare test
+.PHONY: all clean run playground split-waterfall run-split-waterfall standardize-perf standardize3-profile compare-standardize3-commits assign-permuted-sort-compare randomize-split-contract-graphs run-standardize-perf run-standardize3-profile run-compare-standardize3-commits run-assign-permuted-sort-compare run-randomize-split-contract-graphs graph-standardizer-compare graph-standardizer-compare-nauty run-graph-standardizer-compare wheel-split-contract-reps run-wheel-split-contract-reps run-wheel-class run-wheel-class-generated-constrained run-split-contract-files run-split-contract-solver solver-compare solver-compare-linbox run-solver-compare test
 
 all: $(TARGET)
 
@@ -216,6 +216,18 @@ wheel-split-contract-reps: $(WHEEL_SPLIT_CONTRACT_REPS_TARGET)
 run-wheel-split-contract-reps: $(WHEEL_SPLIT_CONTRACT_REPS_TARGET)
 	@./$(WHEEL_SPLIT_CONTRACT_REPS_TARGET) $(or $(WHEEL),11) $(or $(ROUNDS),2) $(OUT)
 
+run-wheel-class: $(WHEEL_SPLIT_CONTRACT_REPS_TARGET)
+	@echo "Generating wheel class via same-degree split-contract support + Wiedemann solve"
+	@echo "Representatives output: $(OUT)"
+	@echo "Class output: $(CLASS_OUT)"
+	@./$(WHEEL_SPLIT_CONTRACT_REPS_TARGET) $(WHEEL) $(SPLIT_CONTRACT_ROUNDS) $(OUT) $(CLASS_OUT)
+
+run-wheel-class-generated-constrained: $(WHEEL_SPLIT_CONTRACT_REPS_TARGET)
+	@echo "Generating wheel class via generated constrained split-contract solve"
+	@echo "Representatives output: $(OUT)"
+	@echo "Class output: $(CLASS_OUT)"
+	@./$(WHEEL_SPLIT_CONTRACT_REPS_TARGET) $(WHEEL) $(SPLIT_CONTRACT_ROUNDS) $(OUT) $(CLASS_OUT) generated-constrained
+
 run-split-contract-files: $(WHEEL_SPLIT_CONTRACT_REPS_TARGET)
 	@echo "Generating split-contract files for W$(WHEEL), rounds $(SPLIT_CONTRACT_ROUNDS)"
 	@./$(WHEEL_SPLIT_CONTRACT_REPS_TARGET) $(WHEEL) $(SPLIT_CONTRACT_ROUNDS) $(SPLIT_CONTRACT_CANDIDATES) unused enumerate
@@ -223,6 +235,7 @@ run-split-contract-files: $(WHEEL_SPLIT_CONTRACT_REPS_TARGET)
 
 run-split-contract-solver: $(WHEEL_SPLIT_CONTRACT_REPS_TARGET)
 	@echo "Solving from generated split-contract files for W$(WHEEL), rounds $(SPLIT_CONTRACT_ROUNDS)"
+	@echo "This writes solver coefficients only; it does not reconstruct/save the final class."
 	@echo "Checkpoint prefix: $(SPLIT_CONTRACT_MAP_PREFIX)_wiedemann_checkpoint.bin"
 	@echo "Checkpoint interval: $(CHECKPOINT_INTERVAL) MMT iterations"
 	@./$(WHEEL_SPLIT_CONTRACT_REPS_TARGET) $(WHEEL) $(SPLIT_CONTRACT_ROUNDS) unused $(SPLIT_CONTRACT_MAP_PREFIX) split-map-solve $(CHECKPOINT_INTERVAL)
