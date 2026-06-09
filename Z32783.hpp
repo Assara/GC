@@ -3,6 +3,8 @@
 #include <stdexcept>
 #include <ostream>
 #include <istream>
+#include <random>
+#include <string>
 #include <type_traits>
 
 // Fixed-prime finite field with 32-bit storage.
@@ -14,6 +16,7 @@ class Z32783 {
 	std::uint32_t v_;                            // always in [0, MOD-1]
 
 	public:
+	using serialized_value_type = std::uint32_t;
 	// Constructors
 	constexpr Z32783() : v_(0) {}
 
@@ -22,11 +25,19 @@ class Z32783 {
 			long long r = static_cast<long long>(x) % static_cast<long long>(MOD);
 			if (r < 0) r += MOD;
 			v_ = static_cast<std::uint32_t>(r);
-		}
+	}
 
 	// Accessors
-	std::uint32_t value() const { return v_; }
-	static constexpr std::uint32_t modulus() { return MOD; }
+	serialized_value_type value() const { return v_; }
+	static constexpr std::uint32_t characteristic() { return MOD; }
+	static constexpr std::uint32_t serialized_value_size_hint() {
+		return static_cast<std::uint32_t>(sizeof(serialized_value_type));
+	}
+	static std::string name() { return "Z32783"; }
+	static Z32783 sample(std::mt19937_64& rng) {
+		std::uniform_int_distribution<std::uint64_t> dist(0, characteristic() - 1);
+		return Z32783{dist(rng)};
+	}
 
 	// Truthiness (so you can write: if (x) ...)
 	explicit operator bool() const { return v_ != 0; }
@@ -116,6 +127,34 @@ class Z32783 {
 		r = r * a; // r = v^13 * v^32768 = v^32781
 
 		return r;  // v^(MOD-2) = v^{-1} mod MOD
+	}
+
+	static void write_serialized_value(std::ostream& out, const serialized_value_type& value) {
+		out.write(reinterpret_cast<const char*>(&value), sizeof(value));
+	}
+
+	static bool read_serialized_value(std::istream& in, serialized_value_type& value) {
+		in.read(reinterpret_cast<char*>(&value), sizeof(value));
+		return static_cast<bool>(in);
+	}
+
+	static void write_value(std::ostream& out, const Z32783& value) {
+		write_serialized_value(out, value.value());
+	}
+
+	static bool read_value(std::istream& in, Z32783& value) {
+		serialized_value_type storage{};
+		if (!read_serialized_value(in, storage)) {
+			return false;
+		}
+		value = Z32783{storage};
+		return true;
+	}
+
+	std::int64_t signed_representative() const {
+		return v_ <= MOD / 2
+			? static_cast<std::int64_t>(v_)
+			: static_cast<std::int64_t>(v_) - static_cast<std::int64_t>(MOD);
 	}
 };
 

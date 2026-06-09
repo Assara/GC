@@ -147,20 +147,25 @@ namespace VectorSpace {
 
 					std::vector<k> candidates;
 					candidates.reserve(size + 2);
-					candidates.push_back(k{0});
-					candidates.push_back(k{1});
+					auto add_candidate_if_new = [&](const k& candidate) {
+						for (const k& existing : candidates) {
+							if (existing == candidate) {
+								return;
+							}
+						}
+						candidates.push_back(candidate);
+					};
+
+					add_candidate_if_new(k{0});
+					add_candidate_if_new(k{1});
 
 					for (std::size_t i = 0; i < size; ++i) {
 						const k diff = y[i] - x[i];
 						if (diff == k{0}) {
 							continue;
 						}
-						candidates.push_back(-(x[i] / diff));
+						add_candidate_if_new(-(x[i] / diff));
 					}
-
-					std::sort(candidates.begin(), candidates.end(),
-						[](const k& a, const k& b) { return a.value() < b.value(); });
-					candidates.erase(std::unique(candidates.begin(), candidates.end()), candidates.end());
 
 					for (const k t : candidates) {
 						DomainVec candidate = affine_combine(x, y, size, t);

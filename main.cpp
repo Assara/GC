@@ -31,7 +31,7 @@ int main() {
     }
 
     out << "graph_size: (20,38)\n";
-    out << "field_type: " << TypeName<fieldType>::name() << "\n";
+    out << "field_type: " << fieldType::name() << "\n";
     out << "number_of_graphs: " << gamma.size() << "\n";
     for (const auto& be : gamma.data()) {
         out << be.getCoefficient() << "; ";

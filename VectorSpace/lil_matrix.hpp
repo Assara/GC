@@ -106,10 +106,9 @@ class lil_matrix {
 			DenseImageVec rv = reserve_dense_image_vec();
 
 			std::mt19937_64 rng(seed);
-			std::uniform_int_distribution<std::uint64_t> dist(0, k::modulus() - 1);
 
 			for (std::size_t i = 0; i < image_dim(); ++i) {
-				rv[i] = k(dist(rng));
+				rv[i] = k::sample(rng);
 			}
 			return rv;
 		}
@@ -122,11 +121,10 @@ class lil_matrix {
 			}
 
 			std::mt19937_64 rng(seed);
-			std::uniform_int_distribution<std::uint64_t> dist(0, k::modulus() - 1);
 
 			for (auto& rv : random_vecs) {			
 				for (std::size_t i = 0; i < image_dim(); ++i) {
-					rv[i] = k(dist(rng));
+					rv[i] = k::sample(rng);
 				}
 			}
 
@@ -145,10 +143,9 @@ class lil_matrix {
 			DenseDomainVec rv = reserve_dense_domain_vec();
 
 			std::mt19937_64 rng(seed);
-			std::uniform_int_distribution<std::uint64_t> dist(0, k::modulus() - 1);
 
 			for (std::size_t i = 0; i < domain_dim(); ++i) {
-				rv[i] = k(dist(rng));
+				rv[i] = k::sample(rng);
 			}
 			return rv;
 

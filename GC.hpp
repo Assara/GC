@@ -5,8 +5,6 @@
 #include "VectorSpace/BasisElement.hpp"
 #include "VectorSpace/wiedemann_primitive_finder.hpp"
 
-#include "VectorSpace/BoundaryFinder.hpp"
-
 #include "MetaGraph.hpp"
 
 template <
@@ -588,22 +586,6 @@ class GC {
 			cout << "created solver" << endl;
 			std::optional<ContL> primitive_optional = solver.find_primitive_or_empty(this -> data());
 
-			if (!primitive_optional.has_value()) {
-				//try with old dense solver
-
-				cout << "trying with dense solver" << endl;
-
-				VectorSpace::BoundaryFinder solver(coboundary_map);
-
-
-				cout << "created solver" << endl;
-				primitive_optional = solver.find_primitive_or_empty(this -> data());
-
-				if (primitive_optional.has_value()) {
-					cout << "sparse solver is bugged" << endl; 
-				}
-			}
-
 			cout << "solved "<< endl;
 			return primitive_optional.transform([](ContL lin_comb) { 
 					return ContGC(lin_comb);
@@ -1045,7 +1027,7 @@ class GC {
 	public: //debug
 		void print(std::ostream& out = std::cout) const {
 			out<< "GC print of size : " << vec.size() << endl;
-			out<< "Coefficient type : " << TypeName<fieldType>::name() << endl;
+			out<< "Coefficient type : " << fieldType::name() << endl;
 			const auto& elems = vec.raw_elements();
 			for (const auto& elem : elems) {
 				elem.getValue().print(out);

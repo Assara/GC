@@ -42,17 +42,6 @@ double time_seconds(Fn&& fn) {
 }
 
 template <Int N>
-std::string cache_path(int rounds) {
-	return (std::filesystem::path("output")
-		/ "split_contract"
-		/ "cache"
-		/ ("gc_wheel_same_degree_candidates_W" + std::to_string(N)
-			+ "_rounds" + std::to_string(rounds)
-			+ "_int" + std::to_string(sizeof(Int))
-			+ "_v1.bin")).string();
-}
-
-template <Int N>
 std::filesystem::path split_map_prefix(int rounds) {
 	return std::filesystem::path("output")
 		/ "split_contract"
@@ -63,7 +52,7 @@ std::filesystem::path split_map_prefix(int rounds) {
 }
 
 template <typename GraphType>
-bool load_graph_cache(const std::string& path, std::vector<GraphType>& graphs) {
+bool load_graph_records(const std::string& path, std::vector<GraphType>& graphs) {
 	std::ifstream in(path, std::ios::binary);
 	if (!in) {
 		return false;
@@ -91,15 +80,15 @@ bool load_graph_cache(const std::string& path, std::vector<GraphType>& graphs) {
 }
 
 template <typename GraphType>
-void save_graph_cache(const std::string& path, const std::vector<GraphType>& graphs) {
-	const std::filesystem::path cache_file(path);
-	if (cache_file.has_parent_path()) {
-		std::filesystem::create_directories(cache_file.parent_path());
+void save_graph_records(const std::string& path, const std::vector<GraphType>& graphs) {
+	const std::filesystem::path output_file(path);
+	if (output_file.has_parent_path()) {
+		std::filesystem::create_directories(output_file.parent_path());
 	}
 
 	std::ofstream out(path, std::ios::binary);
 	if (!out) {
-		std::cerr << "warning: failed to write cache " << path << '\n';
+		std::cerr << "warning: failed to write graph records " << path << '\n';
 		return;
 	}
 
@@ -186,24 +175,17 @@ bigInt automorphism_group_size4(const GraphType& input_graph) {
 	return minimizers.size();
 }
 
-std::uint32_t coefficient_to_u32(const fieldType& coefficient) {
-	return coefficient.value();
-}
-
 void write_field_vector(std::ofstream& out, const fieldType* values, std::size_t size) {
 	for (std::size_t i = 0; i < size; ++i) {
-		const std::uint32_t value = coefficient_to_u32(values[i]);
-		write_binary_value(out, value);
+		fieldType::write_value(out, values[i]);
 	}
 }
 
 bool read_field_vector(std::ifstream& in, fieldType* values, std::size_t size) {
 	for (std::size_t i = 0; i < size; ++i) {
-		std::uint32_t value = 0;
-		if (!read_binary_value(in, value)) {
+		if (!fieldType::read_value(in, values[i])) {
 			return false;
 		}
-		values[i] = fieldType{value};
 	}
 	return true;
 }
@@ -263,7 +245,8 @@ load_split_map_columns_as_compressed_matrix(
 		return std::nullopt;
 	}
 
-	if (header.int_size != sizeof(Int) || header.coeff_size != sizeof(std::uint32_t)) {
+	if (header.int_size != sizeof(Int)
+		|| header.coeff_size != fieldType::serialized_value_size_hint()) {
 		std::cerr << "split-map storage size mismatch in "
 		          << columns_path.string() << '\n';
 		return std::nullopt;
@@ -288,13 +271,13 @@ load_split_map_columns_as_compressed_matrix(
 		}
 		for (std::uint32_t entry = 0; entry < nnz; ++entry) {
 			std::uint32_t row = 0;
-			std::uint32_t coefficient = 0;
-			if (!read_binary_value(in, row) || !read_binary_value(in, coefficient)) {
+			typename fieldType::serialized_value_type coefficient{};
+			if (!read_binary_value(in, row) || !fieldType::read_serialized_value(in, coefficient)) {
 				std::cerr << "failed to read map entry at column "
 				          << column << '\n';
 				return std::nullopt;
 			}
-			matrix.rows_and_coeffs_.emplace_back(row, fieldType{coefficient});
+			matrix.rows_and_coeffs_.emplace_back(row, fieldType{std::move(coefficient)});
 		}
 		matrix.col_ptr_.push_back(
 			static_cast<compressed_sparse_matrix<fieldType>::offset_type>(
@@ -414,6 +397,11 @@ public:
 	explicit compressed_wiedemann_solver(Matrix matrix)
 		: matrix_(std::move(matrix)),
 		  transpose_matrix_(transpose_compressed_matrix(matrix_)),
+		  random_vector_(make_random_image_vec()) {}
+
+	compressed_wiedemann_solver(Matrix matrix, Matrix transpose_matrix)
+		: matrix_(std::move(matrix)),
+		  transpose_matrix_(std::move(transpose_matrix)),
 		  random_vector_(make_random_image_vec()) {}
 
 	std::optional<DenseDomainVec> solve_MX_equals_y(
@@ -555,9 +543,8 @@ private:
 	DenseImageVec make_random_image_vec() const {
 		auto result = std::make_unique<fieldType[]>(static_cast<std::size_t>(matrix_.image_dim()));
 		std::mt19937_64 rng(0xC0FFEEULL);
-		std::uniform_int_distribution<std::uint32_t> dist(0, fieldType::modulus() - 1);
 		for (std::size_t i = 0; i < matrix_.image_dim(); ++i) {
-			result[i] = fieldType{dist(rng)};
+			result[i] = fieldType::sample(rng);
 		}
 		return result;
 	}
@@ -952,7 +939,7 @@ bool write_representatives(
 	}
 
 	out << "graph_size: (" << GraphType::N_VERTICES_ << "," << GraphType::N_EDGES_ << ")\n";
-	out << "field_type: " << TypeName<fieldType>::name() << "\n";
+	out << "field_type: " << fieldType::name() << "\n";
 	out << "number_of_graphs: " << graphs.size() << "\n";
 	for (const auto& graph : graphs) {
 		for (Int edge = 0; edge < GraphType::N_EDGES_; ++edge) {
@@ -1003,7 +990,7 @@ bool write_class_file(
 
 	using GraphType = typename GCType::GraphType;
 	out << "graph_size: (" << GraphType::N_VERTICES_ << "," << GraphType::N_EDGES_ << ")\n";
-	out << "field_type: " << TypeName<fieldType>::name() << "\n";
+	out << "field_type: " << fieldType::name() << "\n";
 	out << "number_of_graphs: " << gamma.data().size() << "\n";
 	for (const auto& be : gamma.data()) {
 		out << be.getCoefficient() << "; ";
@@ -1265,14 +1252,7 @@ int run_case(
 	using GraphType = OddGraphdegZero<N + 1>;
 
 	std::vector<GraphType> graphs;
-	const std::string path = cache_path<N>(rounds);
-	if (load_graph_cache(path, graphs)) {
-		std::cout << "loaded cache = " << path << '\n';
-	} else {
-		graphs = generate_same_degree_candidates<N>(rounds, representatives_output_path);
-		save_graph_cache(path, graphs);
-		std::cout << "saved cache = " << path << '\n';
-	}
+	graphs = generate_same_degree_candidates<N>(rounds, representatives_output_path);
 
 	std::cout << "wheel = W" << +N << '\n';
 	std::cout << "split-contract rounds = " << rounds << '\n';
@@ -1306,40 +1286,15 @@ int run_case(
 }
 
 template <Int N>
-std::vector<OddGraphdegZero<N + 1>> load_or_generate_same_degree_candidates(
-	int rounds,
-	const std::filesystem::path* representatives_output_path
-) {
-	using GraphType = OddGraphdegZero<N + 1>;
-
-	std::vector<GraphType> graphs;
-	const std::string path = cache_path<N>(rounds);
-	if (load_graph_cache(path, graphs)) {
-		std::cout << "loaded cache = " << path << '\n';
-		return graphs;
-	}
-
-	graphs = generate_same_degree_candidates<N>(rounds, representatives_output_path);
-	save_graph_cache(path, graphs);
-	std::cout << "saved cache = " << path << '\n';
-	return graphs;
-}
-
-template <Int N>
 int run_enumerate_case(
 	int rounds,
 	const std::filesystem::path* representatives_output_path
 ) {
-	auto graphs = load_or_generate_same_degree_candidates<N>(
-		rounds,
-		representatives_output_path
-	);
+	auto graphs = generate_same_degree_candidates<N>(rounds, representatives_output_path);
 
 	std::cout << "wheel = W" << +N << '\n';
 	std::cout << "split-contract rounds = " << rounds << '\n';
 	std::cout << "same-degree candidates = " << graphs.size() << '\n';
-	std::cout << "enumeration cache = " << cache_path<N>(rounds) << '\n';
-
 	if (representatives_output_path != nullptr) {
 		if (!write_representatives(*representatives_output_path, graphs)) {
 			std::cerr << "failed to write " << representatives_output_path->string() << '\n';
@@ -1362,10 +1317,7 @@ int run_split_map_export_case(
 	using GraphType = typename GCType::GraphType;
 	using SplitGraph = typename GCType::SplitGraphType;
 
-	auto graphs = load_or_generate_same_degree_candidates<N>(
-		rounds,
-		representatives_output_path
-	);
+	auto graphs = generate_same_degree_candidates<N>(rounds, representatives_output_path);
 
 	typename GraphType::Basis wheel_basis(wheel_graph<N>(), fieldType{1});
 	GraphType::std(wheel_basis);
@@ -1395,7 +1347,7 @@ int run_split_map_export_case(
 	const std::uint32_t wheel_n_u32 = static_cast<std::uint32_t>(N);
 	const std::uint32_t rounds_u32 = static_cast<std::uint32_t>(rounds);
 	const std::uint32_t int_size_u32 = static_cast<std::uint32_t>(sizeof(Int));
-	const std::uint32_t coeff_size_u32 = static_cast<std::uint32_t>(sizeof(std::uint32_t));
+	const std::uint32_t coeff_size_u32 = fieldType::serialized_value_size_hint();
 	const std::uint32_t domain_vertices_u32 = static_cast<std::uint32_t>(GraphType::N_VERTICES_);
 	const std::uint32_t domain_edges_u32 = static_cast<std::uint32_t>(GraphType::N_EDGES_);
 	const std::uint32_t image_vertices_u32 = static_cast<std::uint32_t>(SplitGraph::N_VERTICES_);
@@ -1450,9 +1402,9 @@ int run_split_map_export_case(
 			write_binary_value(columns_out, nnz);
 			for (const auto& be : column) {
 				const std::uint32_t row = get_image_index(be.getValue());
-				const std::uint32_t coefficient = coefficient_to_u32(be.getCoefficient());
+				const auto coefficient = be.getCoefficient().value();
 				write_binary_value(columns_out, row);
-				write_binary_value(columns_out, coefficient);
+				fieldType::write_serialized_value(columns_out, coefficient);
 			}
 
 			++domain_dim_u64;
@@ -1474,7 +1426,7 @@ int run_split_map_export_case(
 	write_binary_value(columns_out, entries_u64);
 	columns_out.close();
 
-	save_graph_cache(image_basis_path.string(), image_basis);
+	save_graph_records(image_basis_path.string(), image_basis);
 
 	std::ofstream metadata_out(metadata_path, std::ios::trunc);
 	if (!metadata_out) {
@@ -1484,16 +1436,17 @@ int run_split_map_export_case(
 	metadata_out << "format: GC split map column binary v1\n";
 	metadata_out << "wheel: W" << +N << "\n";
 	metadata_out << "rounds: " << rounds << "\n";
-	metadata_out << "domain_graph_cache: " << cache_path<N>(rounds) << "\n";
 	metadata_out << "columns_file: " << columns_path.string() << "\n";
 	metadata_out << "image_basis_file: " << image_basis_path.string() << "\n";
-	metadata_out << "domain_graphs_in_cache: " << graphs.size() << "\n";
+	metadata_out << "domain_graphs_generated: " << graphs.size() << "\n";
 	metadata_out << "domain_columns_excluding_wheel: " << domain_dim_u64 << "\n";
 	metadata_out << "skipped_wheel_columns: " << skipped_wheel << "\n";
 	metadata_out << "image_basis_size: " << image_dim_u64 << "\n";
 	metadata_out << "matrix_entries: " << entries_u64 << "\n";
-	metadata_out << "field_type: " << TypeName<fieldType>::name() << "\n";
-	metadata_out << "coefficient_storage: uint32 residue\n";
+	metadata_out << "field_type: " << fieldType::name() << "\n";
+	metadata_out << "coefficient_storage_size_hint: " << coeff_size_u32 << "\n";
+	metadata_out << "coefficient_storage_type: "
+	             << (coeff_size_u32 == 0 ? "structured" : "fixed-size binary") << "\n";
 	metadata_out << "domain_graph_size: (" << +GraphType::N_VERTICES_
 	             << "," << +GraphType::N_EDGES_ << ")\n";
 	metadata_out << "image_graph_size: (" << +SplitGraph::N_VERTICES_
@@ -1501,7 +1454,7 @@ int run_split_map_export_case(
 
 	std::cout << "wheel = W" << +N << '\n';
 	std::cout << "split-contract rounds = " << rounds << '\n';
-	std::cout << "domain graph cache = " << cache_path<N>(rounds) << '\n';
+	std::cout << "domain graphs generated = " << graphs.size() << '\n';
 	std::cout << "split map columns = " << domain_dim_u64 << '\n';
 	std::cout << "split map image basis = " << image_dim_u64 << '\n';
 	std::cout << "split map entries = " << entries_u64 << '\n';
@@ -1567,7 +1520,7 @@ int run_split_map_solve_case(
 	}
 
 	std::vector<SplitGraph> image_basis;
-	if (!load_graph_cache(image_basis_path.string(), image_basis)) {
+	if (!load_graph_records(image_basis_path.string(), image_basis)) {
 		std::cerr << "failed to load image basis = "
 		          << image_basis_path.string() << '\n';
 		return EXIT_FAILURE;
@@ -1672,7 +1625,7 @@ int run_split_map_solve_case(
 template <Int N>
 int run_split_map_dual_case(
 	int rounds,
-	const std::filesystem::path* correction_output_path,
+	const std::filesystem::path* representative_output_path,
 	const std::filesystem::path* map_output_prefix,
 	std::size_t checkpoint_interval
 ) {
@@ -1693,12 +1646,8 @@ int run_split_map_dual_case(
 		return EXIT_FAILURE;
 	}
 
-	std::vector<GraphType> all_domain_graphs;
-	if (!load_graph_cache(cache_path<N>(rounds), all_domain_graphs)) {
-		std::cerr << "failed to load domain graph cache = "
-		          << cache_path<N>(rounds) << '\n';
-		return EXIT_FAILURE;
-	}
+	std::vector<GraphType> all_domain_graphs =
+		generate_same_degree_candidates<N>(rounds, nullptr);
 
 	typename GraphType::Basis wheel_basis(wheel_graph<N>(), fieldType{1});
 	GraphType::std(wheel_basis);
@@ -1724,7 +1673,7 @@ int run_split_map_dual_case(
 	}
 
 	std::vector<SplitGraph> image_basis;
-	if (!load_graph_cache(image_basis_path.string(), image_basis)) {
+	if (!load_graph_records(image_basis_path.string(), image_basis)) {
 		std::cerr << "failed to load image basis = "
 		          << image_basis_path.string() << '\n';
 		return EXIT_FAILURE;
@@ -1742,51 +1691,24 @@ int run_split_map_dual_case(
 		image_index.emplace(image_basis[i], i);
 	}
 
-	std::vector<fieldType> domain_aut(domain_graphs.size(), fieldType{});
-	std::vector<fieldType> image_aut(image_basis.size(), fieldType{});
-	for (std::size_t i = 0; i < domain_graphs.size(); ++i) {
-		domain_aut[i] = fieldType{automorphism_group_size4(domain_graphs[i])};
-	}
-	for (std::size_t i = 0; i < image_basis.size(); ++i) {
-		image_aut[i] = fieldType{automorphism_group_size4(image_basis[i])};
-	}
-
-	auto adjoint_matrix = build_scaled_adjoint_matrix(*split_matrix, image_aut, domain_aut);
-
 	const auto split_target = GCType(wheel, AssumeBasisOrderTag{}).delta().data();
 	std::size_t missing_target_terms = 0;
-	std::vector<typename compressed_sparse_matrix<fieldType>::Basis> indexed_split_target;
-	indexed_split_target.reserve(split_target.size());
+	auto dense_target = split_matrix->reserve_dense_image_vec();
+	for (std::size_t i = 0; i < split_matrix->image_dim(); ++i) {
+		dense_target[i] = fieldType{};
+	}
 	for (const auto& be : split_target) {
 		const auto it = image_index.find(be.getValue());
 		if (it == image_index.end()) {
 			++missing_target_terms;
 			continue;
 		}
-		indexed_split_target.emplace_back(it->second, be.getCoefficient());
+		dense_target[it->second] += be.getCoefficient();
 	}
 	if (missing_target_terms != 0) {
 		std::cout << "target terms missing from image basis = "
 		          << missing_target_terms << '\n';
 		return EXIT_FAILURE;
-	}
-
-	auto normal_rhs_sparse = apply_compressed_matrix_to_sparse_column(adjoint_matrix, indexed_split_target);
-	compressed_sparse_matrix<fieldType> normal_matrix(
-		static_cast<std::uint32_t>(domain_graphs.size())
-	);
-	for (std::uint32_t col = 0; col < split_matrix->domain_dim(); ++col) {
-		normal_matrix.add_col(
-			apply_compressed_matrix_to_sparse_column(adjoint_matrix, split_matrix->get_column(col))
-		);
-	}
-
-	auto dense_target = normal_matrix.reserve_dense_image_vec();
-	for (std::size_t i = 0; i < normal_matrix.image_dim(); ++i) {
-		dense_target[i] = fieldType{};
-	}
-	for (const auto& be : normal_rhs_sparse) {
-		dense_target[be.getValue()] += be.getCoefficient();
 	}
 
 	std::cout << "loaded split map = " << columns_path.string() << '\n';
@@ -1796,11 +1718,10 @@ int run_split_map_dual_case(
 	std::cout << "domain graphs = " << domain_graphs.size() << '\n';
 	std::cout << "split image basis = " << image_basis.size() << '\n';
 	std::cout << "split map entries = " << split_matrix->rows_and_coeffs_.size() << '\n';
-	std::cout << "normal matrix entries = " << normal_matrix.rows_and_coeffs_.size() << '\n';
 	std::cout << "target d_split(W) terms = " << split_target.size() << '\n';
-	std::cout << "adjoint target terms = " << normal_rhs_sparse.size() << '\n';
+	std::cout << "target terms in image basis = " << split_target.size() - missing_target_terms << '\n';
 
-	compressed_wiedemann_solver solver(std::move(normal_matrix));
+	compressed_wiedemann_solver solver(std::move(*split_matrix));
 	std::optional<compressed_wiedemann_solver::DenseDomainVec> correction_coefficients;
 	const double solve_seconds = time_seconds([&]() {
 		correction_coefficients = solver.solve_MX_equals_y(
@@ -1831,49 +1752,41 @@ int run_split_map_dual_case(
 	graph_correction.standardize_all();
 	graph_correction.sort_elements();
 
+	GCType representative(wheel, AssumeBasisOrderTag{});
+	GCType negative_correction = graph_correction;
+	negative_correction.scalar_multiply(fieldType{-1});
+	representative += negative_correction;
+	representative.standardize_all();
+	representative.sort_elements();
+
 	const auto correction_split = graph_correction.delta();
-	auto split_target_copy = split_target;
-	typename GCType::SplitL split_witness =
-		split_target_copy.add_scaled(correction_split.data(), fieldType{-1});
-	split_witness.standardize_and_sort();
-	typename GCType::SplitGC split_witness_gc(split_witness);
-	const auto witness_contract = contraction_of(split_witness_gc);
+	const auto correction_contract = contraction_of(graph_correction);
+	const auto representative_contract = contraction_of(representative);
 
 	std::cout << "dual correction found = yes\n";
 	std::cout << "graph correction coefficients = " << nonzero_coefficients << '\n';
 	std::cout << "graph correction terms = " << graph_correction.data().size() << '\n';
+	std::cout << "representative terms = " << representative.data().size() << '\n';
 	std::cout << "d_split(graph correction) terms = "
 	          << correction_split.data().size() << '\n';
-	std::cout << "split witness terms = " << split_witness.size() << '\n';
-	std::cout << "d_contraction(split witness) terms = "
-	          << witness_contract.data().size() << '\n';
-	std::cout << "split witness contraction-closed = "
-	          << (witness_contract.data().empty() ? "yes" : "no") << '\n';
+	std::cout << "d_contraction(graph correction) terms = "
+	          << correction_contract.data().size() << '\n';
+	std::cout << "d_contraction(representative) terms = "
+	          << representative_contract.data().size() << '\n';
+	std::cout << "representative contraction-closed = "
+	          << (representative_contract.data().empty() ? "yes" : "no") << '\n';
 
-	if (correction_output_path != nullptr) {
-		if (!write_class_file(*correction_output_path, graph_correction)) {
-			std::cerr << "failed to write " << correction_output_path->string() << '\n';
+	if (representative_output_path != nullptr) {
+		if (!write_class_file(*representative_output_path, representative)) {
+			std::cerr << "failed to write " << representative_output_path->string() << '\n';
 			return EXIT_FAILURE;
 		}
-		write_class_file(
-			related_output_path<typename GCType::SplitGC>(correction_output_path, "_dual_witness"),
-			split_witness_gc
-		);
-		write_class_file(
-			related_output_path<typename GCType::ContGC>(correction_output_path, "_dual_witness_contract"),
-			witness_contract
-		);
-		std::cout << "saved graph correction = "
-		          << correction_output_path->string() << '\n';
-		std::cout << "saved split witness = "
-		          << related_output_path<typename GCType::SplitGC>(correction_output_path, "_dual_witness").string()
-		          << '\n';
-		std::cout << "saved witness contraction = "
-		          << related_output_path<typename GCType::ContGC>(correction_output_path, "_dual_witness_contract").string()
+		std::cout << "saved representative = "
+		          << representative_output_path->string()
 		          << '\n';
 	}
 
-	return witness_contract.data().empty() ? EXIT_SUCCESS : EXIT_FAILURE;
+	return representative_contract.data().empty() ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
 template <typename GCType>
@@ -2563,14 +2476,7 @@ int run_generated_constrained_case(
 	using GraphType = OddGraphdegZero<N + 1>;
 
 	std::vector<GraphType> graphs;
-	const std::string path = cache_path<N>(rounds);
-	if (load_graph_cache(path, graphs)) {
-		std::cout << "loaded cache = " << path << '\n';
-	} else {
-		graphs = generate_same_degree_candidates<N>(rounds, representatives_output_path);
-		save_graph_cache(path, graphs);
-		std::cout << "saved cache = " << path << '\n';
-	}
+	graphs = generate_same_degree_candidates<N>(rounds, representatives_output_path);
 
 	std::cout << "wheel = W" << +N << '\n';
 	std::cout << "split-contract rounds = " << rounds << '\n';

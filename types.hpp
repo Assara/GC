@@ -1,7 +1,5 @@
 #pragma once
 #include <cstdint>
-#include <memory>
-#include <string>
 #include <vector>
 #include "Q.hpp"
 #include "Z32783.hpp"
@@ -9,28 +7,6 @@
 // Change this alias to change the integer type project-wide
 using Int = std::uint8_t;
 using signedInt = int;
-
 using bigInt = std::vector<Int>::size_type;
 using fieldType = Z32783;
-// using fieldType = Q;
-
-
-template<typename T>
-struct TypeName {
-	static std::string name() { return "unknown"; }
-};
-
-template<>
-struct TypeName<double> {
-	static std::string name() { return "double"; }
-};
-
-template<>
-struct TypeName<Z32783> {
-	static std::string name() { return "Z32783"; }
-};
-
-template<>
-struct TypeName<Q> {
-	static std::string name() { return "Q"; }
-};
+//using fieldType = Q;  

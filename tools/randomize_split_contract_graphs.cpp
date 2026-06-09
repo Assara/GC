@@ -127,7 +127,7 @@ int run_case(
 	std::mt19937_64 rng(seed);
 
 	out << "graph_size: (" << +GraphType::N_VERTICES_ << "," << +GraphType::N_EDGES_ << ")\n";
-	out << "field_type: " << TypeName<fieldType>::name() << "\n";
+	out << "field_type: " << fieldType::name() << "\n";
 	out << "number_of_graphs: " << total_graphs << "\n";
 
 	std::string line;
