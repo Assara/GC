@@ -20,6 +20,17 @@ public:
 private:
 	Storage value_;
 
+	static Storage make_storage(arbInt numerator, arbInt denominator) {
+		if (denominator == 0) {
+			throw std::domain_error("division by zero");
+		}
+		if (denominator < 0) {
+			numerator = -numerator;
+			denominator = -denominator;
+		}
+		return Storage(std::move(numerator), std::move(denominator));
+	}
+
 public:
 	constexpr Q() : value_(0) {}
 
@@ -29,11 +40,7 @@ public:
 	Q(const arbInt& numerator) : value_(numerator) {}
 
 	Q(const arbInt& numerator, const arbInt& denominator)
-		: value_(numerator, denominator) {
-		if (denominator == 0) {
-			throw std::domain_error("division by zero");
-		}
-	}
+		: value_(make_storage(numerator, denominator)) {}
 
 	Q(const serialized_value_type& serialized)
 		: Q(serialized.first, serialized.second) {}

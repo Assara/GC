@@ -407,18 +407,23 @@ public:
 	std::optional<DenseDomainVec> solve_MX_equals_y(
 		const DenseImageVec& y0,
 		const std::filesystem::path* checkpoint_path = nullptr,
-		std::size_t checkpoint_interval = 32
+		std::size_t checkpoint_interval = 0
 	) const {
 		if (matrix_.image_dim() == 0) {
 			return make_dense_domain_vec_zero();
 		}
 
+		const bool checkpointing_enabled =
+			checkpoint_path != nullptr && checkpoint_interval > 0;
+
 		std::cout << "using compressed split-map solver. image dim = "
 		          << matrix_.image_dim()
 		          << " domain dim = " << matrix_.domain_dim() << '\n';
-		if (checkpoint_path != nullptr) {
+		if (checkpointing_enabled) {
 			std::cout << "checkpoint path = " << checkpoint_path->string() << '\n';
 			std::cout << "checkpoint interval = " << checkpoint_interval << '\n';
+		} else {
+			std::cout << "checkpointing disabled\n";
 		}
 
 		bool is_zero = true;
@@ -442,7 +447,7 @@ public:
 		std::size_t last_checkpoint_iteration = 0;
 		auto checkpoint_timer = std::chrono::steady_clock::now();
 
-		if (checkpoint_path != nullptr && load_checkpoint(*checkpoint_path, signatures, yi)) {
+		if (checkpointing_enabled && load_checkpoint(*checkpoint_path, signatures, yi)) {
 			last_checkpoint_iteration = latest_mmt_iteration(signatures);
 			std::cout << "resumed Wiedemann checkpoint = "
 			          << checkpoint_path->string()
@@ -453,7 +458,7 @@ public:
 			signatures.emplace_back(get_signature(y0));
 			M_MT_into(y0, mt_work, yi);
 			signatures.emplace_back(get_signature(yi));
-			if (checkpoint_path != nullptr) {
+			if (checkpointing_enabled) {
 				const double checkpoint_seconds = time_seconds([&]() {
 					save_checkpoint(*checkpoint_path, signatures, yi);
 				});
@@ -476,7 +481,7 @@ public:
 		while (more_needed > 0) {
 			const std::size_t chunk = std::min<std::size_t>(
 				more_needed,
-				std::max<std::size_t>(checkpoint_interval, 1)
+				checkpointing_enabled ? checkpoint_interval : more_needed
 			);
 			for (std::size_t i = 0; i < chunk; ++i) {
 				M_MT_into(yi, mt_work, next_yi);
@@ -485,7 +490,7 @@ public:
 			}
 			bm_state.process_all_new();
 			const std::size_t current_iteration = latest_mmt_iteration(signatures);
-			if (checkpoint_path != nullptr
+			if (checkpointing_enabled
 				&& current_iteration - last_checkpoint_iteration >= checkpoint_interval) {
 				const auto now = std::chrono::steady_clock::now();
 				const double seconds_since_checkpoint =
@@ -511,7 +516,7 @@ public:
 			y0,
 			bm_state.connection_poly(),
 			checkpoint_path,
-			std::max<std::size_t>(checkpoint_interval, 1)
+			checkpoint_interval
 		);
 	}
 
@@ -821,7 +826,6 @@ private:
 		if (connection_poly.size() < 2 || connection_poly.front() == fieldType{}) {
 			return std::nullopt;
 		}
-
 		const std::size_t length = connection_poly.size() - 1;
 		const fieldType constant = connection_poly.back();
 		if (constant == fieldType{}) {
@@ -835,11 +839,13 @@ private:
 		DenseDomainVec mt_work = make_dense_domain_vec_zero();
 		std::size_t start_j = 1;
 
+		const bool checkpointing_enabled =
+			checkpoint_path != nullptr && checkpoint_interval > 0;
 		const std::filesystem::path recompute_checkpoint_path =
-			checkpoint_path != nullptr
+			checkpointing_enabled
 				? std::filesystem::path(checkpoint_path->string() + ".recompute")
 				: std::filesystem::path{};
-		if (checkpoint_path != nullptr
+		if (checkpointing_enabled
 			&& load_recompute_checkpoint(
 				recompute_checkpoint_path,
 				connection_poly,
@@ -857,7 +863,7 @@ private:
 			M_MT_into(acc, mt_work, next_acc);
 			std::swap(acc, next_acc);
 			add_scaled_inplace(acc, y0, matrix_.image_dim(), connection_poly[j]);
-			if (checkpoint_path != nullptr
+			if (checkpointing_enabled
 				&& (j - last_recompute_checkpoint_step >= checkpoint_interval
 					|| j == length - 1)) {
 				const auto now = std::chrono::steady_clock::now();
@@ -1512,6 +1518,8 @@ int run_split_map_solve_case(
 	const std::filesystem::path image_basis_path = prefix.string() + "_image_basis.bin";
 	const std::filesystem::path solution_path = prefix.string() + "_solution.txt";
 	const std::filesystem::path checkpoint_path = prefix.string() + "_wiedemann_checkpoint.bin";
+	const std::filesystem::path* checkpoint_path_ptr =
+		checkpoint_interval > 0 ? &checkpoint_path : nullptr;
 
 	SplitMapHeader header;
 	auto matrix = load_split_map_columns_as_compressed_matrix(columns_path, &header);
@@ -1578,7 +1586,7 @@ int run_split_map_solve_case(
 	const double solve_seconds = time_seconds([&]() {
 		solution = solver.solve_MX_equals_y(
 			target,
-			&checkpoint_path,
+			checkpoint_path_ptr,
 			checkpoint_interval
 		);
 	});
@@ -1639,6 +1647,8 @@ int run_split_map_dual_case(
 	const std::filesystem::path columns_path = prefix.string() + "_columns.bin";
 	const std::filesystem::path image_basis_path = prefix.string() + "_image_basis.bin";
 	const std::filesystem::path checkpoint_path = prefix.string() + "_dual_wiedemann_checkpoint.bin";
+	const std::filesystem::path* checkpoint_path_ptr =
+		checkpoint_interval > 0 ? &checkpoint_path : nullptr;
 
 	SplitMapHeader header;
 	auto split_matrix = load_split_map_columns_as_compressed_matrix(columns_path, &header);
@@ -1726,7 +1736,7 @@ int run_split_map_dual_case(
 	const double solve_seconds = time_seconds([&]() {
 		correction_coefficients = solver.solve_MX_equals_y(
 			dense_target,
-			&checkpoint_path,
+			checkpoint_path_ptr,
 			checkpoint_interval
 		);
 	});
@@ -2752,10 +2762,10 @@ int main(int argc, char** argv) {
 		}
 	}
 
-	std::size_t checkpoint_interval = 32;
+	std::size_t checkpoint_interval = 0;
 	if (argc >= 7) {
 		const int parsed_interval = std::stoi(argv[6]);
-		if (parsed_interval <= 0) {
+		if (parsed_interval < 0) {
 			print_usage(argv[0]);
 			return EXIT_FAILURE;
 		}
