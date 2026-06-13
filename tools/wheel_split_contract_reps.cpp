@@ -27,6 +27,9 @@ enum class ExperimentMode {
 	SplitMapInfo,
 	SplitMapSolve,
 	SplitMapDual,
+	SplitMapDualScaled,
+	SplitMapDualLive,
+	SplitMapDualScaledLive,
 	Krylov,
 	KrylovDual,
 	KrylovConstrained,
@@ -50,6 +53,13 @@ std::filesystem::path split_map_prefix(int rounds) {
 			+ "_rounds" + std::to_string(rounds)
 			+ "_split_map");
 }
+
+template <typename GraphType>
+struct in_memory_split_map_data {
+	std::vector<GraphType> domain_graphs;
+	std::vector<typename GraphType::SplitGraph> image_basis;
+	compressed_sparse_matrix<fieldType> matrix{0};
+};
 
 template <typename GraphType>
 bool load_graph_records(const std::string& path, std::vector<GraphType>& graphs) {
@@ -1065,9 +1075,11 @@ std::vector<OddGraphdegZero<N + 1>> generate_same_degree_candidates(
 
 	std::cout << "round 0: frontier = " << frontier.size()
 	          << ", cumulative = " << all_graphs.size() << '\n';
-	const auto round0_path = round_snapshot_path(snapshot_output_path, N, 0);
-	if (write_representatives(round0_path, all_graphs)) {
-		std::cout << "round 0 written = " << round0_path.string() << '\n';
+	if (snapshot_output_path != nullptr) {
+		const auto round0_path = round_snapshot_path(snapshot_output_path, N, 0);
+		if (write_representatives(round0_path, all_graphs)) {
+			std::cout << "round 0 written = " << round0_path.string() << '\n';
+		}
 	}
 
 	for (int round = 1; round <= rounds; ++round) {
@@ -1134,10 +1146,12 @@ std::vector<OddGraphdegZero<N + 1>> generate_same_degree_candidates(
 		          << ", cumulative = " << all_graphs.size()
 		          << ", time = " << seconds << " s\n";
 
-		const auto round_path = round_snapshot_path(snapshot_output_path, N, round);
-		if (write_representatives(round_path, all_graphs)) {
-			std::cout << "round " << round << " written = "
-			          << round_path.string() << '\n';
+		if (snapshot_output_path != nullptr) {
+			const auto round_path = round_snapshot_path(snapshot_output_path, N, round);
+			if (write_representatives(round_path, all_graphs)) {
+				std::cout << "round " << round << " written = "
+				          << round_path.string() << '\n';
+			}
 		}
 
 		if (frontier.empty()) {
@@ -1146,6 +1160,82 @@ std::vector<OddGraphdegZero<N + 1>> generate_same_degree_candidates(
 	}
 
 	return all_graphs;
+}
+
+template <Int N>
+in_memory_split_map_data<OddGraphdegZero<N + 1>> build_in_memory_split_map(
+	int rounds
+) {
+	using GraphType = OddGraphdegZero<N + 1>;
+	using GCType = OddGCdegZero<N + 1>;
+	using SplitGraph = typename GCType::SplitGraphType;
+
+	auto all_graphs = generate_same_degree_candidates<N>(rounds, nullptr);
+
+	typename GraphType::Basis wheel_basis(wheel_graph<N>(), fieldType{1});
+	GraphType::std(wheel_basis);
+	const GraphType wheel = wheel_basis.getValue();
+
+	std::vector<GraphType> domain_graphs;
+	domain_graphs.reserve(all_graphs.size());
+	for (const auto& graph : all_graphs) {
+		if (!(graph == wheel)) {
+			domain_graphs.push_back(graph);
+		}
+	}
+
+	std::unordered_map<SplitGraph, std::uint32_t> image_index;
+	std::vector<std::vector<typename compressed_sparse_matrix<fieldType>::Basis>> columns;
+	columns.reserve(domain_graphs.size());
+	std::vector<SplitGraph> image_basis;
+	image_basis.reserve(1024);
+
+	auto get_image_index = [&](const SplitGraph& graph) {
+		auto [it, inserted] = image_index.try_emplace(
+			graph,
+			static_cast<std::uint32_t>(image_basis.size())
+		);
+		if (inserted) {
+			image_basis.push_back(graph);
+		}
+		return it->second;
+	};
+
+	std::size_t entries = 0;
+	const double build_seconds = time_seconds([&]() {
+		for (const GraphType& graph : domain_graphs) {
+			const auto column = GCType(graph, AssumeBasisOrderTag{}).delta().data();
+			std::vector<typename compressed_sparse_matrix<fieldType>::Basis> compressed_column;
+			compressed_column.reserve(column.size());
+			for (const auto& be : column) {
+				compressed_column.emplace_back(
+					get_image_index(be.getValue()),
+					be.getCoefficient()
+				);
+			}
+			entries += compressed_column.size();
+			columns.push_back(std::move(compressed_column));
+		}
+	});
+
+	compressed_sparse_matrix<fieldType> matrix(
+		static_cast<typename compressed_sparse_matrix<fieldType>::indexType>(image_basis.size())
+	);
+	matrix.rows_and_coeffs_.reserve(entries);
+	matrix.col_ptr_.reserve(domain_graphs.size() + 1);
+	for (auto& column : columns) {
+		matrix.add_col(column);
+	}
+
+	std::cout << "built in-memory split map\n";
+	std::cout << "wheel = W" << +N << '\n';
+	std::cout << "rounds = " << rounds << '\n';
+	std::cout << "domain graphs = " << domain_graphs.size() << '\n';
+	std::cout << "split image basis = " << image_basis.size() << '\n';
+	std::cout << "split map entries = " << matrix.rows_and_coeffs_.size() << '\n';
+	std::cout << "split map build time = " << build_seconds << " s\n";
+
+	return {std::move(domain_graphs), std::move(image_basis), std::move(matrix)};
 }
 
 template <Int N>
@@ -1635,7 +1725,8 @@ int run_split_map_dual_case(
 	int rounds,
 	const std::filesystem::path* representative_output_path,
 	const std::filesystem::path* map_output_prefix,
-	std::size_t checkpoint_interval
+	std::size_t checkpoint_interval,
+	bool use_scaled_adjoint
 ) {
 	using GCType = OddGCdegZero<N + 1>;
 	using GraphType = typename GCType::GraphType;
@@ -1731,7 +1822,41 @@ int run_split_map_dual_case(
 	std::cout << "target d_split(W) terms = " << split_target.size() << '\n';
 	std::cout << "target terms in image basis = " << split_target.size() - missing_target_terms << '\n';
 
-	compressed_wiedemann_solver solver(std::move(*split_matrix));
+	compressed_wiedemann_solver solver = [&]() {
+		if (!use_scaled_adjoint) {
+			std::cout << "using plain transpose in dual solver\n";
+			return compressed_wiedemann_solver(std::move(*split_matrix));
+		}
+
+		std::vector<fieldType> image_aut(image_basis.size(), fieldType{});
+		for (std::size_t i = 0; i < image_basis.size(); ++i) {
+			image_aut[i] = fieldType{automorphism_group_size4(image_basis[i])};
+		}
+
+		std::vector<fieldType> domain_aut(domain_graphs.size(), fieldType{});
+		for (std::size_t i = 0; i < domain_graphs.size(); ++i) {
+			domain_aut[i] = fieldType{automorphism_group_size4(domain_graphs[i])};
+		}
+
+		compressed_sparse_matrix<fieldType> scaled_adjoint =
+			build_scaled_adjoint_matrix(*split_matrix, image_aut, domain_aut);
+		compressed_sparse_matrix<fieldType> split_forward =
+			transpose_compressed_matrix(*split_matrix);
+		compressed_sparse_matrix<fieldType> scaled_adjoint_transpose =
+			transpose_compressed_matrix(scaled_adjoint);
+		std::cout << "using scaled adjoint transpose with automorphism weights\n";
+		std::cout << "scaled adjoint image dim = " << scaled_adjoint.image_dim()
+		          << " domain dim = " << scaled_adjoint.domain_dim() << '\n';
+		std::cout << "scaled adjoint transpose image dim = "
+		          << scaled_adjoint_transpose.image_dim()
+		          << " domain dim = " << scaled_adjoint_transpose.domain_dim() << '\n';
+		std::cout << "split forward image dim = " << split_forward.image_dim()
+		          << " domain dim = " << split_forward.domain_dim() << '\n';
+		return compressed_wiedemann_solver(
+			std::move(scaled_adjoint_transpose),
+			std::move(split_forward)
+		);
+	}();
 	std::optional<compressed_wiedemann_solver::DenseDomainVec> correction_coefficients;
 	const double solve_seconds = time_seconds([&]() {
 		correction_coefficients = solver.solve_MX_equals_y(
@@ -1939,6 +2064,157 @@ int run_krylov_case(
 	}
 
 	return EXIT_SUCCESS;
+}
+
+template <Int N>
+int run_split_map_dual_live_case(
+	int rounds,
+	const std::filesystem::path* representative_output_path,
+	std::size_t checkpoint_interval,
+	bool use_scaled_adjoint
+) {
+	using GCType = OddGCdegZero<N + 1>;
+	using GraphType = typename GCType::GraphType;
+	using SplitGraph = typename GCType::SplitGraphType;
+
+	auto data = build_in_memory_split_map<N>(rounds);
+	auto& domain_graphs = data.domain_graphs;
+	auto& image_basis = data.image_basis;
+	auto& split_matrix = data.matrix;
+
+	const std::filesystem::path checkpoint_path = std::filesystem::path("output")
+		/ "split_contract"
+		/ "maps"
+		/ ("W" + std::to_string(N)
+			+ "_rounds" + std::to_string(rounds)
+			+ (use_scaled_adjoint ? "_dual_live_scaled" : "_dual_live_plain")
+			+ "_wiedemann_checkpoint.bin");
+	const std::filesystem::path* checkpoint_path_ptr =
+		checkpoint_interval > 0 ? &checkpoint_path : nullptr;
+
+	typename GraphType::Basis wheel_basis(wheel_graph<N>(), fieldType{1});
+	GraphType::std(wheel_basis);
+	const GraphType wheel = wheel_basis.getValue();
+
+	std::unordered_map<SplitGraph, std::uint32_t> image_index;
+	image_index.reserve(image_basis.size());
+	for (std::uint32_t i = 0; i < image_basis.size(); ++i) {
+		image_index.emplace(image_basis[i], i);
+	}
+
+	const auto split_target = GCType(wheel, AssumeBasisOrderTag{}).delta().data();
+	std::size_t missing_target_terms = 0;
+	auto dense_target = split_matrix.reserve_dense_image_vec();
+	for (std::size_t i = 0; i < split_matrix.image_dim(); ++i) {
+		dense_target[i] = fieldType{};
+	}
+	for (const auto& be : split_target) {
+		const auto it = image_index.find(be.getValue());
+		if (it == image_index.end()) {
+			++missing_target_terms;
+			continue;
+		}
+		dense_target[it->second] += be.getCoefficient();
+	}
+	if (missing_target_terms != 0) {
+		std::cout << "target terms missing from image basis = "
+		          << missing_target_terms << '\n';
+		return EXIT_FAILURE;
+	}
+
+	compressed_wiedemann_solver solver = [&]() {
+		if (!use_scaled_adjoint) {
+			std::cout << "using plain transpose in live dual solver\n";
+			return compressed_wiedemann_solver(std::move(split_matrix));
+		}
+
+		std::vector<fieldType> image_aut(image_basis.size(), fieldType{});
+		for (std::size_t i = 0; i < image_basis.size(); ++i) {
+			image_aut[i] = fieldType{automorphism_group_size4(image_basis[i])};
+		}
+
+		std::vector<fieldType> domain_aut(domain_graphs.size(), fieldType{});
+		for (std::size_t i = 0; i < domain_graphs.size(); ++i) {
+			domain_aut[i] = fieldType{automorphism_group_size4(domain_graphs[i])};
+		}
+
+		compressed_sparse_matrix<fieldType> scaled_adjoint =
+			build_scaled_adjoint_matrix(split_matrix, image_aut, domain_aut);
+		compressed_sparse_matrix<fieldType> split_forward =
+			transpose_compressed_matrix(split_matrix);
+		compressed_sparse_matrix<fieldType> scaled_adjoint_transpose =
+			transpose_compressed_matrix(scaled_adjoint);
+		std::cout << "using scaled adjoint transpose in live dual solver\n";
+		return compressed_wiedemann_solver(
+			std::move(scaled_adjoint_transpose),
+			std::move(split_forward)
+		);
+	}();
+
+	std::optional<compressed_wiedemann_solver::DenseDomainVec> correction_coefficients;
+	const double solve_seconds = time_seconds([&]() {
+		correction_coefficients = solver.solve_MX_equals_y(
+			dense_target,
+			checkpoint_path_ptr,
+			checkpoint_interval
+		);
+	});
+	std::cout << "solve time = " << solve_seconds << " s\n";
+
+	if (!correction_coefficients.has_value()) {
+		std::cout << "dual correction found = no\n";
+		return EXIT_FAILURE;
+	}
+
+	GCType graph_correction;
+	std::size_t nonzero_coefficients = 0;
+	for (std::size_t i = 0; i < domain_graphs.size(); ++i) {
+		const fieldType coefficient = (*correction_coefficients)[i];
+		if (coefficient == fieldType{}) {
+			continue;
+		}
+		++nonzero_coefficients;
+		GCType scaled(domain_graphs[i], AssumeBasisOrderTag{});
+		scaled.scalar_multiply(coefficient);
+		graph_correction += scaled;
+	}
+	graph_correction.standardize_all();
+	graph_correction.sort_elements();
+
+	GCType representative(wheel, AssumeBasisOrderTag{});
+	GCType negative_correction = graph_correction;
+	negative_correction.scalar_multiply(fieldType{-1});
+	representative += negative_correction;
+	representative.standardize_all();
+	representative.sort_elements();
+
+	const auto correction_split = graph_correction.delta();
+	const auto correction_contract = contraction_of(graph_correction);
+	const auto representative_contract = contraction_of(representative);
+
+	std::cout << "dual correction found = yes\n";
+	std::cout << "graph correction coefficients = " << nonzero_coefficients << '\n';
+	std::cout << "graph correction terms = " << graph_correction.data().size() << '\n';
+	std::cout << "representative terms = " << representative.data().size() << '\n';
+	std::cout << "d_split(graph correction) terms = "
+	          << correction_split.data().size() << '\n';
+	std::cout << "d_contraction(graph correction) terms = "
+	          << correction_contract.data().size() << '\n';
+	std::cout << "d_contraction(representative) terms = "
+	          << representative_contract.data().size() << '\n';
+	std::cout << "representative contraction-closed = "
+	          << (representative_contract.data().empty() ? "yes" : "no") << '\n';
+
+	if (representative_output_path != nullptr) {
+		if (!write_class_file(*representative_output_path, representative)) {
+			std::cerr << "failed to write " << representative_output_path->string() << '\n';
+			return EXIT_FAILURE;
+		}
+		std::cout << "saved representative = "
+		          << representative_output_path->string() << '\n';
+	}
+
+	return representative_contract.data().empty() ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
 template <Int N>
@@ -2698,7 +2974,7 @@ int run_constrained_krylov_dual_case(
 
 void print_usage(const char* argv0) {
 	std::cerr << "usage: " << argv0 << " wheel_N rounds [representatives_output_path] [cycle_output_path] [mode] [checkpoint_interval]\n";
-	std::cerr << "  mode defaults to generated-support; use enumerate, split-map, split-map-info, split-map-solve, split-map-dual, generated-constrained, krylov, krylov-dual, krylov-constrained, or krylov-constrained-dual\n";
+	std::cerr << "  mode defaults to generated-support; use enumerate, split-map, split-map-info, split-map-solve, split-map-dual, split-map-dual-scaled, split-map-dual-live, split-map-dual-scaled-live, generated-constrained, krylov, krylov-dual, krylov-constrained, or krylov-constrained-dual\n";
 	std::cerr << "  wheel_N must be one of 3,5,7,9,11,13,15,17,19,21,25,27\n";
 }
 
@@ -2744,6 +3020,12 @@ int main(int argc, char** argv) {
 			mode = ExperimentMode::SplitMapSolve;
 		} else if (mode_arg == "split-map-dual") {
 			mode = ExperimentMode::SplitMapDual;
+		} else if (mode_arg == "split-map-dual-scaled") {
+			mode = ExperimentMode::SplitMapDualScaled;
+		} else if (mode_arg == "split-map-dual-live") {
+			mode = ExperimentMode::SplitMapDualLive;
+		} else if (mode_arg == "split-map-dual-scaled-live") {
+			mode = ExperimentMode::SplitMapDualScaledLive;
 		} else if (mode_arg == "krylov") {
 			mode = ExperimentMode::Krylov;
 		} else if (mode_arg == "krylov-dual") {
@@ -2787,7 +3069,16 @@ int main(int argc, char** argv) {
 			return run_split_map_solve_case<N_VALUE>(rounds, cycle_output_path_ptr, checkpoint_interval); \
 		} \
 		if (mode == ExperimentMode::SplitMapDual) { \
-			return run_split_map_dual_case<N_VALUE>(rounds, representatives_output_path_ptr, cycle_output_path_ptr, checkpoint_interval); \
+			return run_split_map_dual_case<N_VALUE>(rounds, representatives_output_path_ptr, cycle_output_path_ptr, checkpoint_interval, false); \
+		} \
+		if (mode == ExperimentMode::SplitMapDualScaled) { \
+			return run_split_map_dual_case<N_VALUE>(rounds, representatives_output_path_ptr, cycle_output_path_ptr, checkpoint_interval, true); \
+		} \
+		if (mode == ExperimentMode::SplitMapDualLive) { \
+			return run_split_map_dual_live_case<N_VALUE>(rounds, representatives_output_path_ptr, checkpoint_interval, false); \
+		} \
+		if (mode == ExperimentMode::SplitMapDualScaledLive) { \
+			return run_split_map_dual_live_case<N_VALUE>(rounds, representatives_output_path_ptr, checkpoint_interval, true); \
 		} \
 		if (mode == ExperimentMode::GeneratedConstrained) { \
 			return run_generated_constrained_case<N_VALUE>(rounds, representatives_output_path_ptr, cycle_output_path_ptr); \

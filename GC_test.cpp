@@ -1,9 +1,12 @@
 #include <cstdlib>
 #include <iostream>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "examplegraphs.hpp"
 #include "OCGraph_test.hpp"
+#include "GraphStandardizer.hpp"
 
 template <typename GraphType>
 GraphIsomorphism<GraphType::N_VERTICES_, GraphType::N_EDGES_> make_graph_isomorphism_from_vertex_perm(
@@ -258,6 +261,254 @@ bool check_wheel_OCG_F0_exact_equivariance(const char* label) {
 	return check_OCG_F0_exact_equivariance_on_graph(label, source, wheel_OCG_F0_test_isomorphisms<N>());
 }
 
+template <typename GraphType>
+VectorSpace::LinComb<GraphType, fieldType> standardize4_and_sort(
+	std::vector<BasisElement<GraphType, fieldType>> elems
+) {
+	GraphStandardizer<
+		GraphType::N_VERTICES_,
+		GraphType::N_EDGES_,
+		GraphType::N_OUT_HAIR_,
+		GraphType::N_IN_HAIR_,
+		GraphType::C_,
+		GraphType::D_,
+		fieldType
+	> standardizer;
+
+	for (auto& be : elems) {
+		be = standardizer.standardize4(be);
+	}
+
+	VectorSpace::LinComb<GraphType, fieldType> result(std::move(elems), AssumeBasisOrderTag{});
+	result.sort_elements();
+	return result;
+}
+
+template <typename GraphType>
+VectorSpace::LinComb<typename GraphType::SplitGraph, fieldType> split_standardize4(
+	const GraphType& graph,
+	fieldType coeff = fieldType{1}
+) {
+	using SplitGraph = typename GraphType::SplitGraph;
+	const auto raw = graph.unsorted_splits(coeff).raw_elements();
+	std::vector<BasisElement<SplitGraph, fieldType>> elems(raw.begin(), raw.end());
+	return standardize4_and_sort<SplitGraph>(std::move(elems));
+}
+
+template <typename SplitGraph>
+VectorSpace::LinComb<typename SplitGraph::ContGraph, fieldType> contract_standardize4(
+	const SplitGraph& graph,
+	fieldType coeff = fieldType{1}
+) {
+	using ContGraph = typename SplitGraph::ContGraph;
+	std::vector<BasisElement<ContGraph, fieldType>> elems;
+	elems.reserve(SplitGraph::N_EDGES_);
+	for (Int edge = 0; edge < SplitGraph::N_EDGES_; ++edge) {
+		auto be = graph.contract_edge(edge, coeff);
+		if (be.getCoefficient() != fieldType{}) {
+			elems.push_back(std::move(be));
+		}
+	}
+	return standardize4_and_sort<ContGraph>(std::move(elems));
+}
+
+template <typename GraphType>
+bigInt automorphism_group_size4_gc_test(const GraphType& input_graph) {
+	using Standardizer = GraphStandardizer<
+		GraphType::N_VERTICES_,
+		GraphType::N_EDGES_,
+		GraphType::N_OUT_HAIR_,
+		GraphType::N_IN_HAIR_,
+		GraphType::C_,
+		GraphType::D_,
+		fieldType
+	>;
+	using IsomorphismType = typename Standardizer::IsomorphismType;
+
+	Standardizer standardizer;
+	auto [attempts, valid_attempts] = standardizer.create_final_attempts4(input_graph);
+
+	std::vector<IsomorphismType> minimizers;
+	typename GraphType::Basis best_basis;
+	bool have_best = false;
+
+	for (const std::size_t attempt_index : valid_attempts) {
+		typename GraphType::ThisGraph graph;
+		IsomorphismType iso;
+		const signedInt sign = graph.assignPermutedDirectedSortedEdgesWithIsomorphism(
+			input_graph,
+			attempts[attempt_index].create_vertex_permutation(),
+			iso
+		);
+		if (sign == 0) {
+			continue;
+		}
+
+		typename GraphType::Basis attempt_basis(std::move(graph), fieldType{sign});
+		if (!have_best) {
+			best_basis = attempt_basis;
+			minimizers.clear();
+			minimizers.push_back(iso);
+			have_best = true;
+			continue;
+		}
+
+		const signedInt comparison = best_basis.compare(attempt_basis);
+		if (comparison < 0) {
+			best_basis = attempt_basis;
+			minimizers.clear();
+			minimizers.push_back(iso);
+		} else if (comparison == 0) {
+			minimizers.push_back(iso);
+		}
+	}
+
+	return minimizers.size();
+}
+
+template <typename GCType>
+GCType split_contract_step_gc_test(const GCType& gamma) {
+	using GraphType = typename GCType::GraphType;
+	using SplitGraph = typename GCType::SplitGraphType;
+	using ContGraph = typename SplitGraph::ContGraph;
+
+	std::vector<BasisElement<SplitGraph, fieldType>> split_terms;
+	for (const auto& be : gamma.data()) {
+		const auto raw = be.getValue().unsorted_splits(be.getCoefficient()).raw_elements();
+		split_terms.insert(split_terms.end(), raw.begin(), raw.end());
+	}
+	auto split = standardize4_and_sort<SplitGraph>(std::move(split_terms));
+
+	std::vector<BasisElement<ContGraph, fieldType>> contract_terms;
+	for (const auto& be : split) {
+		for (Int edge = 0; edge < SplitGraph::N_EDGES_; ++edge) {
+			auto cont = be.getValue().contract_edge(edge, be.getCoefficient());
+			if (cont.getCoefficient() != fieldType{}) {
+				contract_terms.push_back(std::move(cont));
+			}
+		}
+	}
+	auto contracted = standardize4_and_sort<ContGraph>(std::move(contract_terms));
+	return GCType(contracted);
+}
+
+template <Int N>
+bool check_scaled_transpose_matches_contraction_rounds4(const char* label) {
+	using GCType = OddGCdegZero<N + 1>;
+	using GraphType = typename GCType::GraphType;
+	using SplitGraph = typename GCType::SplitGraphType;
+
+	typename GraphType::Basis wheel_basis(wheel_graph<N>(), fieldType{1});
+	{
+		GraphStandardizer<
+			GraphType::N_VERTICES_,
+			GraphType::N_EDGES_,
+			GraphType::N_OUT_HAIR_,
+			GraphType::N_IN_HAIR_,
+			GraphType::C_,
+			GraphType::D_,
+			fieldType
+		> standardizer;
+		wheel_basis = standardizer.standardize4(wheel_basis);
+	}
+	GCType current(wheel_basis.getValue(), AssumeBasisOrderTag{});
+
+	std::unordered_set<GraphType> seen_y_set;
+	std::unordered_set<SplitGraph> seen_x_set;
+	seen_y_set.insert(wheel_basis.getValue());
+
+	const int rounds = 4;
+	for (int i = 0; i <= rounds; ++i) {
+		std::vector<BasisElement<SplitGraph, fieldType>> split_terms;
+		for (const auto& be : current.data()) {
+			const auto raw = be.getValue().unsorted_splits(be.getCoefficient()).raw_elements();
+			split_terms.insert(split_terms.end(), raw.begin(), raw.end());
+		}
+		auto split = standardize4_and_sort<SplitGraph>(std::move(split_terms));
+		for (const auto& be : split) {
+			seen_x_set.insert(be.getValue());
+		}
+		if (i == rounds) {
+			break;
+		}
+		current = split_contract_step_gc_test(current);
+		for (const auto& be : current.data()) {
+			seen_y_set.insert(be.getValue());
+		}
+	}
+
+	std::vector<GraphType> y_basis(seen_y_set.begin(), seen_y_set.end());
+	std::vector<SplitGraph> x_basis(seen_x_set.begin(), seen_x_set.end());
+	std::sort(y_basis.begin(), y_basis.end());
+	std::sort(x_basis.begin(), x_basis.end());
+
+	std::unordered_map<GraphType, std::size_t> y_index;
+	std::unordered_map<SplitGraph, std::size_t> x_index;
+	for (std::size_t i = 0; i < y_basis.size(); ++i) {
+		y_index.emplace(y_basis[i], i);
+	}
+	for (std::size_t i = 0; i < x_basis.size(); ++i) {
+		x_index.emplace(x_basis[i], i);
+	}
+
+	std::vector<std::vector<std::pair<std::size_t, fieldType>>> split_columns;
+	split_columns.reserve(y_basis.size());
+	for (const auto& y_graph : y_basis) {
+		std::vector<std::pair<std::size_t, fieldType>> col;
+		auto split = split_standardize4<GraphType>(y_graph);
+		col.reserve(split.size());
+		for (const auto& be : split) {
+			col.emplace_back(x_index.at(be.getValue()), be.getCoefficient());
+		}
+		split_columns.push_back(std::move(col));
+	}
+
+	std::vector<std::vector<fieldType>> contraction_matrix(
+		y_basis.size(),
+		std::vector<fieldType>(x_basis.size(), fieldType{})
+	);
+	for (std::size_t i = 0; i < x_basis.size(); ++i) {
+		auto contracted = contract_standardize4<SplitGraph>(x_basis[i]);
+		for (const auto& be : contracted) {
+			auto it = y_index.find(be.getValue());
+			if (it != y_index.end()) {
+				contraction_matrix[it->second][i] = be.getCoefficient();
+			}
+		}
+	}
+
+	std::vector<fieldType> y_aut(y_basis.size(), fieldType{});
+	std::vector<fieldType> x_aut(x_basis.size(), fieldType{});
+	for (std::size_t j = 0; j < y_basis.size(); ++j) {
+		y_aut[j] = fieldType{automorphism_group_size4_gc_test(y_basis[j])};
+	}
+	for (std::size_t i = 0; i < x_basis.size(); ++i) {
+		x_aut[i] = fieldType{automorphism_group_size4_gc_test(x_basis[i])};
+	}
+
+	std::size_t mismatches = 0;
+	for (std::size_t i = 0; i < x_basis.size(); ++i) {
+		for (std::size_t j = 0; j < y_basis.size(); ++j) {
+			fieldType scaled_entry{};
+			for (const auto& [row, coeff] : split_columns[j]) {
+				if (row == i) {
+					scaled_entry = coeff * x_aut[i] / y_aut[j];
+					break;
+				}
+			}
+			if (scaled_entry != contraction_matrix[j][i]) {
+				++mismatches;
+			}
+		}
+	}
+
+	const bool ok = mismatches == 0;
+	std::cout << label << ": W7 rounds=4 scaled transpose vs d_contraction -> "
+	          << (ok ? "ok" : "failed")
+	          << " (mismatches=" << mismatches << ")\n";
+	return ok;
+}
+
 bool check_w9_OCG_F0_unique_direction_data(const char* label) {
 	using GraphType = OddGraphdegZero<10>;
 	const GraphType source = wheel_graph<9>();
@@ -467,6 +718,7 @@ int main() {
 	ok &= check_minimizing_isomorphisms("triangle_minimizers", loop_graph<3>(), 6);
 	ok &= check_minimizing_isomorphisms_match_standardization("wheel_11_minimizers", wheel_graph<11>(), 22);
 	ok &= check_generated_isomorphism_standardization_matches_standardize("wheel_11_iso_std_compare", wheel_graph<11>());
+	ok &= check_scaled_transpose_matches_contraction_rounds4<7>("wheel7_scaled_transpose_matches_contraction_rounds4");
 	ok &= check_v_graph_sort_matches_quick<25>("V25_sort_matches_quick");
 	ok &= check_v_graph_permuted_sort_matches_old_path<25>("V25_permuted_sort_matches_old_path");
 
