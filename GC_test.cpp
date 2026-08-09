@@ -368,7 +368,6 @@ bigInt automorphism_group_size4_gc_test(const GraphType& input_graph) {
 
 template <typename GCType>
 GCType split_contract_step_gc_test(const GCType& gamma) {
-	using GraphType = typename GCType::GraphType;
 	using SplitGraph = typename GCType::SplitGraphType;
 	using ContGraph = typename SplitGraph::ContGraph;
 
@@ -397,6 +396,7 @@ bool check_scaled_transpose_matches_contraction_rounds4(const char* label) {
 	using GCType = OddGCdegZero<N + 1>;
 	using GraphType = typename GCType::GraphType;
 	using SplitGraph = typename GCType::SplitGraphType;
+	using SplitGCType = typename GCType::SplitGC;
 
 	typename GraphType::Basis wheel_basis(wheel_graph<N>(), fieldType{1});
 	{
@@ -451,61 +451,85 @@ bool check_scaled_transpose_matches_contraction_rounds4(const char* label) {
 		x_index.emplace(x_basis[i], i);
 	}
 
-	std::vector<std::vector<std::pair<std::size_t, fieldType>>> split_columns;
-	split_columns.reserve(y_basis.size());
-	for (const auto& y_graph : y_basis) {
-		std::vector<std::pair<std::size_t, fieldType>> col;
-		auto split = split_standardize4<GraphType>(y_graph);
-		col.reserve(split.size());
-		for (const auto& be : split) {
-			col.emplace_back(x_index.at(be.getValue()), be.getCoefficient());
+	std::vector<std::vector<fieldType>> delta_matrix(
+		x_basis.size(),
+		std::vector<fieldType>(y_basis.size(), fieldType{})
+	);
+	std::vector<std::vector<fieldType>> aut_scaled_delta_matrix(
+		x_basis.size(),
+		std::vector<fieldType>(y_basis.size(), fieldType{})
+	);
+	for (std::size_t j = 0; j < y_basis.size(); ++j) {
+		GCType y_gc(BasisElement<GraphType, fieldType>(y_basis[j], fieldType{1}), AssumeBasisOrderTag{});
+
+		auto delta = y_gc.delta();
+		for (const auto& be : delta.data()) {
+			auto it = x_index.find(be.getValue());
+			if (it != x_index.end()) {
+				delta_matrix[it->second][j] = be.getCoefficient();
+			}
 		}
-		split_columns.push_back(std::move(col));
+
+		auto aut_scaled_delta = y_gc.aut_scaled_delta();
+		for (const auto& be : aut_scaled_delta.data()) {
+			auto it = x_index.find(be.getValue());
+			if (it != x_index.end()) {
+				aut_scaled_delta_matrix[it->second][j] = be.getCoefficient();
+			}
+		}
 	}
 
 	std::vector<std::vector<fieldType>> contraction_matrix(
 		y_basis.size(),
 		std::vector<fieldType>(x_basis.size(), fieldType{})
 	);
+	std::vector<std::vector<fieldType>> aut_scaled_contraction_matrix(
+		y_basis.size(),
+		std::vector<fieldType>(x_basis.size(), fieldType{})
+	);
 	for (std::size_t i = 0; i < x_basis.size(); ++i) {
-		auto contracted = contract_standardize4<SplitGraph>(x_basis[i]);
+		SplitGCType x_gc(BasisElement<SplitGraph, fieldType>(x_basis[i], fieldType{1}), AssumeBasisOrderTag{});
+
+		auto contracted_gc = x_gc.d_contraction();
+		const auto& contracted = contracted_gc.data();
 		for (const auto& be : contracted) {
 			auto it = y_index.find(be.getValue());
 			if (it != y_index.end()) {
 				contraction_matrix[it->second][i] = be.getCoefficient();
 			}
 		}
-	}
 
-	std::vector<fieldType> y_aut(y_basis.size(), fieldType{});
-	std::vector<fieldType> x_aut(x_basis.size(), fieldType{});
-	for (std::size_t j = 0; j < y_basis.size(); ++j) {
-		y_aut[j] = fieldType{automorphism_group_size4_gc_test(y_basis[j])};
-	}
-	for (std::size_t i = 0; i < x_basis.size(); ++i) {
-		x_aut[i] = fieldType{automorphism_group_size4_gc_test(x_basis[i])};
-	}
-
-	std::size_t mismatches = 0;
-	for (std::size_t i = 0; i < x_basis.size(); ++i) {
-		for (std::size_t j = 0; j < y_basis.size(); ++j) {
-			fieldType scaled_entry{};
-			for (const auto& [row, coeff] : split_columns[j]) {
-				if (row == i) {
-					scaled_entry = coeff * x_aut[i] / y_aut[j];
-					break;
-				}
-			}
-			if (scaled_entry != contraction_matrix[j][i]) {
-				++mismatches;
+		auto aut_scaled_contracted_gc = x_gc.aut_scaled_d_contract();
+		for (const auto& be : aut_scaled_contracted_gc.data()) {
+			auto it = y_index.find(be.getValue());
+			if (it != y_index.end()) {
+				aut_scaled_contraction_matrix[it->second][i] = be.getCoefficient();
 			}
 		}
 	}
 
-	const bool ok = mismatches == 0;
-	std::cout << label << ": W7 rounds=4 scaled transpose vs d_contraction -> "
+	std::size_t delta_vs_contract_transpose_mismatches = 0;
+	std::size_t contract_vs_delta_transpose_mismatches = 0;
+	for (std::size_t i = 0; i < x_basis.size(); ++i) {
+		for (std::size_t j = 0; j < y_basis.size(); ++j) {
+			if (aut_scaled_delta_matrix[i][j] != contraction_matrix[j][i]) {
+				++delta_vs_contract_transpose_mismatches;
+			}
+			if (aut_scaled_contraction_matrix[j][i] != delta_matrix[i][j]) {
+				++contract_vs_delta_transpose_mismatches;
+			}
+		}
+	}
+
+	const bool ok = delta_vs_contract_transpose_mismatches == 0
+		&& contract_vs_delta_transpose_mismatches == 0;
+	std::cout << label << ": W7 rounds=4 GC aut-scaled transpose checks -> "
 	          << (ok ? "ok" : "failed")
-	          << " (mismatches=" << mismatches << ")\n";
+	          << " (aut_scaled_delta_vs_d_contract_T="
+	          << delta_vs_contract_transpose_mismatches
+	          << ", aut_scaled_d_contract_vs_delta_T="
+	          << contract_vs_delta_transpose_mismatches
+	          << ")\n";
 	return ok;
 }
 

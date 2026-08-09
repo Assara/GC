@@ -902,6 +902,63 @@ Int N_VERTICES,
 				return best_basis;
 			}
 
+			std::pair<BasisElement<GraphType, fieldType>, bigInt> standardize4_with_aut_count(
+				const BasisElement<GraphType, fieldType>& input
+			) const {
+				const GraphType& G = input.getValue();
+				auto [attempts, valid_attempts] = create_final_attempts4(G);
+
+				typename GraphType::Basis best_basis = GraphType::assignPermutedDirectedSortedEdgesBasis(
+					input,
+					attempts[valid_attempts[0]].create_vertex_permutation()
+				);
+
+				if (valid_attempts.size() == 1 || best_basis.getCoefficient() == fieldType{0}) {
+					return {best_basis, static_cast<bigInt>(valid_attempts.size())};
+				}
+
+				typename GraphType::Basis attempt_basis;
+				signedInt comparison;
+				bigInt true_final_attempt_count = 1;
+
+				for (std::size_t i = 1; i < valid_attempts.size(); ++i) {
+					const std::size_t attempt_index = valid_attempts[i];
+					attempt_basis = GraphType::assignPermutedDirectedSortedEdgesBasis(
+						input,
+						attempts[attempt_index].create_vertex_permutation()
+					);
+
+					comparison = best_basis.compare(attempt_basis);
+					if  (comparison == 0) {
+						++true_final_attempt_count;
+						if (attempt_basis.getCoefficient() == -best_basis.getCoefficient()) {
+							best_basis.set_coefficient(fieldType(0));
+						}
+					} else if (comparison < 0) {
+						best_basis = attempt_basis;
+						true_final_attempt_count = 1;
+					}
+				}
+
+				return {best_basis, true_final_attempt_count};
+			}
+
+			BasisElement<GraphType, fieldType> standardize_and_aut_div(
+				const BasisElement<GraphType, fieldType>& input
+			) const {
+				auto [basis, aut_count] = standardize4_with_aut_count(input);
+				basis.getCoefficientRef() /= fieldType{aut_count};
+				return basis;
+			}
+
+			BasisElement<GraphType, fieldType> standardize_and_aut_mul(
+				const BasisElement<GraphType, fieldType>& input
+			) const {
+				auto [basis, aut_count] = standardize4_with_aut_count(input);
+				basis.getCoefficientRef() *= fieldType{aut_count};
+				return basis;
+			}
+
 			class LexicographicalBuilder {
 				public:
 					GraphType G;

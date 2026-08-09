@@ -5,6 +5,7 @@
 #include "VectorSpace/BasisElement.hpp"
 #include "VectorSpace/wiedemann_primitive_finder.hpp"
 
+#include "GraphStandardizer.hpp"
 #include "MetaGraph.hpp"
 
 template <
@@ -114,6 +115,28 @@ class GC {
 			return SplitGC(lin_comb);
 		}
 
+		static SplitGC aut_scaled_delta(const BasisElement<GraphType, fieldType>& G) {
+			return GC(G, AssumeBasisOrderTag{}).aut_scaled_delta();
+		}
+
+		SplitGC aut_scaled_delta() const {
+			L source = vec;
+			standardize_aut_div(source);
+
+			std::vector<BasisElement<SplitGraphType, fieldType>> elems;
+			for (const auto& be : source) {
+				auto raw = be.getValue().unsorted_splits(be.getCoefficient());
+				for (const auto& split_be : raw) {
+					elems.push_back(split_be);
+				}
+			}
+
+			SplitL result(std::move(elems), AssumeBasisOrderTag{});
+			standardize_aut_mul(result);
+			result.sort_elements();
+			return SplitGC(result);
+		}
+
 		static SplitGC delta_4valent(const BasisElement<GraphType, fieldType>& G) {
 			SplitL lin_comb = G.getValue().split_vertex_differential_4valent(G.getCoefficient());
 			return SplitGC(lin_comb);
@@ -208,6 +231,31 @@ class GC {
 			std::vector<BasisElement<typename GraphType::ContGraph, fieldType>> elems = d_contraction_without_sort();
 			ContGC dThis(std::move(elems));
 			return dThis;
+		}
+
+		static ContGC aut_scaled_d_contract(const BasisElement<GraphType, fieldType>& G) {
+			return GC(G, AssumeBasisOrderTag{}).aut_scaled_d_contract();
+		}
+
+		ContGC aut_scaled_d_contract() const {
+			L source = vec;
+			standardize_aut_div(source);
+
+			std::vector<BasisElement<ContGraphType, fieldType>> elems;
+			elems.reserve(source.size() * GraphType::N_EDGES_);
+			for (const auto& be : source) {
+				for (Int edge = 0; edge < GraphType::N_EDGES_; ++edge) {
+					auto contracted = GraphType::contract_edge(be, edge);
+					if (contracted.getCoefficient() != fieldType{}) {
+						elems.push_back(std::move(contracted));
+					}
+				}
+			}
+
+			ContL result(std::move(elems), AssumeBasisOrderTag{});
+			standardize_aut_mul(result);
+			result.sort_elements();
+			return ContGC(result);
 		}
 
 		ContGC d_odd_contraction() {
@@ -989,6 +1037,66 @@ class GC {
 
 
 	private:
+
+		template <typename TargetGraph, typename Standardize>
+		static void standardize_aut_scaled(
+			VectorSpace::LinComb<TargetGraph, fieldType>& lin_comb,
+			const Standardize& standardize
+		) {
+			using Element = BasisElement<TargetGraph, fieldType>;
+			using Standardizer = GraphStandardizer<
+				TargetGraph::N_VERTICES_,
+				TargetGraph::N_EDGES_,
+				TargetGraph::N_OUT_HAIR_,
+				TargetGraph::N_IN_HAIR_,
+				TargetGraph::C_,
+				TargetGraph::D_,
+				fieldType
+			>;
+
+			const auto& input = lin_comb.raw_elements();
+			std::vector<Element> standardized(input.size());
+			std::vector<char> keep(input.size(), 0);
+
+			#pragma omp parallel for schedule(dynamic)
+			for (std::size_t i = 0; i < input.size(); ++i) {
+				Standardizer standardizer;
+				Element canon = standardize(standardizer, input[i]);
+				if (canon.getCoefficient() != fieldType{}) {
+					standardized[i] = std::move(canon);
+					keep[i] = 1;
+				}
+			}
+
+			std::size_t write = 0;
+			for (std::size_t read = 0; read < standardized.size(); ++read) {
+				if (keep[read]) {
+					standardized[write++] = std::move(standardized[read]);
+				}
+			}
+			standardized.resize(write);
+			lin_comb.raw_elements_nonconst() = std::move(standardized);
+		}
+
+		template <typename TargetGraph>
+		static void standardize_aut_div(VectorSpace::LinComb<TargetGraph, fieldType>& lin_comb) {
+			standardize_aut_scaled(
+				lin_comb,
+				[](const auto& standardizer, const auto& be) {
+					return standardizer.standardize_and_aut_div(be);
+				}
+			);
+		}
+
+		template <typename TargetGraph>
+		static void standardize_aut_mul(VectorSpace::LinComb<TargetGraph, fieldType>& lin_comb) {
+			standardize_aut_scaled(
+				lin_comb,
+				[](const auto& standardizer, const auto& be) {
+					return standardizer.standardize_and_aut_mul(be);
+				}
+			);
+		}
 
 		// Recursive delta helper
 		SplitGC delta_recursive(size_t start, size_t end) const {
