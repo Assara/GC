@@ -15,6 +15,7 @@
 
 #include "examplegraphs.hpp"
 #include "GraphStandardizer.hpp"
+#include "VectorSpace/lil_matrix.hpp"
 #include "VectorSpace/row_based_lil_matrix.hpp"
 
 namespace {
@@ -30,10 +31,15 @@ enum class ExperimentMode {
 	SplitMapDualScaled,
 	SplitMapDualLive,
 	SplitMapDualScaledLive,
+	SplitMapDualScaledMatrixLive,
+	SplitMapDualScaledMatrixDirectLive,
+	SplitMapDualScaledMatrixPlainAdjointLive,
 	Krylov,
 	KrylovDual,
 	KrylovConstrained,
-	KrylovConstrainedDual
+	KrylovConstrainedDual,
+	CohomologyDualLive,
+	CohomologyDualLiveLil
 };
 
 template <typename Fn>
@@ -334,6 +340,30 @@ compressed_sparse_matrix<fieldType> build_scaled_adjoint_matrix(
 		adjoint.add_col(column);
 	}
 	return adjoint;
+}
+
+compressed_sparse_matrix<fieldType> build_scaled_forward_matrix(
+	const compressed_sparse_matrix<fieldType>& matrix,
+	const std::vector<fieldType>& image_aut,
+	const std::vector<fieldType>& domain_aut
+) {
+	using Matrix = compressed_sparse_matrix<fieldType>;
+	using Basis = typename Matrix::Basis;
+
+	Matrix scaled(matrix.image_dim());
+	for (std::uint32_t domain_col = 0; domain_col < matrix.domain_dim(); ++domain_col) {
+		const fieldType domain_scale = domain_aut[domain_col];
+		std::vector<Basis> column;
+		for (const auto& be : matrix.get_column(domain_col)) {
+			const std::size_t image_row = static_cast<std::size_t>(be.getValue());
+			column.emplace_back(
+				be.getValue(),
+				be.getCoefficient() * image_aut[image_row] / domain_scale
+			);
+		}
+		scaled.add_col(column);
+	}
+	return scaled;
 }
 
 template <typename SparseColumn>
@@ -954,7 +984,7 @@ bool write_representatives(
 		return false;
 	}
 
-	out << "graph_size: (" << GraphType::N_VERTICES_ << "," << GraphType::N_EDGES_ << ")\n";
+	out << "graph_size: (" << +GraphType::N_VERTICES_ << "," << +GraphType::N_EDGES_ << ")\n";
 	out << "field_type: " << fieldType::name() << "\n";
 	out << "number_of_graphs: " << graphs.size() << "\n";
 	for (const auto& graph : graphs) {
@@ -1005,7 +1035,7 @@ bool write_class_file(
 	}
 
 	using GraphType = typename GCType::GraphType;
-	out << "graph_size: (" << GraphType::N_VERTICES_ << "," << GraphType::N_EDGES_ << ")\n";
+	out << "graph_size: (" << +GraphType::N_VERTICES_ << "," << +GraphType::N_EDGES_ << ")\n";
 	out << "field_type: " << fieldType::name() << "\n";
 	out << "number_of_graphs: " << gamma.data().size() << "\n";
 	for (const auto& be : gamma.data()) {
@@ -2071,7 +2101,10 @@ int run_split_map_dual_live_case(
 	int rounds,
 	const std::filesystem::path* representative_output_path,
 	std::size_t checkpoint_interval,
-	bool use_scaled_adjoint
+	bool use_scaled_adjoint,
+	bool use_scaled_matrix_as_system = false,
+	bool use_direct_scaled_matrix_solve = false,
+	bool use_plain_adjoint_for_scaled_matrix = false
 ) {
 	using GCType = OddGCdegZero<N + 1>;
 	using GraphType = typename GCType::GraphType;
@@ -2087,7 +2120,11 @@ int run_split_map_dual_live_case(
 		/ "maps"
 		/ ("W" + std::to_string(N)
 			+ "_rounds" + std::to_string(rounds)
-			+ (use_scaled_adjoint ? "_dual_live_scaled" : "_dual_live_plain")
+			+ (use_scaled_matrix_as_system
+				? (use_plain_adjoint_for_scaled_matrix
+					? "_dual_live_scaled_matrix_plain_adjoint"
+					: "_dual_live_scaled_matrix")
+				: (use_scaled_adjoint ? "_dual_live_scaled" : "_dual_live_plain"))
 			+ "_wiedemann_checkpoint.bin");
 	const std::filesystem::path* checkpoint_path_ptr =
 		checkpoint_interval > 0 ? &checkpoint_path : nullptr;
@@ -2122,8 +2159,73 @@ int run_split_map_dual_live_case(
 		return EXIT_FAILURE;
 	}
 
-	compressed_wiedemann_solver solver = [&]() {
-		if (!use_scaled_adjoint) {
+	std::optional<compressed_sparse_matrix<fieldType>::DenseDomainVec> correction_coefficients;
+
+	if (use_scaled_matrix_as_system && use_direct_scaled_matrix_solve) {
+		std::vector<fieldType> image_aut(image_basis.size(), fieldType{});
+		for (std::size_t i = 0; i < image_basis.size(); ++i) {
+			image_aut[i] = fieldType{automorphism_group_size4(image_basis[i])};
+		}
+
+		std::vector<fieldType> domain_aut(domain_graphs.size(), fieldType{});
+		for (std::size_t i = 0; i < domain_graphs.size(); ++i) {
+			domain_aut[i] = fieldType{automorphism_group_size4(domain_graphs[i])};
+		}
+
+		row_based_lil_matrix<fieldType> scaled_matrix;
+		for (std::uint32_t domain_col = 0; domain_col < split_matrix.domain_dim(); ++domain_col) {
+			const fieldType domain_scale = domain_aut[domain_col];
+			for (const auto& be : split_matrix.get_column(domain_col)) {
+				const std::size_t image_row = static_cast<std::size_t>(be.getValue());
+				scaled_matrix.add_element(
+					image_row,
+					domain_col,
+					be.getCoefficient() * image_aut[image_row] / domain_scale
+				);
+			}
+		}
+		scaled_matrix.sort_rows();
+
+		const fieldType wheel_aut{automorphism_group_size4(wheel)};
+		VectorSpace::LinComb<std::size_t, fieldType> sparse_scaled_wheel_target;
+		for (std::size_t i = 0; i < split_matrix.image_dim(); ++i) {
+			if (dense_target[i] != fieldType{}) {
+				sparse_scaled_wheel_target.append_in_basis_order(
+					i,
+					dense_target[i] * image_aut[i] / wheel_aut
+				);
+			}
+		}
+		sparse_scaled_wheel_target.standardize_and_sort();
+
+		std::optional<VectorSpace::LinComb<std::size_t, fieldType>> direct_solution;
+		const double solve_seconds = time_seconds([&]() {
+			direct_solution = scaled_matrix.solve_MX_equals_y(sparse_scaled_wheel_target);
+		});
+		std::cout << "using scaled matrix with direct row solve\n";
+		std::cout << "direct scaled matrix rows = " << scaled_matrix.image_dim() << '\n';
+		std::cout << "direct scaled matrix cols = " << scaled_matrix.domain_dim() << '\n';
+		std::cout << "direct scaled matrix entries = " << scaled_matrix.size() << '\n';
+		std::cout << "direct solve Sx=S(W) time = " << solve_seconds << " s\n";
+		std::cout << "direct Sx=S(W) solution found = "
+		          << (direct_solution.has_value() ? "yes" : "no") << '\n';
+
+		if (!direct_solution.has_value()) {
+			std::cout << "dual correction found = no\n";
+			return EXIT_FAILURE;
+		}
+
+		auto dense_solution = std::make_unique<fieldType[]>(domain_graphs.size());
+		for (std::size_t i = 0; i < domain_graphs.size(); ++i) {
+			dense_solution[i] = fieldType{};
+		}
+		for (const auto& be : *direct_solution) {
+			dense_solution[be.getValue()] = be.getCoefficient();
+		}
+		correction_coefficients = std::move(dense_solution);
+	} else {
+		compressed_wiedemann_solver solver = [&]() {
+		if (!use_scaled_adjoint && !use_scaled_matrix_as_system) {
 			std::cout << "using plain transpose in live dual solver\n";
 			return compressed_wiedemann_solver(std::move(split_matrix));
 		}
@@ -2138,6 +2240,26 @@ int run_split_map_dual_live_case(
 			domain_aut[i] = fieldType{automorphism_group_size4(domain_graphs[i])};
 		}
 
+		if (use_scaled_matrix_as_system) {
+			const fieldType wheel_aut{automorphism_group_size4(wheel)};
+			for (std::size_t i = 0; i < image_basis.size(); ++i) {
+				dense_target[i] = dense_target[i] * image_aut[i] / wheel_aut;
+			}
+			compressed_sparse_matrix<fieldType> scaled_matrix =
+				build_scaled_forward_matrix(split_matrix, image_aut, domain_aut);
+			if (use_plain_adjoint_for_scaled_matrix) {
+				compressed_sparse_matrix<fieldType> scaled_matrix_transpose =
+					transpose_compressed_matrix(scaled_matrix);
+				std::cout << "using scaled matrix with unscaled transpose adjoint in live dual solver\n";
+				return compressed_wiedemann_solver(
+					std::move(split_matrix),
+					std::move(scaled_matrix_transpose)
+				);
+			}
+			std::cout << "using scaled matrix with ordinary transpose adjoint in live dual solver\n";
+			return compressed_wiedemann_solver(std::move(scaled_matrix));
+		}
+
 		compressed_sparse_matrix<fieldType> scaled_adjoint =
 			build_scaled_adjoint_matrix(split_matrix, image_aut, domain_aut);
 		compressed_sparse_matrix<fieldType> split_forward =
@@ -2149,17 +2271,17 @@ int run_split_map_dual_live_case(
 			std::move(scaled_adjoint_transpose),
 			std::move(split_forward)
 		);
-	}();
+		}();
 
-	std::optional<compressed_wiedemann_solver::DenseDomainVec> correction_coefficients;
-	const double solve_seconds = time_seconds([&]() {
-		correction_coefficients = solver.solve_MX_equals_y(
-			dense_target,
-			checkpoint_path_ptr,
-			checkpoint_interval
-		);
-	});
-	std::cout << "solve time = " << solve_seconds << " s\n";
+		const double solve_seconds = time_seconds([&]() {
+			correction_coefficients = solver.solve_MX_equals_y(
+				dense_target,
+				checkpoint_path_ptr,
+				checkpoint_interval
+			);
+		});
+		std::cout << "solve time = " << solve_seconds << " s\n";
+	}
 
 	if (!correction_coefficients.has_value()) {
 		std::cout << "dual correction found = no\n";
@@ -2215,6 +2337,287 @@ int run_split_map_dual_live_case(
 	}
 
 	return representative_contract.data().empty() ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+
+template <Int N>
+int run_cohomology_dual_live_case(
+	int rounds,
+	const std::filesystem::path* representative_output_path
+) {
+	using GCType = OddGCdegZero<N + 1>;
+	using GraphType = typename GCType::GraphType;
+	using LowerGraph = typename GraphType::ContGraph;
+	using NextGraph = typename GraphType::SplitGraph;
+	using LowerGCType = GC<
+		LowerGraph::N_VERTICES_,
+		LowerGraph::N_EDGES_,
+		LowerGraph::N_OUT_HAIR_,
+		LowerGraph::N_IN_HAIR_,
+		LowerGraph::C_,
+		LowerGraph::D_
+	>;
+
+	auto all_graphs = generate_same_degree_candidates<N>(rounds, nullptr);
+	std::sort(all_graphs.begin(), all_graphs.end());
+
+	typename GraphType::Basis wheel_basis(wheel_graph<N>(), fieldType{1});
+	GraphType::std(wheel_basis);
+	const GraphType wheel = wheel_basis.getValue();
+
+	std::unordered_map<GraphType, std::size_t> upper_index;
+	upper_index.reserve(all_graphs.size());
+	for (std::size_t i = 0; i < all_graphs.size(); ++i) {
+		upper_index.emplace(all_graphs[i], i);
+	}
+
+	std::unordered_set<LowerGraph> lower_set;
+	for (const auto& graph : all_graphs) {
+		for (Int edge = 0; edge < GraphType::N_EDGES_; ++edge) {
+			auto contracted = graph.contract_edge(edge, fieldType{1});
+			if (!canonicalize_nonzero<LowerGraph>(contracted)) {
+				continue;
+			}
+			lower_set.insert(contracted.getValue());
+		}
+	}
+	std::vector<LowerGraph> lower_basis(lower_set.begin(), lower_set.end());
+	std::sort(lower_basis.begin(), lower_basis.end());
+
+	std::unordered_set<NextGraph> next_set;
+	for (const auto& graph : all_graphs) {
+		const auto split = GCType(graph, AssumeBasisOrderTag{}).delta().data();
+		for (const auto& be : split) {
+			next_set.insert(be.getValue());
+		}
+	}
+	std::vector<NextGraph> next_basis(next_set.begin(), next_set.end());
+	std::sort(next_basis.begin(), next_basis.end());
+
+	std::unordered_map<NextGraph, std::size_t> next_index;
+	next_index.reserve(next_basis.size());
+	for (std::size_t i = 0; i < next_basis.size(); ++i) {
+		next_index.emplace(next_basis[i], i);
+	}
+
+	row_based_lil_matrix<fieldType> equations;
+
+	for (const auto& graph : all_graphs) {
+		const std::size_t col = upper_index.at(graph);
+		const auto split = GCType(graph, AssumeBasisOrderTag{}).delta().data();
+		for (const auto& be : split) {
+			equations.add_element(next_index.at(be.getValue()), col, be.getCoefficient());
+		}
+	}
+
+	const std::size_t lower_row_offset = equations.image_dim();
+	for (std::size_t lower_row = 0; lower_row < lower_basis.size(); ++lower_row) {
+		const auto split = LowerGCType(lower_basis[lower_row], AssumeBasisOrderTag{}).delta().data();
+		for (const auto& be : split) {
+			const auto it = upper_index.find(be.getValue());
+			if (it != upper_index.end()) {
+				equations.add_element(lower_row_offset + lower_row, it->second, be.getCoefficient());
+			}
+		}
+	}
+
+	const std::size_t normalize_row = lower_row_offset + lower_basis.size();
+	equations.add_element(normalize_row, upper_index.at(wheel), fieldType{1});
+	equations.sort_rows();
+
+	VectorSpace::LinComb<std::size_t, fieldType> rhs;
+	rhs.append_in_basis_order(normalize_row, fieldType{1});
+	rhs.standardize_and_sort();
+
+	std::cout << "cohomology dual live solve\n";
+	std::cout << "wheel = W" << +N << '\n';
+	std::cout << "rounds = " << rounds << '\n';
+	std::cout << "upper basis graphs = " << all_graphs.size() << '\n';
+	std::cout << "lower contracted basis = " << lower_basis.size() << '\n';
+	std::cout << "next split basis = " << next_basis.size() << '\n';
+	std::cout << "equations rows = " << equations.image_dim() << '\n';
+	std::cout << "equations cols = " << equations.domain_dim() << '\n';
+	std::cout << "equations nnz = " << equations.size() << '\n';
+
+	std::optional<VectorSpace::LinComb<std::size_t, fieldType>> solution;
+	const double solve_seconds = time_seconds([&]() {
+		solution = equations.solve_MX_equals_y(rhs);
+	});
+	std::cout << "solve time = " << solve_seconds << " s\n";
+
+	if (!solution.has_value()) {
+		std::cout << "cohomology dual witness found = no\n";
+		return EXIT_FAILURE;
+	}
+
+	GCType representative;
+	for (const auto& be : *solution) {
+		GCType scaled(all_graphs[be.getValue()], AssumeBasisOrderTag{});
+		scaled.scalar_multiply(be.getCoefficient());
+		representative += scaled;
+	}
+	representative.standardize_all();
+	representative.sort_elements();
+
+	const auto representative_split = representative.delta();
+	const auto representative_contract = contraction_of(representative);
+
+	std::cout << "cohomology dual witness found = yes\n";
+	std::cout << "solution coefficients = " << solution->size() << '\n';
+	std::cout << "representative terms = " << representative.data().size() << '\n';
+	std::cout << "d_split(representative) terms = " << representative_split.data().size() << '\n';
+	std::cout << "d_contraction(representative) terms = " << representative_contract.data().size() << '\n';
+
+	if (representative_output_path != nullptr) {
+		if (!write_class_file(*representative_output_path, representative)) {
+			std::cerr << "failed to write " << representative_output_path->string() << '\n';
+			return EXIT_FAILURE;
+		}
+		std::cout << "saved representative = " << representative_output_path->string() << '\n';
+	}
+
+	return representative_split.data().empty() && representative_contract.data().empty()
+		? EXIT_SUCCESS
+		: EXIT_FAILURE;
+}
+
+template <Int N>
+int run_cohomology_dual_live_lil_case(
+	int rounds,
+	const std::filesystem::path* representative_output_path
+) {
+	using GCType = OddGCdegZero<N + 1>;
+	using GraphType = typename GCType::GraphType;
+	using LowerGraph = typename GraphType::ContGraph;
+	using NextGraph = typename GraphType::SplitGraph;
+	using LowerGCType = GC<
+		LowerGraph::N_VERTICES_,
+		LowerGraph::N_EDGES_,
+		LowerGraph::N_OUT_HAIR_,
+		LowerGraph::N_IN_HAIR_,
+		LowerGraph::C_,
+		LowerGraph::D_
+	>;
+
+	auto all_graphs = generate_same_degree_candidates<N>(rounds, nullptr);
+	std::sort(all_graphs.begin(), all_graphs.end());
+
+	typename GraphType::Basis wheel_basis(wheel_graph<N>(), fieldType{1});
+	GraphType::std(wheel_basis);
+	const GraphType wheel = wheel_basis.getValue();
+
+	std::unordered_map<GraphType, std::size_t> upper_index;
+	upper_index.reserve(all_graphs.size());
+	for (std::size_t i = 0; i < all_graphs.size(); ++i) {
+		upper_index.emplace(all_graphs[i], i);
+	}
+
+	std::unordered_set<LowerGraph> lower_set;
+	for (const auto& graph : all_graphs) {
+		for (Int edge = 0; edge < GraphType::N_EDGES_; ++edge) {
+			auto contracted = graph.contract_edge(edge, fieldType{1});
+			if (!canonicalize_nonzero<LowerGraph>(contracted)) {
+				continue;
+			}
+			lower_set.insert(contracted.getValue());
+		}
+	}
+	std::vector<LowerGraph> lower_basis(lower_set.begin(), lower_set.end());
+	std::sort(lower_basis.begin(), lower_basis.end());
+
+	std::unordered_set<NextGraph> next_set;
+	for (const auto& graph : all_graphs) {
+		const auto split = GCType(graph, AssumeBasisOrderTag{}).delta().data();
+		for (const auto& be : split) {
+			next_set.insert(be.getValue());
+		}
+	}
+	std::vector<NextGraph> next_basis(next_set.begin(), next_set.end());
+	std::sort(next_basis.begin(), next_basis.end());
+
+	std::unordered_map<NextGraph, std::size_t> next_index;
+	next_index.reserve(next_basis.size());
+	for (std::size_t i = 0; i < next_basis.size(); ++i) {
+		next_index.emplace(next_basis[i], i);
+	}
+
+	lil_matrix<fieldType> equations;
+
+	for (const auto& graph : all_graphs) {
+		const std::size_t col = upper_index.at(graph);
+		const auto split = GCType(graph, AssumeBasisOrderTag{}).delta().data();
+		for (const auto& be : split) {
+			equations.add_element(next_index.at(be.getValue()), col, be.getCoefficient());
+		}
+	}
+
+	const std::size_t lower_row_offset = equations.image_dim();
+	for (std::size_t lower_row = 0; lower_row < lower_basis.size(); ++lower_row) {
+		const auto split = LowerGCType(lower_basis[lower_row], AssumeBasisOrderTag{}).delta().data();
+		for (const auto& be : split) {
+			const auto it = upper_index.find(be.getValue());
+			if (it != upper_index.end()) {
+				equations.add_element(lower_row_offset + lower_row, it->second, be.getCoefficient());
+			}
+		}
+	}
+
+	const std::size_t normalize_row = lower_row_offset + lower_basis.size();
+	equations.add_element(normalize_row, upper_index.at(wheel), fieldType{1});
+
+	VectorSpace::LinComb<std::size_t, fieldType> rhs;
+	rhs.append_in_basis_order(normalize_row, fieldType{1});
+	rhs.standardize_and_sort();
+
+	std::cout << "cohomology dual live solve (lil_matrix)\n";
+	std::cout << "wheel = W" << +N << '\n';
+	std::cout << "rounds = " << rounds << '\n';
+	std::cout << "upper basis graphs = " << all_graphs.size() << '\n';
+	std::cout << "lower contracted basis = " << lower_basis.size() << '\n';
+	std::cout << "next split basis = " << next_basis.size() << '\n';
+	std::cout << "equations rows = " << equations.image_dim() << '\n';
+	std::cout << "equations cols = " << equations.domain_dim() << '\n';
+	std::cout << "equations nnz = " << equations.size() << '\n';
+
+	std::optional<VectorSpace::LinComb<std::size_t, fieldType>> solution;
+	const double solve_seconds = time_seconds([&]() {
+		solution = equations.solve_MX_equals_y(rhs);
+	});
+	std::cout << "solve time = " << solve_seconds << " s\n";
+
+	if (!solution.has_value()) {
+		std::cout << "cohomology dual witness found = no\n";
+		return EXIT_FAILURE;
+	}
+
+	GCType representative;
+	for (const auto& be : *solution) {
+		GCType scaled(all_graphs[be.getValue()], AssumeBasisOrderTag{});
+		scaled.scalar_multiply(be.getCoefficient());
+		representative += scaled;
+	}
+	representative.standardize_all();
+	representative.sort_elements();
+
+	const auto representative_split = representative.delta();
+	const auto representative_contract = contraction_of(representative);
+
+	std::cout << "cohomology dual witness found = yes\n";
+	std::cout << "solution coefficients = " << solution->size() << '\n';
+	std::cout << "representative terms = " << representative.data().size() << '\n';
+	std::cout << "d_split(representative) terms = " << representative_split.data().size() << '\n';
+	std::cout << "d_contraction(representative) terms = " << representative_contract.data().size() << '\n';
+
+	if (representative_output_path != nullptr) {
+		if (!write_class_file(*representative_output_path, representative)) {
+			std::cerr << "failed to write " << representative_output_path->string() << '\n';
+			return EXIT_FAILURE;
+		}
+		std::cout << "saved representative = " << representative_output_path->string() << '\n';
+	}
+
+	return representative_split.data().empty() && representative_contract.data().empty()
+		? EXIT_SUCCESS
+		: EXIT_FAILURE;
 }
 
 template <Int N>
@@ -2974,7 +3377,7 @@ int run_constrained_krylov_dual_case(
 
 void print_usage(const char* argv0) {
 	std::cerr << "usage: " << argv0 << " wheel_N rounds [representatives_output_path] [cycle_output_path] [mode] [checkpoint_interval]\n";
-	std::cerr << "  mode defaults to generated-support; use enumerate, split-map, split-map-info, split-map-solve, split-map-dual, split-map-dual-scaled, split-map-dual-live, split-map-dual-scaled-live, generated-constrained, krylov, krylov-dual, krylov-constrained, or krylov-constrained-dual\n";
+	std::cerr << "  mode defaults to generated-support; use enumerate, split-map, split-map-info, split-map-solve, split-map-dual, split-map-dual-scaled, split-map-dual-live, split-map-dual-scaled-live, split-map-dual-scaled-matrix-live, split-map-dual-scaled-matrix-direct-live, split-map-dual-scaled-matrix-plain-adjoint-live, generated-constrained, krylov, krylov-dual, krylov-constrained, krylov-constrained-dual, cohomology-dual-live, or cohomology-dual-live-lil\n";
 	std::cerr << "  wheel_N must be one of 3,5,7,9,11,13,15,17,19,21,25,27\n";
 }
 
@@ -3026,6 +3429,12 @@ int main(int argc, char** argv) {
 			mode = ExperimentMode::SplitMapDualLive;
 		} else if (mode_arg == "split-map-dual-scaled-live") {
 			mode = ExperimentMode::SplitMapDualScaledLive;
+		} else if (mode_arg == "split-map-dual-scaled-matrix-live") {
+			mode = ExperimentMode::SplitMapDualScaledMatrixLive;
+		} else if (mode_arg == "split-map-dual-scaled-matrix-direct-live") {
+			mode = ExperimentMode::SplitMapDualScaledMatrixDirectLive;
+		} else if (mode_arg == "split-map-dual-scaled-matrix-plain-adjoint-live") {
+			mode = ExperimentMode::SplitMapDualScaledMatrixPlainAdjointLive;
 		} else if (mode_arg == "krylov") {
 			mode = ExperimentMode::Krylov;
 		} else if (mode_arg == "krylov-dual") {
@@ -3034,6 +3443,10 @@ int main(int argc, char** argv) {
 			mode = ExperimentMode::KrylovConstrained;
 		} else if (mode_arg == "krylov-constrained-dual") {
 			mode = ExperimentMode::KrylovConstrainedDual;
+		} else if (mode_arg == "cohomology-dual-live") {
+			mode = ExperimentMode::CohomologyDualLive;
+		} else if (mode_arg == "cohomology-dual-live-lil") {
+			mode = ExperimentMode::CohomologyDualLiveLil;
 		} else if (mode_arg == "generated-constrained") {
 			mode = ExperimentMode::GeneratedConstrained;
 		} else if (mode_arg == "generated-support") {
@@ -3079,6 +3492,21 @@ int main(int argc, char** argv) {
 		} \
 		if (mode == ExperimentMode::SplitMapDualScaledLive) { \
 			return run_split_map_dual_live_case<N_VALUE>(rounds, representatives_output_path_ptr, checkpoint_interval, true); \
+		} \
+		if (mode == ExperimentMode::SplitMapDualScaledMatrixLive) { \
+			return run_split_map_dual_live_case<N_VALUE>(rounds, representatives_output_path_ptr, checkpoint_interval, false, true); \
+		} \
+		if (mode == ExperimentMode::SplitMapDualScaledMatrixDirectLive) { \
+			return run_split_map_dual_live_case<N_VALUE>(rounds, representatives_output_path_ptr, checkpoint_interval, false, true, true); \
+		} \
+		if (mode == ExperimentMode::SplitMapDualScaledMatrixPlainAdjointLive) { \
+			return run_split_map_dual_live_case<N_VALUE>(rounds, representatives_output_path_ptr, checkpoint_interval, false, true, false, true); \
+		} \
+		if (mode == ExperimentMode::CohomologyDualLive) { \
+			return run_cohomology_dual_live_case<N_VALUE>(rounds, representatives_output_path_ptr); \
+		} \
+		if (mode == ExperimentMode::CohomologyDualLiveLil) { \
+			return run_cohomology_dual_live_lil_case<N_VALUE>(rounds, representatives_output_path_ptr); \
 		} \
 		if (mode == ExperimentMode::GeneratedConstrained) { \
 			return run_generated_constrained_case<N_VALUE>(rounds, representatives_output_path_ptr, cycle_output_path_ptr); \
