@@ -51,8 +51,12 @@ public:
 	static constexpr std::uint32_t serialized_value_size_hint() { return 0; }
 	static std::string name() { return "Q"; }
 	static Q sample(std::mt19937_64& rng) {
-		std::uniform_int_distribution<int> dist(-1, 1);
-		return Q{dist(rng)};
+		std::uniform_int_distribution<int> dist(-1024, 1024);
+		int value = 0;
+		while (value == 0) {
+			value = dist(rng);
+		}
+		return Q{value};
 	}
 
 	const Storage& raw() const { return value_; }
