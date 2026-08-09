@@ -11,6 +11,7 @@ STANDARDIZE3_PROFILE_TARGET := standardize3_profile
 ASSIGN_PERMUTED_SORT_COMPARE_TARGET := assign_permuted_sort_compare
 GRAPH_STANDARDIZER_COMPARE_TARGET := graph_standardizer_compare
 RANDOMIZE_SPLIT_CONTRACT_TARGET := randomize_split_contract_graphs
+FILTER_CLASS_BY_VALENCE_TARGET := filter_class_by_valence
 WHEEL_SPLIT_CONTRACT_REPS_TARGET := wheel_split_contract_reps
 SOLVER_COMPARE_TARGET := solver_compare
 TEST_TARGET := gc_test
@@ -37,8 +38,8 @@ LINBOX_CXXFLAGS ?= $(shell pkg-config --cflags linbox givaro fflas-ffpack 2>/dev
 LINBOX_LDLIBS ?= $(shell pkg-config --libs linbox givaro fflas-ffpack 2>/dev/null || echo -llinbox -lgivaro -lfflas -lffpack -lgmp)
 
 # Compiler and linker flags
-CXXFLAGS  := -std=c++23 -O3 -march=native -Wall -Wextra -Wpedantic $(INC) -flto $(OPENMP_CXXFLAGS)
-LDFLAGS   := -flto -fuse-ld=lld $(OPENMP_LDFLAGS)
+CXXFLAGS  := -std=c++23 -O3 -march=native -Wall -Wextra -Wpedantic $(INC) $(OPENMP_CXXFLAGS)
+LDFLAGS   := -fuse-ld=lld $(OPENMP_LDFLAGS)
 
 # ======= SOURCE / BUILD SETUP =======
 
@@ -69,6 +70,9 @@ GRAPH_STANDARDIZER_COMPARE_NAUTY_OBJS := $(BUILD_DIR)/tools/graph_standardizer_c
 RANDOMIZE_SPLIT_CONTRACT_SRCS := tools/randomize_split_contract_graphs.cpp
 RANDOMIZE_SPLIT_CONTRACT_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(RANDOMIZE_SPLIT_CONTRACT_SRCS))
 
+FILTER_CLASS_BY_VALENCE_SRCS := tools/filter_class_by_valence.cpp
+FILTER_CLASS_BY_VALENCE_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(FILTER_CLASS_BY_VALENCE_SRCS))
+
 WHEEL_SPLIT_CONTRACT_REPS_SRCS := tools/wheel_split_contract_reps.cpp
 WHEEL_SPLIT_CONTRACT_REPS_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(WHEEL_SPLIT_CONTRACT_REPS_SRCS))
 
@@ -81,7 +85,7 @@ TEST_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(TEST_SRCS))
 
 # ======= RULES =======
 
-.PHONY: all clean run playground split-waterfall run-split-waterfall standardize-perf standardize3-profile compare-standardize3-commits assign-permuted-sort-compare randomize-split-contract-graphs run-standardize-perf run-standardize3-profile run-compare-standardize3-commits run-assign-permuted-sort-compare run-randomize-split-contract-graphs graph-standardizer-compare graph-standardizer-compare-nauty run-graph-standardizer-compare wheel-split-contract-reps run-wheel-split-contract-reps run-wheel-class run-wheel-class-generated-constrained run-split-contract-files run-split-contract-solver solver-compare solver-compare-linbox run-solver-compare test
+.PHONY: all clean run playground split-waterfall run-split-waterfall standardize-perf standardize3-profile compare-standardize3-commits assign-permuted-sort-compare randomize-split-contract-graphs filter-class-by-valence run-standardize-perf run-standardize3-profile run-compare-standardize3-commits run-assign-permuted-sort-compare run-randomize-split-contract-graphs run-filter-class-by-valence graph-standardizer-compare graph-standardizer-compare-nauty run-graph-standardizer-compare wheel-split-contract-reps run-wheel-split-contract-reps run-wheel-class run-wheel-class-generated-constrained run-split-contract-files run-split-contract-solver solver-compare solver-compare-linbox run-solver-compare test
 
 all: $(TARGET)
 
@@ -130,6 +134,11 @@ $(RANDOMIZE_SPLIT_CONTRACT_TARGET): $(RANDOMIZE_SPLIT_CONTRACT_OBJS)
 	$(LD) $(RANDOMIZE_SPLIT_CONTRACT_OBJS) $(LDFLAGS) -o $(RANDOMIZE_SPLIT_CONTRACT_TARGET)
 	@echo "✅ Build complete."
 
+$(FILTER_CLASS_BY_VALENCE_TARGET): $(FILTER_CLASS_BY_VALENCE_OBJS)
+	@echo "🚧 Linking $(FILTER_CLASS_BY_VALENCE_TARGET) with Clang + LLD..."
+	$(LD) $(FILTER_CLASS_BY_VALENCE_OBJS) $(LDFLAGS) -o $(FILTER_CLASS_BY_VALENCE_TARGET)
+	@echo "✅ Build complete."
+
 $(WHEEL_SPLIT_CONTRACT_REPS_TARGET): $(WHEEL_SPLIT_CONTRACT_REPS_OBJS)
 	@echo "🚧 Linking $(WHEEL_SPLIT_CONTRACT_REPS_TARGET) with Clang + LLD..."
 	$(LD) $(WHEEL_SPLIT_CONTRACT_REPS_OBJS) $(LDFLAGS) -o $(WHEEL_SPLIT_CONTRACT_REPS_TARGET)
@@ -167,7 +176,7 @@ $(SOLVER_COMPARE_LINBOX_OBJS): tools/solver_comparison.cpp
 
 clean:
 	@echo "🧹 Cleaning build files..."
-	rm -rf $(BUILD_DIR) $(TARGET) $(PLAYGROUND_TARGET) $(SPLIT_WATERFALL_TARGET) $(STANDARDIZE_PERF_TARGET) $(STANDARDIZE3_PROFILE_TARGET) $(ASSIGN_PERMUTED_SORT_COMPARE_TARGET) $(GRAPH_STANDARDIZER_COMPARE_TARGET) $(GRAPH_STANDARDIZER_COMPARE_TARGET)-nauty $(RANDOMIZE_SPLIT_CONTRACT_TARGET) $(WHEEL_SPLIT_CONTRACT_REPS_TARGET) $(SOLVER_COMPARE_TARGET) $(SOLVER_COMPARE_TARGET)-linbox $(TEST_TARGET)
+	rm -rf $(BUILD_DIR) $(TARGET) $(PLAYGROUND_TARGET) $(SPLIT_WATERFALL_TARGET) $(STANDARDIZE_PERF_TARGET) $(STANDARDIZE3_PROFILE_TARGET) $(ASSIGN_PERMUTED_SORT_COMPARE_TARGET) $(GRAPH_STANDARDIZER_COMPARE_TARGET) $(GRAPH_STANDARDIZER_COMPARE_TARGET)-nauty $(RANDOMIZE_SPLIT_CONTRACT_TARGET) $(FILTER_CLASS_BY_VALENCE_TARGET) $(WHEEL_SPLIT_CONTRACT_REPS_TARGET) $(SOLVER_COMPARE_TARGET) $(SOLVER_COMPARE_TARGET)-linbox $(TEST_TARGET)
 
 run: all
 	@./$(TARGET)
@@ -189,6 +198,8 @@ assign-permuted-sort-compare: $(ASSIGN_PERMUTED_SORT_COMPARE_TARGET)
 
 randomize-split-contract-graphs: $(RANDOMIZE_SPLIT_CONTRACT_TARGET)
 
+filter-class-by-valence: $(FILTER_CLASS_BY_VALENCE_TARGET)
+
 run-standardize-perf: $(STANDARDIZE_PERF_TARGET)
 	@./$(STANDARDIZE_PERF_TARGET) $(or $(WHEEL),33) $(or $(REPEAT),1) $(or $(ITER),3)
 
@@ -203,6 +214,9 @@ run-assign-permuted-sort-compare: $(ASSIGN_PERMUTED_SORT_COMPARE_TARGET)
 
 run-randomize-split-contract-graphs: $(RANDOMIZE_SPLIT_CONTRACT_TARGET)
 	@./$(RANDOMIZE_SPLIT_CONTRACT_TARGET) $(or $(WHEEL),11) $(IN) $(OUT) $(or $(SEED),123456789)
+
+run-filter-class-by-valence: $(FILTER_CLASS_BY_VALENCE_TARGET)
+	@./$(FILTER_CLASS_BY_VALENCE_TARGET) $(or $(WHEEL),7) $(IN) $(OUT)
 
 graph-standardizer-compare: $(GRAPH_STANDARDIZER_COMPARE_TARGET)
 
