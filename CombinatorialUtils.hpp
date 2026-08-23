@@ -1,9 +1,17 @@
+#pragma once
 
+#include <algorithm>
 #include <array>
-#include <vector>
+#include <cstdint>
+#include <functional>
 #include <iostream>
 #include <numeric>
 #include <cstring>
+#include <span>
+#include <stdexcept>
+#include <unordered_set>
+#include <utility>
+#include <vector>
 #include "types.hpp"
 
 using namespace std;
@@ -32,6 +40,68 @@ namespace combutils {
 			subset[i] = startIndex + (size - 1 - i);
 		}
 		return subset;
+	}
+
+	// Enumerate the Cartesian product
+	//
+	//     0 <= counts[i] <= upper_bounds[i].
+	//
+	// The count vector is reused between callbacks and is therefore exposed as
+	// a read-only span.  An empty list of bounds has one element: the empty
+	// count vector.
+	template <typename Emit>
+	std::uint64_t for_each_bounded_count_vector(
+		std::span<const Int> upper_bounds,
+		Emit&& emit
+	) {
+		std::vector<Int> counts(upper_bounds.size(), Int{0});
+		std::uint64_t emitted = 0;
+		while (true) {
+			std::invoke(
+				emit,
+				std::span<const Int>(counts.data(), counts.size())
+			);
+			++emitted;
+
+			std::size_t index = 0;
+			while (index < counts.size()
+				&& counts[index] == upper_bounds[index]) {
+				counts[index] = 0;
+				++index;
+			}
+			if (index == counts.size()) {
+				break;
+			}
+			++counts[index];
+		}
+		return emitted;
+	}
+
+	// Counts describe how identical objects in each group are assigned to one
+	// side of an unordered bipartition; group_sizes-counts describes the other
+	// side.  Keep the lexicographically first of the complementary descriptions.
+	// Equality is retained because a self-complementary description occurs only
+	// once in the bounded count product.
+	inline bool is_first_grouped_bipartition(
+		std::span<const Int> counts,
+		std::span<const Int> group_sizes
+	) {
+		if (counts.size() != group_sizes.size()) {
+			throw std::invalid_argument("grouped bipartition size mismatch");
+		}
+		for (std::size_t i = 0; i < counts.size(); ++i) {
+			if (counts[i] > group_sizes[i]) {
+				throw std::invalid_argument("grouped bipartition count exceeds group size");
+			}
+			const Int complement = static_cast<Int>(group_sizes[i] - counts[i]);
+			if (counts[i] < complement) {
+				return true;
+			}
+			if (counts[i] > complement) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 

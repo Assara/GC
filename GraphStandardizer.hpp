@@ -513,7 +513,7 @@ Int N_VERTICES,
 
 				typename GraphType::Basis attempt_basis;
 				signedInt comparison;
-				unsigned long long true_final_attempt_count = 1;
+				[[maybe_unused]] unsigned long long true_final_attempt_count = 1;
 			
 				for (std::size_t i = 1; i < valid_attempts.size(); ++i) {
 					const std::size_t attempt_index = valid_attempts[i];
@@ -797,6 +797,34 @@ Int N_VERTICES,
 				return {std::move(attempts), std::move(valid_attempts)};
 			}
 
+			GraphType standardize_no_sign(const GraphType& input) const {
+				auto [attempts, valid_attempts] = create_final_attempts4(input);
+
+				GraphType best_graph;
+				best_graph.assignPermutedDirectedSortedEdgesNoSign(
+					input,
+					attempts[valid_attempts[0]].create_vertex_permutation()
+				);
+
+				// Keep this final materialization and comparison even in the unsigned
+				// path. Besides guarding the canonical representative, a future
+				// automorphism count must count only attempts that produce the actual
+				// winning graph; the refinement survivors alone are not sufficient.
+				for (std::size_t i = 1; i < valid_attempts.size(); ++i) {
+					GraphType attempt_graph;
+					attempt_graph.assignPermutedDirectedSortedEdgesNoSign(
+						input,
+						attempts[valid_attempts[i]].create_vertex_permutation()
+					);
+
+					if (best_graph.compare(attempt_graph) < 0) {
+						best_graph = std::move(attempt_graph);
+					}
+				}
+
+				return best_graph;
+			}
+
 			BasisElement<GraphType, fieldType> standardize4(const BasisElement<GraphType, fieldType>& input) const {
 #if defined(GC_PROFILE_STANDARDIZER_SORT)
 				const auto create_final_attempts_start = std::chrono::steady_clock::now();
@@ -866,7 +894,7 @@ Int N_VERTICES,
 
 				typename GraphType::Basis attempt_basis;
 				signedInt comparison;
-				unsigned long long true_final_attempt_count = 1;
+				[[maybe_unused]] unsigned long long true_final_attempt_count = 1;
 
 				for (std::size_t i = 1; i < valid_attempts.size(); ++i) {
 					const std::size_t attempt_index = valid_attempts[i];

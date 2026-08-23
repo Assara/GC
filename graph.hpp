@@ -1083,6 +1083,41 @@ Int N_VERTICES,
 				return sortEdgesRadix();
 			}
 
+			void assignPermutedDirectedSortedEdgesNoSign(
+				const ThisGraph& source,
+				const Permutation<N_VERTICES>& perm
+			) {
+				for (Int i = 0; i < N_HAIR; ++i) {
+					half_edges[i] = perm[source.half_edges[i]];
+				}
+
+				std::array<EdgeRadixEntry, N_EDGES> original_entries{};
+				for (Int edge_index = 0; edge_index < N_EDGES; ++edge_index) {
+					const Int base = N_HAIR + 2 * edge_index;
+					Int u = perm[source.half_edges[base]];
+					Int v = perm[source.half_edges[base + 1]];
+					if (u > v) {
+						std::swap(u, v);
+					}
+					original_entries[edge_index] = EdgeRadixEntry{u, v, edge_index};
+				}
+
+				std::array<EdgeRadixEntry, N_EDGES> by_second{};
+				std::array<EdgeRadixEntry, N_EDGES> sorted_entries{};
+				stable_bucket_pass(original_entries, by_second, [](const EdgeRadixEntry& entry) {
+					return entry.v;
+				});
+				stable_bucket_pass(by_second, sorted_entries, [](const EdgeRadixEntry& entry) {
+					return entry.u;
+				});
+
+				for (Int sorted_index = 0; sorted_index < N_EDGES; ++sorted_index) {
+					const Int base = N_HAIR + 2 * sorted_index;
+					half_edges[base] = sorted_entries[sorted_index].u;
+					half_edges[base + 1] = sorted_entries[sorted_index].v;
+				}
+			}
+
 			signedInt assignPermutedDirectedSortedEdges(
 				const ThisGraph& source,
 				const Permutation<N_VERTICES>& perm

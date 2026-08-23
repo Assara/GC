@@ -1,7 +1,11 @@
+#pragma once
+
 #include <cstdint>
 #include <cstddef>
 #include <memory>
 #include <vector>
+
+#include "BasisElement.hpp"
 
 template<typename fieldType>
 class compressed_sparse_matrix {
@@ -64,6 +68,9 @@ class compressed_sparse_matrix {
 			const std::size_t is = static_cast<std::size_t>(i);
 			const offset_type b = col_ptr_[is];
 			const offset_type e = col_ptr_[is + 1];
+			if (rows_and_coeffs_.empty()) {
+				return {nullptr, nullptr};
+			}
 
 			return { rows_and_coeffs_.data() + b,
 				rows_and_coeffs_.data() + e };

@@ -229,6 +229,68 @@ std::vector<GraphIsomorphism<GraphType::N_VERTICES_, GraphType::N_EDGES_>> sampl
 	return isomorphisms;
 }
 
+template <typename GraphType>
+bool check_standardize_no_sign_isomorphism_invariance(
+	const char* label,
+	const GraphType& graph
+) {
+	using Standardizer = GraphStandardizer<
+		GraphType::N_VERTICES_,
+		GraphType::N_EDGES_,
+		GraphType::N_OUT_HAIR_,
+		GraphType::N_IN_HAIR_,
+		GraphType::C_,
+		GraphType::D_,
+		fieldType
+	>;
+
+	Standardizer standardizer;
+	const GraphType canonical = standardizer.standardize_no_sign(graph);
+	bool ok = standardizer.standardize_no_sign(canonical) == canonical;
+
+	for (const auto& isomorphism : sample_graph_isomorphisms(graph)) {
+		const GraphType permuted = isomorphism.permute(graph);
+		ok &= standardizer.standardize_no_sign(permuted) == canonical;
+	}
+
+	std::cout << label << ": unsigned canonicalization -> "
+	          << (ok ? "ok" : "failed") << '\n';
+	return ok;
+}
+
+bool check_standardize_no_sign_keeps_parallel_edges(const char* label) {
+	using GraphType = Graph<2, 3, 0, 0, 0, 1, fieldType>;
+	using Standardizer = GraphStandardizer<2, 3, 0, 0, 0, 1, fieldType>;
+
+	GraphType theta;
+	for (Int edge = 0; edge < GraphType::N_EDGES_; ++edge) {
+		theta.setEdge(edge, 0, 1);
+	}
+
+	Standardizer standardizer;
+	typename GraphType::Basis signed_input(theta, fieldType{1});
+	const auto signed_canonical = standardizer.standardize4(signed_input);
+	const GraphType unsigned_canonical = standardizer.standardize_no_sign(theta);
+
+	const bool ok = signed_canonical.getCoefficient() == fieldType{}
+		&& standardizer.standardize_no_sign(unsigned_canonical) == unsigned_canonical;
+	std::cout << label << ": signed zero retained without signs -> "
+	          << (ok ? "ok" : "failed") << '\n';
+	return ok;
+}
+
+Graph<3, 6, 0, 0, 0, 1, fieldType> tadpole_parallel_test_graph() {
+	using GraphType = Graph<3, 6, 0, 0, 0, 1, fieldType>;
+	GraphType graph;
+	graph.setEdge(0, 0, 0);
+	graph.setEdge(1, 0, 1);
+	graph.setEdge(2, 0, 1);
+	graph.setEdge(3, 1, 2);
+	graph.setEdge(4, 2, 2);
+	graph.setEdge(5, 0, 2);
+	return graph;
+}
+
 template <Int N>
 GraphIsomorphism<OddGraphdegZero<N + 1>::N_VERTICES_, OddGraphdegZero<N + 1>::N_EDGES_>
 wheel_swap_spoke_and_rim_labels_isomorphism() {
@@ -715,6 +777,13 @@ int main() {
 	ok &= check_graph_isomorphism_inverse<OddLoopGraphType<3>>("triangle_iso_inv");
 	ok &= check_graph_isomorphism_graph_sign<OddLoopGraphType<3>>("triangle_iso_graph_sign");
 	ok &= check_generated_isomorphism_standardization_matches_standardize("triangle_iso_std_compare", loop_graph<3>());
+	ok &= check_standardize_no_sign_isomorphism_invariance("triangle_no_sign", loop_graph<3>());
+	ok &= check_standardize_no_sign_isomorphism_invariance("wheel11_no_sign", wheel_graph<11>());
+	ok &= check_standardize_no_sign_keeps_parallel_edges("theta_no_sign");
+	ok &= check_standardize_no_sign_isomorphism_invariance(
+		"tadpole_parallel_no_sign",
+		tadpole_parallel_test_graph()
+	);
 	ok &= check_graph_directions_shape<OddLoopGraphType<3>>("triangle_directions");
 	ok &= check_graph_directions_isomorphism_action<OddLoopGraphType<3>>("triangle_directions_iso");
 	ok &= check_graph_directions_order<OddLoopGraphType<3>>("triangle_directions_order");

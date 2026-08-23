@@ -13,6 +13,23 @@ GRAPH_STANDARDIZER_COMPARE_TARGET := graph_standardizer_compare
 RANDOMIZE_SPLIT_CONTRACT_TARGET := randomize_split_contract_graphs
 FILTER_CLASS_BY_VALENCE_TARGET := filter_class_by_valence
 WHEEL_SPLIT_CONTRACT_REPS_TARGET := wheel_split_contract_reps
+GRAPH_STAGE_GENERATOR_LOOP ?= 7
+GRAPH_GENERATION_PROFILE ?= 0
+GRAPH_GENERATION_PROFILE_SUFFIX := $(if $(filter 1,$(GRAPH_GENERATION_PROFILE)),_profile,)
+GRAPH_STAGE_GENERATOR_TARGET := graph_stage_generator_$(GRAPH_STAGE_GENERATOR_LOOP)$(GRAPH_GENERATION_PROFILE_SUFFIX)
+GENG_FINALIZER_TARGET := geng_finalizer_$(GRAPH_STAGE_GENERATOR_LOOP)
+TRANSIENT_GRAPH_TEST_TARGET := transient_graph_test
+ROOTED_TRANSIENT_TEST_TARGET := rooted_transient_test
+AGGREGATE_TRANSIENT_TEST_TARGET := aggregate_transient_test
+SUPPORT_TRANSIENT_TEST_TARGET := support_transient_test
+MAPPED_SUPPORT_TRANSIENT_TEST_TARGET := mapped_support_transient_test
+FINAL_CANONICALIZATION_TEST_TARGET := final_canonicalization_test
+TRICONNECTED_ORACLE_LOOP ?= 8
+TRICONNECTED_ORACLE_TARGET := compare_triconnected_generation_$(TRICONNECTED_ORACLE_LOOP)
+MIN_TADPOLES ?= 3
+MAX_TADPOLES ?= 5
+DIMENSION_DIR ?= output/graph_dimensions
+DIMENSION_TABLE ?= $(DIMENSION_DIR)/dimensions.tsv
 SOLVER_COMPARE_TARGET := solver_compare
 TEST_TARGET := gc_test
 BUILD_DIR := build
@@ -76,6 +93,26 @@ FILTER_CLASS_BY_VALENCE_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(FILTER_CLASS
 WHEEL_SPLIT_CONTRACT_REPS_SRCS := tools/wheel_split_contract_reps.cpp
 WHEEL_SPLIT_CONTRACT_REPS_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(WHEEL_SPLIT_CONTRACT_REPS_SRCS))
 
+GRAPH_STAGE_GENERATOR_SRC := tools/generate_graph_stages.cpp
+GRAPH_STAGE_GENERATOR_OBJ := $(BUILD_DIR)/tools/generate_graph_stages_L$(GRAPH_STAGE_GENERATOR_LOOP)$(GRAPH_GENERATION_PROFILE_SUFFIX).o
+GENG_FINALIZER_SRC := tools/finalize_geng_stream.cpp
+GENG_FINALIZER_OBJ := $(BUILD_DIR)/tools/finalize_geng_stream_L$(GRAPH_STAGE_GENERATOR_LOOP).o
+TRANSIENT_GRAPH_TEST_SRC := tools/transient_graph_test.cpp
+TRANSIENT_GRAPH_TEST_OBJ := $(BUILD_DIR)/tools/transient_graph_test.o
+ROOTED_TRANSIENT_TEST_SRC := tools/rooted_transient_test.cpp
+ROOTED_TRANSIENT_TEST_OBJ := $(BUILD_DIR)/tools/rooted_transient_test.o
+AGGREGATE_TRANSIENT_TEST_SRC := tools/aggregate_transient_test.cpp
+AGGREGATE_TRANSIENT_TEST_OBJ := $(BUILD_DIR)/tools/aggregate_transient_test.o
+SUPPORT_TRANSIENT_TEST_SRC := tools/support_transient_test.cpp
+SUPPORT_TRANSIENT_TEST_OBJ := $(BUILD_DIR)/tools/support_transient_test.o
+MAPPED_SUPPORT_TRANSIENT_TEST_SRC := tools/mapped_support_transient_test.cpp
+MAPPED_SUPPORT_TRANSIENT_TEST_OBJ := $(BUILD_DIR)/tools/mapped_support_transient_test.o
+FINAL_CANONICALIZATION_TEST_SRC := tools/final_canonicalization_test.cpp
+FINAL_CANONICALIZATION_TEST_OBJ := $(BUILD_DIR)/tools/final_canonicalization_test.o
+TRICONNECTED_ORACLE_SRC := tools/compare_triconnected_generation.cpp
+TRICONNECTED_ORACLE_OBJ := $(BUILD_DIR)/tools/compare_triconnected_generation_L$(TRICONNECTED_ORACLE_LOOP).o
+GRAPH_GENERATION_HEADERS := GraphGeneration/SupportTransientGraph.hpp GraphGeneration/SupportTransientStandardizer.hpp GraphGeneration/UnrootedSupportTransientGraph.hpp GraphGeneration/UnrootedSupportTransientStandardizer.hpp GraphGeneration/RootedTransientGraph.hpp GraphGeneration/MappedSupportTransientFile.hpp GraphGeneration/FinalCanonicalization.hpp GraphGeneration/MappedGraphFile.hpp GraphGeneration/MappedFinalGraphFile.hpp CombinatorialUtils.hpp graph.hpp GraphStandardizer.hpp
+
 SOLVER_COMPARE_SRCS := tools/solver_comparison.cpp
 SOLVER_COMPARE_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(SOLVER_COMPARE_SRCS))
 SOLVER_COMPARE_LINBOX_OBJS := $(BUILD_DIR)/tools/solver_comparison_linbox.o
@@ -85,7 +122,7 @@ TEST_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(TEST_SRCS))
 
 # ======= RULES =======
 
-.PHONY: all clean run playground split-waterfall run-split-waterfall standardize-perf standardize3-profile compare-standardize3-commits assign-permuted-sort-compare randomize-split-contract-graphs filter-class-by-valence run-standardize-perf run-standardize3-profile run-compare-standardize3-commits run-assign-permuted-sort-compare run-randomize-split-contract-graphs run-filter-class-by-valence graph-standardizer-compare graph-standardizer-compare-nauty run-graph-standardizer-compare wheel-split-contract-reps run-wheel-split-contract-reps run-wheel-class run-wheel-class-generated-constrained run-split-contract-files run-split-contract-solver solver-compare solver-compare-linbox run-solver-compare test
+.PHONY: all clean run playground split-waterfall run-split-waterfall standardize-perf standardize3-profile compare-standardize3-commits assign-permuted-sort-compare randomize-split-contract-graphs filter-class-by-valence graph-stage-generator geng-finalizer graph-dimension-table transient-graph-test run-transient-graph-test rooted-transient-test run-rooted-transient-test aggregate-transient-test run-aggregate-transient-test support-transient-test run-support-transient-test mapped-support-transient-test run-mapped-support-transient-test final-canonicalization-test run-final-canonicalization-test triconnected-oracle run-sparse-rank-test run-standardize-perf run-standardize3-profile run-compare-standardize3-commits run-assign-permuted-sort-compare run-randomize-split-contract-graphs run-filter-class-by-valence graph-standardizer-compare graph-standardizer-compare-nauty run-graph-standardizer-compare wheel-split-contract-reps run-wheel-split-contract-reps run-wheel-class run-wheel-class-generated-constrained run-split-contract-files run-split-contract-solver solver-compare solver-compare-linbox run-solver-compare test
 
 all: $(TARGET)
 
@@ -144,6 +181,78 @@ $(WHEEL_SPLIT_CONTRACT_REPS_TARGET): $(WHEEL_SPLIT_CONTRACT_REPS_OBJS)
 	$(LD) $(WHEEL_SPLIT_CONTRACT_REPS_OBJS) $(LDFLAGS) -o $(WHEEL_SPLIT_CONTRACT_REPS_TARGET)
 	@echo "✅ Build complete."
 
+$(GRAPH_STAGE_GENERATOR_TARGET): $(GRAPH_STAGE_GENERATOR_OBJ)
+	@echo "🚧 Linking $(GRAPH_STAGE_GENERATOR_TARGET) with Clang + LLD..."
+	$(LD) $(GRAPH_STAGE_GENERATOR_OBJ) $(LDFLAGS) -o $(GRAPH_STAGE_GENERATOR_TARGET)
+	@echo "✅ Build complete."
+
+$(GRAPH_STAGE_GENERATOR_OBJ): $(GRAPH_STAGE_GENERATOR_SRC) $(GRAPH_GENERATION_HEADERS)
+	@mkdir -p $(dir $@)
+	@echo "🔧 Compiling $< for loop number $(GRAPH_STAGE_GENERATOR_LOOP)..."
+	$(CXX) $(CXXFLAGS) -DGC_GENERATION_LOOP=$(GRAPH_STAGE_GENERATOR_LOOP) $(if $(filter 1,$(GRAPH_GENERATION_PROFILE)),-DGC_PROFILE_GRAPH_GENERATION) -c $< -o $@
+
+$(GENG_FINALIZER_TARGET): $(GENG_FINALIZER_OBJ)
+	@echo "🚧 Linking $(GENG_FINALIZER_TARGET) with Clang + LLD..."
+	$(LD) $(GENG_FINALIZER_OBJ) $(LDFLAGS) -o $(GENG_FINALIZER_TARGET)
+	@echo "✅ Build complete."
+
+$(GENG_FINALIZER_OBJ): $(GENG_FINALIZER_SRC) $(GRAPH_GENERATION_HEADERS)
+	@mkdir -p $(dir $@)
+	@echo "🔧 Compiling $< for loop number $(GRAPH_STAGE_GENERATOR_LOOP)..."
+	$(CXX) $(CXXFLAGS) -DGC_GENERATION_LOOP=$(GRAPH_STAGE_GENERATOR_LOOP) -c $< -o $@
+
+$(TRANSIENT_GRAPH_TEST_TARGET): $(TRANSIENT_GRAPH_TEST_OBJ)
+	@echo "🚧 Linking $(TRANSIENT_GRAPH_TEST_TARGET) with Clang + LLD..."
+	$(LD) $(TRANSIENT_GRAPH_TEST_OBJ) $(LDFLAGS) -o $(TRANSIENT_GRAPH_TEST_TARGET)
+	@echo "✅ Build complete."
+
+$(TRANSIENT_GRAPH_TEST_OBJ): $(TRANSIENT_GRAPH_TEST_SRC) GraphGeneration/TransientGraph.hpp CombinatorialUtils.hpp
+
+$(ROOTED_TRANSIENT_TEST_TARGET): $(ROOTED_TRANSIENT_TEST_OBJ)
+	@echo "🚧 Linking $(ROOTED_TRANSIENT_TEST_TARGET) with Clang + LLD..."
+	$(LD) $(ROOTED_TRANSIENT_TEST_OBJ) $(LDFLAGS) -o $(ROOTED_TRANSIENT_TEST_TARGET)
+	@echo "✅ Build complete."
+
+$(ROOTED_TRANSIENT_TEST_OBJ): $(ROOTED_TRANSIENT_TEST_SRC) GraphGeneration/RootedTransientGraph.hpp GraphGeneration/RootedTransientStandardizer.hpp GraphGeneration/TransientGraph.hpp CombinatorialUtils.hpp
+
+$(AGGREGATE_TRANSIENT_TEST_TARGET): $(AGGREGATE_TRANSIENT_TEST_OBJ)
+	@echo "🚧 Linking $(AGGREGATE_TRANSIENT_TEST_TARGET) with Clang + LLD..."
+	$(LD) $(AGGREGATE_TRANSIENT_TEST_OBJ) $(LDFLAGS) -o $(AGGREGATE_TRANSIENT_TEST_TARGET)
+	@echo "✅ Build complete."
+
+$(AGGREGATE_TRANSIENT_TEST_OBJ): $(AGGREGATE_TRANSIENT_TEST_SRC) GraphGeneration/AggregateTransientGraph.hpp GraphGeneration/AggregateTransientStandardizer.hpp GraphGeneration/RootedTransientGraph.hpp GraphGeneration/RootedTransientStandardizer.hpp GraphGeneration/TransientGraph.hpp CombinatorialUtils.hpp
+
+$(SUPPORT_TRANSIENT_TEST_TARGET): $(SUPPORT_TRANSIENT_TEST_OBJ)
+	@echo "🚧 Linking $(SUPPORT_TRANSIENT_TEST_TARGET) with Clang + LLD..."
+	$(LD) $(SUPPORT_TRANSIENT_TEST_OBJ) $(LDFLAGS) -o $(SUPPORT_TRANSIENT_TEST_TARGET)
+	@echo "✅ Build complete."
+
+$(SUPPORT_TRANSIENT_TEST_OBJ): $(SUPPORT_TRANSIENT_TEST_SRC) GraphGeneration/SupportTransientGraph.hpp GraphGeneration/SupportTransientStandardizer.hpp GraphGeneration/RootedTransientGraph.hpp GraphGeneration/RootedTransientStandardizer.hpp GraphGeneration/TransientGraph.hpp CombinatorialUtils.hpp
+
+$(MAPPED_SUPPORT_TRANSIENT_TEST_TARGET): $(MAPPED_SUPPORT_TRANSIENT_TEST_OBJ)
+	@echo "🚧 Linking $(MAPPED_SUPPORT_TRANSIENT_TEST_TARGET) with Clang + LLD..."
+	$(LD) $(MAPPED_SUPPORT_TRANSIENT_TEST_OBJ) $(LDFLAGS) -o $(MAPPED_SUPPORT_TRANSIENT_TEST_TARGET)
+	@echo "✅ Build complete."
+
+$(MAPPED_SUPPORT_TRANSIENT_TEST_OBJ): $(MAPPED_SUPPORT_TRANSIENT_TEST_SRC) GraphGeneration/MappedSupportTransientFile.hpp GraphGeneration/MappedGraphFile.hpp GraphGeneration/SupportTransientGraph.hpp
+
+$(FINAL_CANONICALIZATION_TEST_TARGET): $(FINAL_CANONICALIZATION_TEST_OBJ)
+	@echo "🚧 Linking $(FINAL_CANONICALIZATION_TEST_TARGET) with Clang + LLD..."
+	$(LD) $(FINAL_CANONICALIZATION_TEST_OBJ) $(LDFLAGS) -o $(FINAL_CANONICALIZATION_TEST_TARGET)
+	@echo "✅ Build complete."
+
+$(FINAL_CANONICALIZATION_TEST_OBJ): $(FINAL_CANONICALIZATION_TEST_SRC) GraphGeneration/FinalCanonicalization.hpp
+
+$(TRICONNECTED_ORACLE_TARGET): $(TRICONNECTED_ORACLE_OBJ)
+	@echo "🚧 Linking $(TRICONNECTED_ORACLE_TARGET) with Clang + LLD..."
+	$(LD) $(TRICONNECTED_ORACLE_OBJ) $(LDFLAGS) -o $(TRICONNECTED_ORACLE_TARGET)
+	@echo "✅ Build complete."
+
+$(TRICONNECTED_ORACLE_OBJ): $(TRICONNECTED_ORACLE_SRC) GraphGeneration/FinalCanonicalization.hpp GraphGeneration/MappedFinalGraphFile.hpp GraphGeneration/MappedGraphFile.hpp graph.hpp GraphStandardizer.hpp
+	@mkdir -p $(dir $@)
+	@echo "🔧 Compiling $< for loop number $(TRICONNECTED_ORACLE_LOOP)..."
+	$(CXX) $(CXXFLAGS) -DGC_TRICONNECTED_ORACLE_LOOP=$(TRICONNECTED_ORACLE_LOOP) -c $< -o $@
+
 $(SOLVER_COMPARE_TARGET): $(SOLVER_COMPARE_OBJS)
 	@echo "🚧 Linking $(SOLVER_COMPARE_TARGET) with Clang + LLD..."
 	$(LD) $(SOLVER_COMPARE_OBJS) $(LDFLAGS) -o $(SOLVER_COMPARE_TARGET)
@@ -176,7 +285,7 @@ $(SOLVER_COMPARE_LINBOX_OBJS): tools/solver_comparison.cpp
 
 clean:
 	@echo "🧹 Cleaning build files..."
-	rm -rf $(BUILD_DIR) $(TARGET) $(PLAYGROUND_TARGET) $(SPLIT_WATERFALL_TARGET) $(STANDARDIZE_PERF_TARGET) $(STANDARDIZE3_PROFILE_TARGET) $(ASSIGN_PERMUTED_SORT_COMPARE_TARGET) $(GRAPH_STANDARDIZER_COMPARE_TARGET) $(GRAPH_STANDARDIZER_COMPARE_TARGET)-nauty $(RANDOMIZE_SPLIT_CONTRACT_TARGET) $(FILTER_CLASS_BY_VALENCE_TARGET) $(WHEEL_SPLIT_CONTRACT_REPS_TARGET) $(SOLVER_COMPARE_TARGET) $(SOLVER_COMPARE_TARGET)-linbox $(TEST_TARGET)
+	rm -rf $(BUILD_DIR) $(TARGET) $(PLAYGROUND_TARGET) $(SPLIT_WATERFALL_TARGET) $(STANDARDIZE_PERF_TARGET) $(STANDARDIZE3_PROFILE_TARGET) $(ASSIGN_PERMUTED_SORT_COMPARE_TARGET) $(GRAPH_STANDARDIZER_COMPARE_TARGET) $(GRAPH_STANDARDIZER_COMPARE_TARGET)-nauty $(RANDOMIZE_SPLIT_CONTRACT_TARGET) $(FILTER_CLASS_BY_VALENCE_TARGET) $(WHEEL_SPLIT_CONTRACT_REPS_TARGET) graph_stage_generator_* geng_finalizer_* $(TRANSIENT_GRAPH_TEST_TARGET) $(ROOTED_TRANSIENT_TEST_TARGET) $(AGGREGATE_TRANSIENT_TEST_TARGET) $(SUPPORT_TRANSIENT_TEST_TARGET) $(MAPPED_SUPPORT_TRANSIENT_TEST_TARGET) $(FINAL_CANONICALIZATION_TEST_TARGET) compare_triconnected_generation_* $(SOLVER_COMPARE_TARGET) $(SOLVER_COMPARE_TARGET)-linbox $(TEST_TARGET)
 
 run: all
 	@./$(TARGET)
@@ -199,6 +308,49 @@ assign-permuted-sort-compare: $(ASSIGN_PERMUTED_SORT_COMPARE_TARGET)
 randomize-split-contract-graphs: $(RANDOMIZE_SPLIT_CONTRACT_TARGET)
 
 filter-class-by-valence: $(FILTER_CLASS_BY_VALENCE_TARGET)
+
+graph-stage-generator: $(GRAPH_STAGE_GENERATOR_TARGET)
+
+geng-finalizer: $(GENG_FINALIZER_TARGET)
+
+graph-dimension-table:
+	@MIN_TADPOLES="$(MIN_TADPOLES)" ./tools/generate_dimension_table.sh "$(MAX_TADPOLES)" "$(DIMENSION_DIR)" "$(DIMENSION_TABLE)"
+
+transient-graph-test: $(TRANSIENT_GRAPH_TEST_TARGET)
+
+run-transient-graph-test: $(TRANSIENT_GRAPH_TEST_TARGET)
+	@./$(TRANSIENT_GRAPH_TEST_TARGET)
+
+rooted-transient-test: $(ROOTED_TRANSIENT_TEST_TARGET)
+
+run-rooted-transient-test: $(ROOTED_TRANSIENT_TEST_TARGET)
+	@./$(ROOTED_TRANSIENT_TEST_TARGET)
+
+aggregate-transient-test: $(AGGREGATE_TRANSIENT_TEST_TARGET)
+
+run-aggregate-transient-test: $(AGGREGATE_TRANSIENT_TEST_TARGET)
+	@./$(AGGREGATE_TRANSIENT_TEST_TARGET)
+
+support-transient-test: $(SUPPORT_TRANSIENT_TEST_TARGET)
+
+run-support-transient-test: $(SUPPORT_TRANSIENT_TEST_TARGET)
+	@./$(SUPPORT_TRANSIENT_TEST_TARGET)
+
+mapped-support-transient-test: $(MAPPED_SUPPORT_TRANSIENT_TEST_TARGET)
+
+run-mapped-support-transient-test: $(MAPPED_SUPPORT_TRANSIENT_TEST_TARGET)
+	@./$(MAPPED_SUPPORT_TRANSIENT_TEST_TARGET)
+
+final-canonicalization-test: $(FINAL_CANONICALIZATION_TEST_TARGET)
+
+run-final-canonicalization-test: $(FINAL_CANONICALIZATION_TEST_TARGET)
+	@./$(FINAL_CANONICALIZATION_TEST_TARGET)
+
+triconnected-oracle: $(TRICONNECTED_ORACLE_TARGET)
+
+run-sparse-rank-test:
+	@$(MAKE) -C VectorSpace/tests "$(CURDIR)/VectorSpace/tests/bin/test_sparse_rank"
+	@./VectorSpace/tests/bin/test_sparse_rank
 
 run-standardize-perf: $(STANDARDIZE_PERF_TARGET)
 	@./$(STANDARDIZE_PERF_TARGET) $(or $(WHEEL),33) $(or $(REPEAT),1) $(or $(ITER),3)
