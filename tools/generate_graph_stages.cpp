@@ -27,6 +27,7 @@
 #include "GraphGeneration/MappedSupportTransientFile.hpp"
 #include "GraphGeneration/UnrootedSupportTransientGraph.hpp"
 #include "GraphGeneration/UnrootedSupportTransientStandardizer.hpp"
+#include "LinearProbeSet.hpp"
 #include "graph.hpp"
 
 #ifndef GC_GENERATION_LOOP
@@ -231,6 +232,7 @@ class ConcurrentGraphSet {
 template <typename SupportGraph>
 class PartitionedTransientGraphSet {
 	public:
+		using set_type = linear_probe_set<SupportGraph>;
 		static constexpr std::size_t PARTITION_SIDE
 			= static_cast<std::size_t>(SupportGraph::N_VERTICES_) + 1;
 		static constexpr std::size_t PARTITION_COUNT
@@ -264,13 +266,15 @@ class PartitionedTransientGraphSet {
 				+ (hash & (SHARDS_PER_PARTITION - 1));
 			Shard& shard = shards_[slot];
 			std::lock_guard lock(shard.mutex);
-			const bool inserted = shard.graphs.insert(std::move(graph)).second;
+			const bool inserted = shard.graphs.insert(std::move(graph));
 			shard.duplicates += !inserted;
 		}
 
 		std::uint64_t size() const noexcept {
 			std::uint64_t result = 0;
-			for (const Shard& shard : shards_) result += shard.graphs.size();
+			for (const Shard& shard : shards_) {
+				result += shard.graphs.size();
+			}
 			return result;
 		}
 
@@ -280,7 +284,7 @@ class PartitionedTransientGraphSet {
 			return result;
 		}
 
-		const std::unordered_set<SupportGraph>& slot(std::size_t index) const {
+		const set_type& slot(std::size_t index) const noexcept {
 			return shards_[index].graphs;
 		}
 
@@ -304,7 +308,7 @@ class PartitionedTransientGraphSet {
 
 		struct alignas(64) Shard {
 			std::mutex mutex;
-			std::unordered_set<SupportGraph> graphs;
+			set_type graphs;
 			std::uint64_t duplicates = 0;
 		};
 
@@ -423,9 +427,10 @@ void write_transient_graph_set(
 		 );
 		 ++shard_index) {
 		std::uint64_t output_index = offsets[static_cast<std::size_t>(shard_index)];
-		for (const GraphType& graph
-			: graphs.slot(static_cast<std::size_t>(shard_index))) {
-			writer.write(output_index++, graph);
+		const auto& slot = graphs.slot(static_cast<std::size_t>(shard_index));
+		for (std::size_t index = 0; index < slot.capacity(); ++index) {
+			const GraphType& graph = slot.data()[index];
+			if (!graph.empty()) writer.write(output_index++, graph);
 		}
 	}
 }

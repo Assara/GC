@@ -440,6 +440,20 @@ class support_transient_graph {
 			return static_cast<std::size_t>(hash);
 		}
 
+		std::size_t hash() const noexcept { return hash_value(); }
+
+		bool empty() const noexcept {
+			if constexpr (N_VERTICES == 1) {
+				// The zero-bit value is the one-vertex rose, not an empty slot.
+				return false;
+			} else {
+				return std::ranges::all_of(
+					support_words_,
+					[](std::uint64_t word) { return word == 0; }
+				);
+			}
+		}
+
 		static constexpr classification_mask_type classification_bit(
 			transient_classification classification
 		) noexcept {

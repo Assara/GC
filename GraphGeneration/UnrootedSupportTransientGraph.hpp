@@ -175,6 +175,8 @@ class unrooted_support_transient_graph {
 			return support_ < other.support_;
 		}
 		std::size_t hash_value() const noexcept { return support_.hash_value(); }
+		std::size_t hash() const noexcept { return hash_value(); }
+		bool empty() const noexcept { return support_.empty(); }
 
 	private:
 		support_type support_{};

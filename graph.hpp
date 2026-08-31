@@ -62,7 +62,11 @@ Int N_VERTICES,
 			using RebindDegree = Graph<N_VERTICES, N_EDGES, N_OUT_HAIR, N_IN_HAIR, NewC, NewD, fieldType>;
 
 
-			Graph() = default;
+			Graph() noexcept {
+				if constexpr (N_VERTICES == 1) {
+					half_edges.fill(Int{1});
+				}
+			}
 
 			explicit Graph(const array<Int, SIZE>& arr) : half_edges(arr) {}
 
@@ -1339,12 +1343,28 @@ Int N_VERTICES,
 			}
 
 
-			bool operator==(Graph const& other) const {
+			bool operator==(Graph const& other) const noexcept {
 				return half_edges == other.half_edges;
 			}
 
-			bool operator!=(Graph const& other) const {
+			bool operator!=(Graph const& other) const noexcept {
 				return !(*this == other);
+			}
+
+			std::size_t hash() const noexcept {
+				return graph_hash_detail::hash_bytes(
+					reinterpret_cast<const unsigned char*>(half_edges.data()),
+					sizeof(half_edges)
+				);
+			}
+
+			bool empty() const noexcept {
+				return std::ranges::all_of(
+					half_edges,
+					[](Int value) {
+						return value == (N_VERTICES == 1 ? Int{1} : Int{0});
+					}
+				);
 			}
 
 			std::array<Int, SIZE> half_edges{};

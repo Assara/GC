@@ -75,6 +75,7 @@ class transient_graph {
 		};
 
 		transient_graph() {
+			graph_.half_edges.fill(0);
 			graph_.half_edges[0] = 0;
 		}
 
