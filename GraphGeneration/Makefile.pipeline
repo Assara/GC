@@ -1,0 +1,58 @@
+# Run from the repository root: make -f GraphGeneration/Makefile.pipeline test
+CXX ?= g++
+PIPELINE_MAX_LOOP ?= 3
+PIPELINE_MAX_VERTICES ?= 6
+PIPELINE_FLAGS ?= -std=c++23 -O1 -I. -IVectorSpace
+PIPELINE_BINARY := build/transient_pipeline_L$(PIPELINE_MAX_LOOP)_V$(PIPELINE_MAX_VERTICES)
+PIPELINE_HEADERS := GraphGeneration/GraphGenerationPipeline.hpp GraphGeneration/TransientGraph2.hpp GraphGeneration/TransientGraph2Standardizer.hpp GraphGeneration/MappedTransientGraph2File.hpp GraphGeneration/MappedGraphFile.hpp LinearProbeSet.hpp graph.hpp GraphStandardizer.hpp
+
+.PHONY: all test
+all: $(PIPELINE_BINARY)
+
+$(PIPELINE_BINARY): tools/generate_transient_graphs.cpp $(PIPELINE_HEADERS)
+	@mkdir -p build
+	$(CXX) $(PIPELINE_FLAGS) -DGC_PIPELINE_MAX_LOOP=$(PIPELINE_MAX_LOOP) -DGC_PIPELINE_MAX_VERTICES=$(PIPELINE_MAX_VERTICES) $< -o $@
+
+build/graph_generation_pipeline_test: tools/graph_generation_pipeline_test.cpp $(PIPELINE_HEADERS)
+	@mkdir -p build
+	$(CXX) $(PIPELINE_FLAGS) $< -o $@
+
+build/transient_graph2_pipeline_split_test: tools/transient_graph2_test.cpp $(PIPELINE_HEADERS)
+	@mkdir -p build
+	$(CXX) $(PIPELINE_FLAGS) $< -o $@
+
+test: build/graph_generation_pipeline_test build/transient_graph2_pipeline_split_test
+	./build/graph_generation_pipeline_test
+	./build/transient_graph2_pipeline_split_test
+
+GC_VERTICES ?= 4
+GC_EDGES ?= 6
+GC_CONVERTER := build/transient_to_gc_V$(GC_VERTICES)_E$(GC_EDGES)
+GC_CONVERTER_HEADERS := GraphGeneration/TransientToGCPipeline.hpp GraphGeneration/MappedGCGraphFile.hpp GraphGeneration/FinalCanonicalization.hpp $(PIPELINE_HEADERS)
+
+.PHONY: gc-converter test-gc-converter
+gc-converter: $(GC_CONVERTER)
+
+$(GC_CONVERTER): tools/convert_transient_to_gc.cpp $(GC_CONVERTER_HEADERS)
+	@mkdir -p build
+	$(CXX) $(PIPELINE_FLAGS) -DGC_CONVERT_VERTICES=$(GC_VERTICES) -DGC_CONVERT_EDGES=$(GC_EDGES) $< -o $@
+
+build/transient_to_gc_pipeline_test: tools/transient_to_gc_pipeline_test.cpp $(GC_CONVERTER_HEADERS)
+	@mkdir -p build
+	$(CXX) $(PIPELINE_FLAGS) $< -o $@
+
+test-gc-converter: build/transient_to_gc_pipeline_test
+	./build/transient_to_gc_pipeline_test
+
+test: test-gc-converter
+
+.PHONY: pipeline-verifier
+pipeline-verifier: build/verify_gc_pipeline
+
+build/verify_gc_pipeline: tools/verify_gc_pipeline.cpp $(GC_CONVERTER_HEADERS)
+	@mkdir -p build
+	$(CXX) $(PIPELINE_FLAGS) $< -o $@
+
+build/verify_gc_pipeline_L%: tools/verify_gc_pipeline.cpp $(GC_CONVERTER_HEADERS)
+	@mkdir -p build
+	$(CXX) $(PIPELINE_FLAGS) -DGC_VERIFY_MAX_LOOP=$* $< -o $@

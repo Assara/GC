@@ -704,7 +704,7 @@ Int N_VERTICES,
 					return n ^ (n >> 31);
 				}
 
-				Permutation<N_VERTICES> create_vertex_permutation() {
+					Permutation<N_VERTICES> create_vertex_permutation() const {
 					Permutation<N_VERTICES> perm;
 
 					for (Int i = 0; i< N_VERTICES; ++i) {
@@ -799,6 +799,30 @@ Int N_VERTICES,
 
 			GraphType standardize_no_sign(const GraphType& input) const {
 				auto [attempts, valid_attempts] = create_final_attempts4(input);
+				return standardize_no_sign_from_attempts(
+					input, attempts, valid_attempts
+				);
+			}
+
+			// Keep this entry point separate from standardize_no_sign.  Transient
+			// generation relies on the standardize4 refinement order, where the
+			// vertices are sorted and grouped after the first neighbour iteration;
+			// that makes the resulting vertex order increase with valency.
+			GraphType standardize_no_sign_increasing_valency(
+				const GraphType& input
+			) const {
+				auto [attempts, valid_attempts] = create_final_attempts4(input);
+				return standardize_no_sign_from_attempts(
+					input, attempts, valid_attempts
+				);
+			}
+
+		private:
+			GraphType standardize_no_sign_from_attempts(
+				const GraphType& input,
+				const vector<CanonBuilder4>& attempts,
+				const vector<std::size_t>& valid_attempts
+			) const {
 
 				GraphType best_graph;
 				best_graph.assignPermutedDirectedSortedEdgesNoSign(
@@ -824,6 +848,8 @@ Int N_VERTICES,
 
 				return best_graph;
 			}
+
+		public:
 
 			BasisElement<GraphType, fieldType> standardize4(const BasisElement<GraphType, fieldType>& input) const {
 #if defined(GC_PROFILE_STANDARDIZER_SORT)

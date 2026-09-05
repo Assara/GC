@@ -10,9 +10,8 @@
 
 namespace GraphGeneration {
 
-// The two sign conventions used for the ordinary (non-hairy) graph complex.
-// Edge directions have even degree in both cases; the omitted third convention
-// is the one in which reversing an edge also changes the sign.
+// Legacy survival labels. The odd-vertex case includes edge reversals when
+// the canonicalizer's OddEdgeFlips option is enabled (ordinary odd GC).
 enum class final_graph_survival : std::uint8_t {
 	none = 0,
 	odd_edges = 1U << 0,
@@ -57,10 +56,12 @@ struct final_canonicalization_result {
 };
 
 // Canonicalize a final, simple, hairless graph once and collect the metadata
-// needed by both literature sign conventions.  Automorphisms here mean vertex
+// needed by both sign conventions. Automorphisms here mean vertex
 // automorphisms.  This intentionally does not add formal tadpole flips or
 // parallel-edge swaps; such graphs are rejected before the search.
-template <typename GraphType>
+// Preserve the legacy convention by default; the new GC pipeline opts into
+// the half-edge sign required for odd GC.
+template <typename GraphType, bool OddEdgeFlips = false>
 class final_graph_canonicalizer {
 	public:
 		static_assert(GraphType::N_HAIR == 0,
@@ -97,7 +98,7 @@ class final_graph_canonicalizer {
 			result_type result;
 			bool have_best = false;
 			signedInt reference_edge_parity = 1;
-			signedInt reference_vertex_parity = 1;
+			signedInt reference_odd_parity = 1;
 
 			for (const std::size_t attempt_index : valid_attempts) {
 				GraphType candidate;
@@ -108,6 +109,12 @@ class final_graph_canonicalizer {
 					isomorphism
 				);
 
+				signedInt odd_parity = isomorphism.vertex_permutation_sign();
+				if constexpr (OddEdgeFlips) {
+					for (bool flipped : isomorphism.edge_flip_data())
+						if (flipped) odd_parity = -odd_parity;
+				}
+
 				const bool new_best = !have_best
 					|| result.canonical_graph.compare(candidate) < 0;
 				if (new_best) {
@@ -116,8 +123,7 @@ class final_graph_canonicalizer {
 					result.survival = final_graph_survival::both;
 					reference_edge_parity
 						= isomorphism.edge_permutation_sign();
-					reference_vertex_parity
-						= isomorphism.vertex_permutation_sign();
+					reference_odd_parity = odd_parity;
 					have_best = true;
 					continue;
 				}
@@ -134,8 +140,7 @@ class final_graph_canonicalizer {
 						final_graph_survival::odd_edges
 					);
 				}
-				if (isomorphism.vertex_permutation_sign()
-					!= reference_vertex_parity) {
+				if (odd_parity != reference_odd_parity) {
 					result.survival = without_survival(
 						result.survival,
 						final_graph_survival::even_edges_odd_vertices

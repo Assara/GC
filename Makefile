@@ -1,7 +1,7 @@
 # ======= CONFIGURATION =======
 
-CXX       := clang++
-LD        := clang++
+CXX       := g++
+LD        := g++
 
 TARGET    := gc
 PLAYGROUND_TARGET := gc_contraction_playground
@@ -24,6 +24,7 @@ AGGREGATE_TRANSIENT_TEST_TARGET := aggregate_transient_test
 SUPPORT_TRANSIENT_TEST_TARGET := support_transient_test
 MAPPED_SUPPORT_TRANSIENT_TEST_TARGET := mapped_support_transient_test
 FINAL_CANONICALIZATION_TEST_TARGET := final_canonicalization_test
+LINEAR_PROBE_SET_TEST_TARGET := linear_probe_set_test
 TRICONNECTED_ORACLE_LOOP ?= 8
 TRICONNECTED_ORACLE_TARGET := compare_triconnected_generation_$(TRICONNECTED_ORACLE_LOOP)
 MIN_TADPOLES ?= 3
@@ -45,9 +46,12 @@ CHECKPOINT_INTERVAL ?= 32
 INC       := -I. -IVectorSpace
 
 # ---- OpenMP ----
-# For Clang on Linux, libomp is typical. If your system uses libgomp instead, see notes below.
-OPENMP_CXXFLAGS := -fopenmp=libomp
-OPENMP_LDFLAGS  := -fopenmp=libomp -lomp
+# GCC uses the installed libgomp OpenMP runtime.
+OPENMP_CXXFLAGS := -fopenmp
+OPENMP_LDFLAGS  := -fopenmp
+
+# Prefer LLD when installed, otherwise let the compiler select the system linker.
+LINKER_FLAG := $(if $(shell command -v ld.lld 2>/dev/null),-fuse-ld=lld,)
 
 NAUTY_CXXFLAGS ?= $(shell pkg-config --cflags nauty 2>/dev/null)
 NAUTY_LDLIBS ?= $(shell pkg-config --libs nauty 2>/dev/null || echo -lnauty)
@@ -56,7 +60,7 @@ LINBOX_LDLIBS ?= $(shell pkg-config --libs linbox givaro fflas-ffpack 2>/dev/nul
 
 # Compiler and linker flags
 CXXFLAGS  := -std=c++23 -O3 -march=native -Wall -Wextra -Wpedantic $(INC) $(OPENMP_CXXFLAGS)
-LDFLAGS   := -fuse-ld=lld $(OPENMP_LDFLAGS)
+LDFLAGS   := $(LINKER_FLAG) $(OPENMP_LDFLAGS)
 
 # ======= SOURCE / BUILD SETUP =======
 
@@ -109,9 +113,11 @@ MAPPED_SUPPORT_TRANSIENT_TEST_SRC := tools/mapped_support_transient_test.cpp
 MAPPED_SUPPORT_TRANSIENT_TEST_OBJ := $(BUILD_DIR)/tools/mapped_support_transient_test.o
 FINAL_CANONICALIZATION_TEST_SRC := tools/final_canonicalization_test.cpp
 FINAL_CANONICALIZATION_TEST_OBJ := $(BUILD_DIR)/tools/final_canonicalization_test.o
+LINEAR_PROBE_SET_TEST_SRC := tools/linear_probe_set_test.cpp
+LINEAR_PROBE_SET_TEST_OBJ := $(BUILD_DIR)/tools/linear_probe_set_test.o
 TRICONNECTED_ORACLE_SRC := tools/compare_triconnected_generation.cpp
 TRICONNECTED_ORACLE_OBJ := $(BUILD_DIR)/tools/compare_triconnected_generation_L$(TRICONNECTED_ORACLE_LOOP).o
-GRAPH_GENERATION_HEADERS := GraphGeneration/SupportTransientGraph.hpp GraphGeneration/SupportTransientStandardizer.hpp GraphGeneration/UnrootedSupportTransientGraph.hpp GraphGeneration/UnrootedSupportTransientStandardizer.hpp GraphGeneration/RootedTransientGraph.hpp GraphGeneration/MappedSupportTransientFile.hpp GraphGeneration/FinalCanonicalization.hpp GraphGeneration/MappedGraphFile.hpp GraphGeneration/MappedFinalGraphFile.hpp CombinatorialUtils.hpp graph.hpp GraphStandardizer.hpp
+GRAPH_GENERATION_HEADERS := GraphGeneration/SupportTransientGraph.hpp GraphGeneration/SupportTransientStandardizer.hpp GraphGeneration/UnrootedSupportTransientGraph.hpp GraphGeneration/UnrootedSupportTransientStandardizer.hpp GraphGeneration/RootedTransientGraph.hpp GraphGeneration/MappedSupportTransientFile.hpp GraphGeneration/FinalCanonicalization.hpp GraphGeneration/MappedGraphFile.hpp GraphGeneration/MappedFinalGraphFile.hpp CombinatorialUtils.hpp LinearProbeSet.hpp graph.hpp GraphStandardizer.hpp
 
 SOLVER_COMPARE_SRCS := tools/solver_comparison.cpp
 SOLVER_COMPARE_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(SOLVER_COMPARE_SRCS))
@@ -122,12 +128,12 @@ TEST_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(TEST_SRCS))
 
 # ======= RULES =======
 
-.PHONY: all clean run playground split-waterfall run-split-waterfall standardize-perf standardize3-profile compare-standardize3-commits assign-permuted-sort-compare randomize-split-contract-graphs filter-class-by-valence graph-stage-generator geng-finalizer graph-dimension-table transient-graph-test run-transient-graph-test rooted-transient-test run-rooted-transient-test aggregate-transient-test run-aggregate-transient-test support-transient-test run-support-transient-test mapped-support-transient-test run-mapped-support-transient-test final-canonicalization-test run-final-canonicalization-test triconnected-oracle run-sparse-rank-test run-standardize-perf run-standardize3-profile run-compare-standardize3-commits run-assign-permuted-sort-compare run-randomize-split-contract-graphs run-filter-class-by-valence graph-standardizer-compare graph-standardizer-compare-nauty run-graph-standardizer-compare wheel-split-contract-reps run-wheel-split-contract-reps run-wheel-class run-wheel-class-generated-constrained run-split-contract-files run-split-contract-solver solver-compare solver-compare-linbox run-solver-compare test
+.PHONY: all clean run playground split-waterfall run-split-waterfall standardize-perf standardize3-profile compare-standardize3-commits assign-permuted-sort-compare randomize-split-contract-graphs filter-class-by-valence graph-stage-generator geng-finalizer graph-dimension-table transient-graph-test run-transient-graph-test rooted-transient-test run-rooted-transient-test aggregate-transient-test run-aggregate-transient-test support-transient-test run-support-transient-test mapped-support-transient-test run-mapped-support-transient-test final-canonicalization-test run-final-canonicalization-test linear-probe-set-test run-linear-probe-set-test triconnected-oracle run-sparse-rank-test run-standardize-perf run-standardize3-profile run-compare-standardize3-commits run-assign-permuted-sort-compare run-randomize-split-contract-graphs run-filter-class-by-valence graph-standardizer-compare graph-standardizer-compare-nauty run-graph-standardizer-compare wheel-split-contract-reps run-wheel-split-contract-reps run-wheel-class run-wheel-class-generated-constrained run-split-contract-files run-split-contract-solver solver-compare solver-compare-linbox run-solver-compare test
 
 all: $(TARGET)
 
 $(TARGET): $(MAIN_OBJS)
-	@echo "🚧 Linking $(TARGET) with Clang + LLD..."
+	@echo "🚧 Linking $(TARGET) with GCC..."
 	$(LD) $(MAIN_OBJS) $(LDFLAGS) -o $(TARGET)
 	@echo "✅ Build complete."
 
@@ -243,6 +249,13 @@ $(FINAL_CANONICALIZATION_TEST_TARGET): $(FINAL_CANONICALIZATION_TEST_OBJ)
 
 $(FINAL_CANONICALIZATION_TEST_OBJ): $(FINAL_CANONICALIZATION_TEST_SRC) GraphGeneration/FinalCanonicalization.hpp
 
+$(LINEAR_PROBE_SET_TEST_TARGET): $(LINEAR_PROBE_SET_TEST_OBJ)
+	@echo "🚧 Linking $(LINEAR_PROBE_SET_TEST_TARGET) with Clang + LLD..."
+	$(LD) $(LINEAR_PROBE_SET_TEST_OBJ) $(LDFLAGS) -o $(LINEAR_PROBE_SET_TEST_TARGET)
+	@echo "✅ Build complete."
+
+$(LINEAR_PROBE_SET_TEST_OBJ): $(LINEAR_PROBE_SET_TEST_SRC) LinearProbeSet.hpp GraphGeneration/SupportTransientGraph.hpp graph.hpp graph_hash.hpp
+
 $(TRICONNECTED_ORACLE_TARGET): $(TRICONNECTED_ORACLE_OBJ)
 	@echo "🚧 Linking $(TRICONNECTED_ORACLE_TARGET) with Clang + LLD..."
 	$(LD) $(TRICONNECTED_ORACLE_OBJ) $(LDFLAGS) -o $(TRICONNECTED_ORACLE_TARGET)
@@ -285,7 +298,7 @@ $(SOLVER_COMPARE_LINBOX_OBJS): tools/solver_comparison.cpp
 
 clean:
 	@echo "🧹 Cleaning build files..."
-	rm -rf $(BUILD_DIR) $(TARGET) $(PLAYGROUND_TARGET) $(SPLIT_WATERFALL_TARGET) $(STANDARDIZE_PERF_TARGET) $(STANDARDIZE3_PROFILE_TARGET) $(ASSIGN_PERMUTED_SORT_COMPARE_TARGET) $(GRAPH_STANDARDIZER_COMPARE_TARGET) $(GRAPH_STANDARDIZER_COMPARE_TARGET)-nauty $(RANDOMIZE_SPLIT_CONTRACT_TARGET) $(FILTER_CLASS_BY_VALENCE_TARGET) $(WHEEL_SPLIT_CONTRACT_REPS_TARGET) graph_stage_generator_* geng_finalizer_* $(TRANSIENT_GRAPH_TEST_TARGET) $(ROOTED_TRANSIENT_TEST_TARGET) $(AGGREGATE_TRANSIENT_TEST_TARGET) $(SUPPORT_TRANSIENT_TEST_TARGET) $(MAPPED_SUPPORT_TRANSIENT_TEST_TARGET) $(FINAL_CANONICALIZATION_TEST_TARGET) compare_triconnected_generation_* $(SOLVER_COMPARE_TARGET) $(SOLVER_COMPARE_TARGET)-linbox $(TEST_TARGET)
+	rm -rf $(BUILD_DIR) $(TARGET) $(PLAYGROUND_TARGET) $(SPLIT_WATERFALL_TARGET) $(STANDARDIZE_PERF_TARGET) $(STANDARDIZE3_PROFILE_TARGET) $(ASSIGN_PERMUTED_SORT_COMPARE_TARGET) $(GRAPH_STANDARDIZER_COMPARE_TARGET) $(GRAPH_STANDARDIZER_COMPARE_TARGET)-nauty $(RANDOMIZE_SPLIT_CONTRACT_TARGET) $(FILTER_CLASS_BY_VALENCE_TARGET) $(WHEEL_SPLIT_CONTRACT_REPS_TARGET) graph_stage_generator_* geng_finalizer_* $(TRANSIENT_GRAPH_TEST_TARGET) $(ROOTED_TRANSIENT_TEST_TARGET) $(AGGREGATE_TRANSIENT_TEST_TARGET) $(SUPPORT_TRANSIENT_TEST_TARGET) $(MAPPED_SUPPORT_TRANSIENT_TEST_TARGET) $(FINAL_CANONICALIZATION_TEST_TARGET) $(LINEAR_PROBE_SET_TEST_TARGET) compare_triconnected_generation_* $(SOLVER_COMPARE_TARGET) $(SOLVER_COMPARE_TARGET)-linbox $(TEST_TARGET)
 
 run: all
 	@./$(TARGET)
@@ -318,6 +331,17 @@ graph-dimension-table:
 
 transient-graph-test: $(TRANSIENT_GRAPH_TEST_TARGET)
 
+.PHONY: transient-graph2-test run-transient-graph2-test
+transient-graph2-test: $(BUILD_DIR)/transient_graph2_test
+
+$(BUILD_DIR)/transient_graph2_test: $(BUILD_DIR)/tools/transient_graph2_test.o
+	$(LD) $< $(LDFLAGS) -o $@
+
+$(BUILD_DIR)/tools/transient_graph2_test.o: tools/transient_graph2_test.cpp GraphGeneration/TransientGraph2.hpp GraphGeneration/TransientGraph2Standardizer.hpp graph.hpp GraphStandardizer.hpp
+
+run-transient-graph2-test: $(BUILD_DIR)/transient_graph2_test
+	@./$(BUILD_DIR)/transient_graph2_test
+
 run-transient-graph-test: $(TRANSIENT_GRAPH_TEST_TARGET)
 	@./$(TRANSIENT_GRAPH_TEST_TARGET)
 
@@ -345,6 +369,11 @@ final-canonicalization-test: $(FINAL_CANONICALIZATION_TEST_TARGET)
 
 run-final-canonicalization-test: $(FINAL_CANONICALIZATION_TEST_TARGET)
 	@./$(FINAL_CANONICALIZATION_TEST_TARGET)
+
+linear-probe-set-test: $(LINEAR_PROBE_SET_TEST_TARGET)
+
+run-linear-probe-set-test: $(LINEAR_PROBE_SET_TEST_TARGET)
+	@./$(LINEAR_PROBE_SET_TEST_TARGET)
 
 triconnected-oracle: $(TRICONNECTED_ORACLE_TARGET)
 
