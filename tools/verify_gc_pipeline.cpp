@@ -66,6 +66,8 @@ void convert(const std::filesystem::path& root) {
             const auto record = reader[i];
             for (Int valence : record.graph.valence_array())
                 if (valence < 3) throw std::runtime_error("GC output not at least trivalent");
+            if (!record.graph.is_biconnected())
+                throw std::runtime_error("GC output has a cut vertex or is disconnected; regenerate GC files");
             records.push_back({mask_of(record.graph), record.odd_gc, record.even_gc});
             odd += record.odd_gc; even += record.even_gc;
         }
@@ -102,18 +104,20 @@ struct Oracle {
         for (int a = 0; a < n; ++a)
             for (int b = a + 1; b < n; ++b) pairs.emplace_back(a,b);
     }
-    bool connected(std::uint64_t mask) const {
-        unsigned seen = 1;
+    bool connected(std::uint64_t mask, int removed = -1) const {
+        unsigned seen = removed == 0 ? 2 : 1;
         bool changed;
         do {
             const auto previous = seen;
             for (std::size_t i = 0; i < pairs.size(); ++i) if (mask & (std::uint64_t{1} << i)) {
                 auto [a,b] = pairs[i];
+                if (a == removed || b == removed) continue;
                 if (seen & ((1U << a) | (1U << b))) seen |= (1U << a) | (1U << b);
             }
             changed = seen != previous;
         } while (changed);
-        return seen == (1U << n) - 1;
+        const unsigned target = ((1U << n) - 1) & ~(removed < 0 ? 0U : (1U << removed));
+        return seen == target;
     }
     // Only equal-degree vertices can be exchanged after ordering by degree.
     // Keep one exhaustive canonical representative, rather than storing all
@@ -147,6 +151,8 @@ struct Oracle {
     }
     void accept(std::uint64_t mask) {
         if (!connected(mask)) return;
+        for (int vertex = 0; vertex < n; ++vertex)
+            if (!connected(mask, vertex)) return;
         ++labeled;
         if (orbit.contains(mask)) return;
         const auto id = representatives.size();

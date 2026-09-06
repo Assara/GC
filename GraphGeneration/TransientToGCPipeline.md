@@ -17,8 +17,9 @@ auto counts = GraphGeneration::TransientToGCPipeline<4, 6>{}.run(input, output);
 
 ## Conversion rules
 
-1. Read the mmap transient file and discard each graph containing a vertex of
-   valence below 3. Both 1- and 2-valent transient vertices are excluded.
+1. Read the mmap transient file and retain only vertex-2-connected graphs of
+   minimum valence 3. Both 1- and 2-valent vertices, graphs with cut vertices,
+   and disconnected graphs are excluded. This matches `geng -C -d3`.
 2. Canonicalize each retained graph with the existing final graph canonicalizer.
    Its automorphism parity check determines survival in both conventions:
    - **oddGC:** vertex-permutation sign multiplied by `(-1)^reversed_edges`
@@ -30,7 +31,7 @@ auto counts = GraphGeneration::TransientToGCPipeline<4, 6>{}.run(input, output);
 
 Input stage files are already deduplicated; conversion does not deduplicate
 again. Graphs that vanish in both conventions remain in the output. `total`
-counts all records after the valence filter; `odd_gc` and `even_gc` independently
+counts all records after the valence and connectivity filters; `odd_gc` and `even_gc` independently
 count nonzero records in their respective complexes. Their sum need not equal
 `total`.
 
@@ -39,6 +40,11 @@ writes them directly into an exactly sized mmap file in a second pass. It does
 not buffer the graph collection. An empty result still writes a valid header.
 The input is unchanged, existing outputs are refused, and a temporary output
 is renamed after writing and synchronizing the mapping.
+
+Regenerate existing GC files into a fresh directory when changing from the
+previous all-connected scope. The binary format is unchanged; old files can
+contain graphs with cut vertices. Intermediate transient files are still valid
+inputs and may contain cut vertices.
 
 ## Byte format
 

@@ -53,6 +53,24 @@ int main() {
         directory / "tetrahedron.gcg", directory / "tetrahedron_out.gcg");
     assert(tetra_counts.total == 1 && tetra_counts.odd_gc == 1 && tetra_counts.even_gc == 1);
     assert((signed_survival<1, 1>(tetrahedron) && signed_survival<0, 1>(tetrahedron)));
+    assert(tetrahedron.is_biconnected());
+    // Two K4 blocks sharing a vertex meet the valence bound but have a cut vertex.
+    using Joined = Graph<7, 12, 0, 0, 0, 0, fieldType>;
+    const auto joined = make_graph<Joined>({{0,1},{0,2},{0,6},{1,2},{1,6},{2,6},
+                                           {3,4},{3,5},{3,6},{4,5},{4,6},{5,6}});
+    assert(!joined.is_biconnected());
+    write_input<Joined>(directory / "joined.gcg", {joined});
+    const auto joined_counts = TransientToGCPipeline<7, 12>{}.run(
+        directory / "joined.gcg", directory / "joined_out.gcg");
+    assert(joined_counts.total == 0 && joined_counts.odd_gc == 0 && joined_counts.even_gc == 0);
+    // Disconnected graphs must not pass merely because they have no articulation vertex.
+    using Disjoint = Graph<8, 12, 0, 0, 0, 0, fieldType>;
+    const auto disjoint = make_graph<Disjoint>({{0,1},{0,2},{0,3},{1,2},{1,3},{2,3},
+                                               {4,5},{4,6},{4,7},{5,6},{5,7},{6,7}});
+    assert(!disjoint.is_biconnected());
+    // The valence filter is separate from vertex-2-connectivity.
+    using Cycle = Graph<4, 4, 0, 0, 0, 0, fieldType>;
+    assert(make_graph<Cycle>({{0,1},{1,2},{2,3},{3,0}}).is_biconnected());
     std::array<Int, 4> permutation{0, 1, 2, 3};
     do {
         auto relabeled = tetrahedron;

@@ -4,10 +4,91 @@ PIPELINE_MAX_LOOP ?= 3
 PIPELINE_MAX_VERTICES ?= 6
 PIPELINE_FLAGS ?= -std=c++23 -O1 -I. -IVectorSpace
 PIPELINE_BINARY := build/transient_pipeline_L$(PIPELINE_MAX_LOOP)_V$(PIPELINE_MAX_VERTICES)
-PIPELINE_HEADERS := GraphGeneration/GraphGenerationPipeline.hpp GraphGeneration/TransientGraph2.hpp GraphGeneration/TransientGraph2Standardizer.hpp GraphGeneration/MappedTransientGraph2File.hpp GraphGeneration/MappedGraphFile.hpp LinearProbeSet.hpp graph.hpp GraphStandardizer.hpp
+COMPARISON_VERTICES = $(shell echo $$((2 * ($(PIPELINE_MAX_LOOP) - 1))))
+COMPARISON_DIR ?= output/transient2_counts_L$(PIPELINE_MAX_LOOP)
+PIPELINE_HEADERS := GraphGeneration/BivalentSplitRule.hpp GraphGeneration/GraphGenerationPipeline.hpp GraphGeneration/TransientGraph2.hpp GraphGeneration/TransientGraph2Standardizer.hpp GraphGeneration/MappedTransientGraph2File.hpp GraphGeneration/MappedGraphFile.hpp LinearProbeSet.hpp graph.hpp GraphStandardizer.hpp
 
 .PHONY: all test
 all: $(PIPELINE_BINARY)
+
+TRIANGLE_MAX_LOOP ?= 6
+TRIANGLE_OUTPUT ?= output/triangle_seeds_L$(TRIANGLE_MAX_LOOP)
+TRIANGLE_BINARY := build/triangle_seeds_L$(TRIANGLE_MAX_LOOP)
+
+.PHONY: triangle-seeds run-triangle-seeds
+triangle-seeds: $(TRIANGLE_BINARY)
+
+.PHONY: test-triangle-components
+test-triangle-components: build/triangle_component_stack_test
+	./build/triangle_component_stack_test
+
+build/triangle_component_stack_test: tools/triangle_component_stack_test.cpp GraphGeneration/TriangleComponentStack.hpp
+	@mkdir -p build
+	$(CXX) $(PIPELINE_FLAGS) $< -o $@
+
+run-triangle-seeds: triangle-seeds
+	./$(TRIANGLE_BINARY) "$(TRIANGLE_OUTPUT)"
+
+$(TRIANGLE_BINARY): tools/generate_triangle_seeds.cpp GraphGeneration/TriangleComponentStack.hpp $(PIPELINE_HEADERS)
+	@mkdir -p build
+	$(CXX) $(PIPELINE_FLAGS) -DGC_TRIANGLE_MAX_LOOP=$(TRIANGLE_MAX_LOOP) $< -o $@
+
+TRIANGLE_SPLIT_LOOP ?= 6
+TRIANGLE_SEED_DIR ?= $(TRIANGLE_OUTPUT)
+TRIANGLE_SPLIT_OUTPUT ?= output/triangle_splits_L$(TRIANGLE_SPLIT_LOOP)
+TRIANGLE_SPLIT_BINARY := build/triangle_splits_L$(TRIANGLE_SPLIT_LOOP)
+
+.PHONY: triangle-splits run-triangle-splits
+triangle-splits: $(TRIANGLE_SPLIT_BINARY)
+
+run-triangle-splits: triangle-splits
+	./$(TRIANGLE_SPLIT_BINARY) "$(TRIANGLE_SEED_DIR)" "$(TRIANGLE_SPLIT_OUTPUT)"
+
+$(TRIANGLE_SPLIT_BINARY): tools/split_triangle_seeds.cpp $(PIPELINE_HEADERS)
+	@mkdir -p build
+	$(CXX) $(PIPELINE_FLAGS) -DGC_TRIANGLE_SPLIT_LOOP=$(TRIANGLE_SPLIT_LOOP) $< -o $@
+
+TRIANGLE_COMPARISON_DIR ?= output/triangle_comparison_L$(TRIANGLE_MAX_LOOP)
+TRIANGLE_SPLIT_BINARIES = $(addprefix build/triangle_splits_L,$(shell seq 3 $(TRIANGLE_MAX_LOOP)))
+
+.PHONY: triangle-comparison run-triangle-comparison
+triangle-comparison: $(TRIANGLE_BINARY) $(TRIANGLE_SPLIT_BINARIES)
+
+run-triangle-comparison: triangle-comparison
+	bash tools/compare_triangle_pipeline.sh $(TRIANGLE_MAX_LOOP) "$(TRIANGLE_COMPARISON_DIR)"
+
+build/triangle_splits_L%: tools/split_triangle_seeds.cpp $(PIPELINE_HEADERS)
+	@mkdir -p build
+	$(CXX) $(PIPELINE_FLAGS) -DGC_TRIANGLE_SPLIT_LOOP=$* $< -o $@
+
+# Build only; generation and benchmarking are explicitly separate.
+.PHONY: comparison run-comparison
+comparison:
+	$(MAKE) -f GraphGeneration/Makefile.pipeline all PIPELINE_MAX_VERTICES=$(COMPARISON_VERTICES)
+
+run-comparison: comparison
+	bash tools/compare_transient2_counts.sh $(PIPELINE_MAX_LOOP) "$(COMPARISON_DIR)" "build/transient_pipeline_L$(PIPELINE_MAX_LOOP)_V$(COMPARISON_VERTICES)"
+
+# Reuse the existing hairless generator, with the same optimization flags as Transient2.
+HAIRLESS_LOOPS = $(shell seq 3 $(PIPELINE_MAX_LOOP))
+HAIRLESS_BINARIES = $(addprefix build/hairless_pipeline_L,$(HAIRLESS_LOOPS))
+HAIRLESS_HEADERS := $(wildcard GraphGeneration/*.hpp) graph.hpp GraphStandardizer.hpp LinearProbeSet.hpp
+
+.PHONY: comparison-three-way run-comparison-three-way
+comparison-three-way: comparison $(HAIRLESS_BINARIES)
+
+.PHONY: comparison-hairless run-comparison-hairless
+comparison-hairless: $(HAIRLESS_BINARIES)
+
+run-comparison-hairless: comparison-hairless
+	bash tools/compare_transient2_counts.sh $(PIPELINE_MAX_LOOP) "$(COMPARISON_DIR)" - build/hairless_pipeline_L
+
+run-comparison-three-way: comparison-three-way
+	bash tools/compare_transient2_counts.sh $(PIPELINE_MAX_LOOP) "$(COMPARISON_DIR)" "build/transient_pipeline_L$(PIPELINE_MAX_LOOP)_V$(COMPARISON_VERTICES)" build/hairless_pipeline_L
+
+build/hairless_pipeline_L%: tools/generate_graph_stages.cpp $(HAIRLESS_HEADERS)
+	@mkdir -p build
+	$(CXX) $(PIPELINE_FLAGS) -fopenmp -DGC_GENERATION_LOOP=$* $< -o $@
 
 $(PIPELINE_BINARY): tools/generate_transient_graphs.cpp $(PIPELINE_HEADERS)
 	@mkdir -p build

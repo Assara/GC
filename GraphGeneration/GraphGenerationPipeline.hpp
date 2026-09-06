@@ -3,8 +3,10 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
+#include <ostream>
 #include <string>
 #include <tuple>
 #include <type_traits>
@@ -12,6 +14,7 @@
 #include <vector>
 
 #include "GraphGeneration/MappedTransientGraph2File.hpp"
+#include "GraphGeneration/BivalentSplitRule.hpp"
 #include "GraphGeneration/TransientGraph2Standardizer.hpp"
 #include "LinearProbeSet.hpp"
 
@@ -32,6 +35,8 @@ class GraphGenerationPipeline {
 	template <std::size_t V, std::size_t L>
 	struct Partition {
 		using graph_type = Graph<V, V - 1 + L, 0, 0, 0, 0, fieldType>;
+		static constexpr Int loop_number = L;
+		static constexpr Int max_surplus_edges = MaxLoopNumber - L;
 		std::vector<graph_type> pending;
 		linear_probe_set<graph_type> graphs;
 		std::size_t candidates = 0;
@@ -83,9 +88,9 @@ public:
 			+ "_E" + std::to_string(edges) + ".gcg");
 	}
 
-	// A run starts from K3 and stops at the explicit vertex bound. Files are
-	// transient frontiers only; there is no final/admissible classification.
-	std::vector<StageSummary> run(const std::filesystem::path& directory) {
+	// A run starts only from K3. Files contain transient frontiers.
+	std::vector<StageSummary> run(const std::filesystem::path& directory,
+		std::ostream* progress = nullptr) {
 		assert(!started_ && "pipeline instances can run only once");
 		started_ = true;
 		std::filesystem::create_directories(directory);
@@ -109,35 +114,12 @@ public:
 
 		std::vector<StageSummary> summaries;
 		[&]<std::size_t... I>(std::index_sequence<I...>) {
-			(process_stage<I + 3>(directory, summaries), ...);
+			(process_stage<I + 3>(directory, summaries, progress), ...);
 		}(std::make_index_sequence<MaxVertices - 2>{});
 		return summaries;
 	}
-
 private:
-	template <typename G>
-	static auto eligible_split_vertices(const G& graph,
-		const std::array<Int, G::N_VERTICES_>& valences) {
-		// Children reaching drain() are not yet ordered by valence.
-		const Int maximum = *std::max_element(valences.begin(), valences.end());
-		const auto low_valence_count = std::ranges::count_if(valences,
-			[](Int valence) { return valence <= 2; });
-		std::array<Int, G::N_VERTICES_> low_valence_neighbors{};
-		if (low_valence_count != 0) {
-			for (Int edge = 0; edge < G::N_EDGES_; ++edge) {
-				const auto [a, b] = graph.getEdge(edge);
-				low_valence_neighbors[a] += valences[b] <= 2;
-				low_valence_neighbors[b] += valences[a] <= 2;
-			}
-		}
-		std::array<bool, G::N_VERTICES_> eligible{};
-		for (Int vertex = 0; vertex < G::N_VERTICES_; ++vertex) {
-			// The splitting vertex itself need not be its own neighbour.
-			eligible[vertex] = valences[vertex] == maximum
-				&& low_valence_neighbors[vertex] == low_valence_count - (valences[vertex] <= 2);
-		}
-		return eligible;
-	}
+
 
 	template <std::size_t V>
 	void drain() {
@@ -147,8 +129,6 @@ private:
 				transient_graph2_standardizer<G::N_VERTICES_, G::N_EDGES_> standardizer;
 				partition.candidates += partition.pending.size();
 				for (auto& graph : partition.pending) {
-					const auto eligible = eligible_split_vertices(graph, graph.valence_array());
-					if (std::ranges::none_of(eligible, [](bool value) { return value; })) continue;
 					auto canonical = standardizer.standardize_no_sign(
 						transient_graph2<G::N_VERTICES_, G::N_EDGES_>(std::move(graph)));
 					const auto valences = canonical.graph().valence_array();
@@ -162,25 +142,37 @@ private:
 	}
 
 	template <typename PartitionType>
-	static void write_partition(const std::filesystem::path& directory,
+	static std::size_t write_partition(const std::filesystem::path& directory,
 		const PartitionType& partition) {
 		using G = typename PartitionType::graph_type;
 		const auto path = file_path(directory, G::N_VERTICES_, G::N_EDGES_);
 		const auto temporary = path.string() + ".tmp";
+		std::size_t gc_count = 0;
 		{
 			MappedTransientGraph2Writer<G> writer(temporary, partition.graphs.size());
 			std::size_t record = 0;
 			for (std::size_t slot = 0; slot < partition.graphs.capacity(); ++slot) {
 				const auto& graph = partition.graphs.data()[slot];
-				if (!graph.empty()) writer.write(record++, graph);
+				if (!graph.empty()) {
+					writer.write(record++, graph);
+					const auto valences = graph.valence_array();
+					gc_count += std::ranges::all_of(valences, [](Int valence) { return valence >= 3; })
+						&& graph.is_biconnected();
+				}
 			}
 		}
 		std::filesystem::rename(temporary, path);
+		return gc_count;
 	}
 
 	template <std::size_t V>
 	void process_stage(const std::filesystem::path& directory,
-		std::vector<StageSummary>& summaries) {
+		std::vector<StageSummary>& summaries, std::ostream* progress) {
+		using Clock = std::chrono::steady_clock;
+		const auto started = Clock::now();
+		auto last_report = started;
+		std::size_t processed = 0;
+		if (progress) *progress << "Starting V=" << V << std::endl;
 		StageSummary summary{static_cast<Int>(V), 0, 0};
 		auto& stage = std::get<V - 3>(stages_);
 		std::apply([&](auto&... partitions) {
@@ -188,21 +180,50 @@ private:
 				using G = typename std::remove_reference_t<decltype(partition)>::graph_type;
 				summary.candidates += partition.candidates;
 				summary.unique_graphs += partition.graphs.size();
-				write_partition(directory, partition);
+				const auto gc_count = write_partition(directory, partition);
+				if (progress) {
+					// Unsigned biconnected graphs of minimum valence three.
+					*progress << "COUNT\t" << static_cast<int>(G::N_EDGES_) - static_cast<int>(V) + 1 << '\t' << V
+						<< '\t' << +G::N_EDGES_ << '\t' << gc_count << std::endl;
+					*progress << "Saved V=" << V << " E=" << +G::N_EDGES_
+						<< " transient=" << partition.graphs.size() << std::endl;
+				}
 				if constexpr (V < MaxVertices) {
 					for (std::size_t slot = 0; slot < partition.graphs.capacity(); ++slot) {
 						const auto& graph = partition.graphs.data()[slot];
 						if (graph.empty()) continue;
 						const auto valences = graph.valence_array();
-						const auto eligible = eligible_split_vertices(graph, valences);
-						constexpr Int minimum = 1;
+						assert(std::is_sorted(valences.begin(), valences.end()));
+						auto eligible = bivalent_split_vertices(graph, valences);
+						if constexpr (G::N_VERTICES_ == 3 && G::N_EDGES_ == 3) {
+							// The triangle seed needs just one of its equivalent splits.
+							eligible.fill(false);
+							eligible[0] = true;
+						}
 						const Int preserve = valences[V - 2];
+						constexpr Int minimum = 2;
+						const Int maximum = valences.back() + (valences.back() == V - 1);
+						// Every eligible vertex neighbours all bivalents; the triangle
+						// exception also has bivalent neighbours.
+						const bool has_bivalents = std::binary_search(valences.begin(), valences.end(), Int{2});
 						const transient_graph2<G::N_VERTICES_, G::N_EDGES_> parent(graph);
 						for (Int vertex = 0; vertex < V; ++vertex) {
-							if (eligible[vertex])
-								parent.split(vertex, preserve, minimum, MaxLoopNumber, collector_);
+							if (!eligible[vertex]) continue;
+							if (has_bivalents)
+								parent.split_with_bivalent_neighbours(vertex, preserve, minimum, maximum, 0,
+									partition.loop_number + partition.max_surplus_edges, collector_);
+							else
+								parent.split(vertex, preserve, minimum, maximum, 0,
+									partition.loop_number + partition.max_surplus_edges, collector_);
 						}
 						drain<V + 1>();
+						++processed;
+						if (progress && Clock::now() - last_report >= std::chrono::seconds(5)) {
+							*progress << "Expanding V=" << V << " parents=" << processed
+								<< " elapsed_seconds=" << std::chrono::duration<double>(Clock::now() - started).count()
+								<< std::endl;
+							last_report = Clock::now();
+						}
 					}
 				}
 				partition.graphs = {};
@@ -211,6 +232,9 @@ private:
 			(process(partitions), ...);
 		}, stage);
 		summaries.push_back(summary);
+		if (progress) *progress << "Finished V=" << V << " candidates=" << summary.candidates
+			<< " unique=" << summary.unique_graphs << " stage_seconds="
+			<< std::chrono::duration<double>(Clock::now() - started).count() << std::endl;
 	}
 
 	Stages stages_;

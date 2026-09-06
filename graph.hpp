@@ -165,6 +165,15 @@ Int N_VERTICES,
 				return valence;
 			}
 
+			// Vertex-biconnectivity: at least three vertices, and deleting any
+			// vertex leaves a connected graph. Hair slots do not count as edges.
+			bool is_biconnected() const {
+				if constexpr (N_VERTICES < 3) return false;
+				for (Int vertex = 0; vertex < N_VERTICES; ++vertex)
+					if (!is_connected_after_removing_vertex(vertex)) return false;
+				return true;
+			}
+
 			bool is_connected_after_removing_vertex(Int removed_vertex) const {
 				if constexpr (N_VERTICES <= 2) {
 					return true;

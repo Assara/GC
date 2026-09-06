@@ -1,10 +1,18 @@
 # Graph representative generation
 
+The standalone [triangle seed proof of concept](TriangleSeeds.md) starts from K3
+and adds triangles with at most one new vertex per step.
+
 Build a generator specialized for one loop number:
 
 ```sh
 make graph-stage-generator GRAPH_STAGE_GENERATOR_LOOP=7
 ```
+
+To compare this existing hairless generator with TransientGraph2 and geng, use
+the [three-way comparison](TransientGraph2Pipeline.md#counts-and-performance-against-geng).
+That workflow builds this same source with matching optimization flags and
+uses a separate output directory for each backend.
 
 Generate the vertex-irreducible stages from the unrooted one-edge support seed
 `K2`:
