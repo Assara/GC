@@ -10,8 +10,15 @@
 #include <string>
 #include <vector>
 
-#include "GraphGeneration/TransientGraph2Standardizer.hpp"
+#ifdef GC_TRIANGLE_KEY_STANDARDIZER
+#include "GraphGeneration/TriangleSeedKeyStandardizer.hpp"
+#else
+#include "GraphGeneration/TriangleSeedStandardizer.hpp"
+#endif
 #include "GraphGeneration/TriangleComponentStack.hpp"
+#include "GraphGeneration/TriangleCompletionBudget.hpp"
+#include "GraphGeneration/TriangleSeedEntry.hpp"
+#include "LinearProbeSet.hpp"
 
 #ifndef GC_TRIANGLE_MAX_LOOP
 #define GC_TRIANGLE_MAX_LOOP 6
@@ -35,51 +42,14 @@ Adjacency adjacency(int vertices, const Edges& edges) {
     return result;
 }
 
-// Removing a vertex that leaves k components requires at least k-1 more
-// independent cycles to connect those components without that vertex.
-int cut_loop_lower_bound(int vertices, const Edges& edges) {
-    const auto adjacent = adjacency(vertices, edges);
-    int bound = 0;
-    for (int removed = 0; removed < vertices; ++removed) {
-        std::vector<bool> seen(vertices);
-        seen[removed] = true;
-        int components = 0;
-        for (int start = 0; start < vertices; ++start) {
-            if (seen[start]) continue;
-            ++components;
-            std::vector<int> pending{start};
-            seen[start] = true;
-            for (std::size_t i = 0; i < pending.size(); ++i)
-                for (int v = 0; v < vertices; ++v)
-                    if (!seen[v] && adjacent[pending[i]][v]) {
-                        seen[v] = true;
-                        pending.push_back(v);
-                    }
-        }
-        bound = std::max(bound, components - 1);
-    }
-    return bound;
-}
-
-// Dispatch only the dimensions reachable from K3; reuse the existing canonicalizer.
-template <int V = 3, int E = (3 * (V - 1) + 1) / 2>
-Edges standardize(int vertices, const Edges& edges) {
-    if (vertices == V) {
-        if (edges.size() == 2 * E) {
-            using T = GraphGeneration::transient_graph2<V, E>;
-            typename T::graph_type graph;
-            std::copy(edges.begin(), edges.end(), graph.half_edges.begin());
-            GraphGeneration::transient_graph2_standardizer<V, E> canonicalizer;
-            const auto canonical = canonicalizer.standardize_no_sign(T(graph));
-            const auto& data = canonical.graph().half_edges;
-            return {data.begin(), data.end()};
-        }
-        if constexpr (E < std::min(V * (V - 1) / 2, V - 1 + max_loop))
-            return standardize<V, E + 1>(vertices, edges);
-    } else if constexpr (V < max_vertices) {
-        return standardize<V + 1>(vertices, edges);
-    }
-    throw std::logic_error("unreachable triangle graph dimensions");
+// Every vertex in a triangle-grown graph has degree at least two.
+std::uint64_t bivalent_vertices(int vertices, const Edges& edges) {
+    std::array<int, max_vertices> degrees{};
+    for (Int v : edges) ++degrees[v];
+    std::uint64_t mask = 0;
+    for (int v = 0; v < vertices; ++v)
+        if (degrees[v] == 2) mask |= std::uint64_t{1} << v;
+    return mask;
 }
 
 void write_graph6(std::ostream& out, int vertices, const Edges& edges) {
@@ -98,14 +68,21 @@ void write_graph6(std::ostream& out, int vertices, const Edges& edges) {
     out.put('\n');
 }
 
+#ifdef GC_TRIANGLE_KEY_STANDARDIZER
+struct StoredGraph : GraphGeneration::TriangleSeedEntry<max_loop> {
+    std::array<Int, 6 * max_loop> original{};
+};
+#else
+using StoredGraph = GraphGeneration::TriangleSeedEntry<max_loop>;
+#endif
 class Generator {
     struct LiveGraph {
         Edges edges;
-        // K3 uses one loop; each push consumes another. Thus at most max_loop frames.
+        // Components are relabelled with the graph, preserving stack order.
         GraphGeneration::TriangleComponentStack<max_loop> components;
     };
     struct Bucket {
-        std::map<Edges, LiveGraph> graphs; // Canonical full graph -> original labels and history.
+        linear_probe_set<StoredGraph> graphs;
         std::size_t candidates = 0;
     };
     // Every augmentation strictly increases loop order, including those with no new vertex.
@@ -115,12 +92,32 @@ class Generator {
         const auto& edges = graph.edges;
         const int loop = static_cast<int>(edges.size() / 2) - vertices + 1;
         if (loop > max_loop || vertices > max_vertices) return;
-        if (cut_loop_lower_bound(vertices, edges) > max_loop - loop) return;
+        const auto bivalent = bivalent_vertices(vertices, edges);
+        if (!GraphGeneration::triangle_completion_fits(
+                vertices, std::popcount(bivalent), loop, max_loop)) return;
+        if (bivalent == 0) graph.components.forget();
+#ifdef GC_TRIANGLE_KEY_STANDARDIZER
+        if (graph.components.reversed_sizes_are_greater()) return;
+#else
+        if (graph.components.last_exceeds_first()) return;
+#endif
+        // Forgetting the construction stack does not remove actual cut vertices.
+#ifdef GC_TRIANGLE_KEY_STANDARDIZER
+        const auto key = GraphGeneration::TriangleSeedKeyStandardizer<max_loop>{}
+            .canonical_key(vertices, edges);
+        StoredGraph entry;
+        entry.endpoint_count = edges.size();
+        std::copy(key.begin(), key.end(), entry.canonical.begin());
+        std::copy(edges.begin(), edges.end(), entry.original.begin());
+        entry.components = graph.components;
+#else
+        const auto entry = GraphGeneration::TriangleSeedStandardizer<max_loop>{}
+            .standardize(vertices, edges, graph.components);
+        if (entry.empty()) return; // Noncanonical component orientation.
+#endif
         auto& bucket = pending_[{loop, vertices}];
         ++bucket.candidates;
-        auto key = standardize(vertices, edges);
-        // Keep the first construction history; never relabel its component masks.
-        bucket.graphs.try_emplace(std::move(key), std::move(graph));
+        bucket.graphs.insert(entry);
     }
 
     void expand(int vertices, const LiveGraph& graph) {
@@ -185,12 +182,22 @@ public:
             all.exceptions(std::ios::badbit | std::ios::failbit);
             seeds.exceptions(std::ios::badbit | std::ios::failbit);
             std::size_t seed_count = 0, processed = 0;
-            for (const auto& [canonical, graph] : bucket.graphs) {
+            for (std::size_t slot = 0; slot < bucket.graphs.capacity(); ++slot) {
+                const auto& entry = bucket.graphs.data()[slot];
+                if (entry.empty()) continue;
+                const Edges canonical(entry.canonical.begin(),
+                                      entry.canonical.begin() + entry.endpoint_count);
+#ifdef GC_TRIANGLE_KEY_STANDARDIZER
+                const LiveGraph graph{
+                    Edges(entry.original.begin(), entry.original.begin() + entry.endpoint_count),
+                    entry.components};
+#else
+                const LiveGraph graph{canonical, entry.components};
+#endif
                 write_graph6(all, vertices, canonical);
                 std::vector<int> degrees(vertices);
                 for (Int v : canonical) ++degrees[v];
-                if (std::ranges::all_of(degrees, [](int d) { return d >= 3; })
-                    && cut_loop_lower_bound(vertices, canonical) == 0) {
+                if (std::ranges::all_of(degrees, [](int d) { return d >= 3; })) {
                     write_graph6(seeds, vertices, canonical);
                     ++seed_count;
                 }
@@ -226,6 +233,11 @@ int main(int argc, char** argv) {
         return 2;
     }
     try {
+#ifdef GC_TRIANGLE_KEY_STANDARDIZER
+        std::cout << "Standardizer: full-graph key, original working graph; first/last rule\n";
+#else
+        std::cout << "Standardizer: custom component-aware; ordered stack, first/last rule\n";
+#endif
         std::cout << "Triangle seed proof of concept: K3, max_loop=" << max_loop
                   << " max_vertices=" << max_vertices << std::endl;
         Generator{}.run(argv[1]);

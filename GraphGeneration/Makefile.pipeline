@@ -13,25 +13,51 @@ all: $(PIPELINE_BINARY)
 
 TRIANGLE_MAX_LOOP ?= 6
 TRIANGLE_OUTPUT ?= output/triangle_seeds_L$(TRIANGLE_MAX_LOOP)
+TRIANGLE_STANDARDIZER ?= key
+ifeq ($(TRIANGLE_STANDARDIZER),key)
+TRIANGLE_BINARY := build/triangle_seeds_key_L$(TRIANGLE_MAX_LOOP)
+TRIANGLE_DEFINES := -DGC_TRIANGLE_KEY_STANDARDIZER
+TRIANGLE_KEY_HEADERS := GraphGeneration/TriangleSeedKeyStandardizer.hpp $(PIPELINE_HEADERS)
+else ifeq ($(TRIANGLE_STANDARDIZER),custom)
 TRIANGLE_BINARY := build/triangle_seeds_L$(TRIANGLE_MAX_LOOP)
+else
+$(error TRIANGLE_STANDARDIZER must be custom or key)
+endif
+TRIANGLE_HEADERS := GraphGeneration/TriangleSeedStandardizer.hpp GraphGeneration/TriangleSeedEntry.hpp GraphGeneration/TriangleComponentStack.hpp GraphGeneration/TriangleCompletionBudget.hpp LinearProbeSet.hpp graph_hash.hpp types.hpp
 
 .PHONY: triangle-seeds run-triangle-seeds
 triangle-seeds: $(TRIANGLE_BINARY)
 
+.PHONY: test-triangle-standardizer
+test-triangle-standardizer: build/triangle_seed_standardizer_test
+	./build/triangle_seed_standardizer_test
+
+build/triangle_seed_standardizer_test: tools/triangle_seed_standardizer_test.cpp $(TRIANGLE_HEADERS)
+	@mkdir -p build
+	$(CXX) $(PIPELINE_FLAGS) $< -o $@
+
 .PHONY: test-triangle-components
+test-cut-vertex-splits: build/cut_vertex_split_rule_test
+	./build/cut_vertex_split_rule_test
+
+build/cut_vertex_split_rule_test: tools/cut_vertex_split_rule_test.cpp GraphGeneration/CutVertexSplitRule.hpp graph.hpp CombinatorialUtils.hpp types.hpp
+	@mkdir -p build
+	$(CXX) $(PIPELINE_FLAGS) $< -o $@
+
+.PHONY: test-cut-vertex-splits
 test-triangle-components: build/triangle_component_stack_test
 	./build/triangle_component_stack_test
 
-build/triangle_component_stack_test: tools/triangle_component_stack_test.cpp GraphGeneration/TriangleComponentStack.hpp
+build/triangle_component_stack_test: tools/triangle_component_stack_test.cpp GraphGeneration/TriangleComponentStack.hpp GraphGeneration/TriangleCompletionBudget.hpp GraphGeneration/TriangleSeedEntry.hpp LinearProbeSet.hpp graph_hash.hpp types.hpp
 	@mkdir -p build
 	$(CXX) $(PIPELINE_FLAGS) $< -o $@
 
 run-triangle-seeds: triangle-seeds
 	./$(TRIANGLE_BINARY) "$(TRIANGLE_OUTPUT)"
 
-$(TRIANGLE_BINARY): tools/generate_triangle_seeds.cpp GraphGeneration/TriangleComponentStack.hpp $(PIPELINE_HEADERS)
+$(TRIANGLE_BINARY): tools/generate_triangle_seeds.cpp $(TRIANGLE_HEADERS) $(TRIANGLE_KEY_HEADERS)
 	@mkdir -p build
-	$(CXX) $(PIPELINE_FLAGS) -DGC_TRIANGLE_MAX_LOOP=$(TRIANGLE_MAX_LOOP) $< -o $@
+	$(CXX) $(PIPELINE_FLAGS) $(TRIANGLE_DEFINES) -DGC_TRIANGLE_MAX_LOOP=$(TRIANGLE_MAX_LOOP) $< -o $@
 
 TRIANGLE_SPLIT_LOOP ?= 6
 TRIANGLE_SEED_DIR ?= $(TRIANGLE_OUTPUT)
@@ -44,7 +70,9 @@ triangle-splits: $(TRIANGLE_SPLIT_BINARY)
 run-triangle-splits: triangle-splits
 	./$(TRIANGLE_SPLIT_BINARY) "$(TRIANGLE_SEED_DIR)" "$(TRIANGLE_SPLIT_OUTPUT)"
 
-$(TRIANGLE_SPLIT_BINARY): tools/split_triangle_seeds.cpp $(PIPELINE_HEADERS)
+TRIANGLE_SPLIT_HEADERS := GraphGeneration/CutVertexSplitRule.hpp graph.hpp GraphStandardizer.hpp GraphIsomorphism.hpp CombinatorialUtils.hpp permutation.hpp types.hpp
+
+$(TRIANGLE_SPLIT_BINARY): tools/split_triangle_seeds.cpp $(TRIANGLE_SPLIT_HEADERS)
 	@mkdir -p build
 	$(CXX) $(PIPELINE_FLAGS) -DGC_TRIANGLE_SPLIT_LOOP=$(TRIANGLE_SPLIT_LOOP) $< -o $@
 
@@ -55,9 +83,9 @@ TRIANGLE_SPLIT_BINARIES = $(addprefix build/triangle_splits_L,$(shell seq 3 $(TR
 triangle-comparison: $(TRIANGLE_BINARY) $(TRIANGLE_SPLIT_BINARIES)
 
 run-triangle-comparison: triangle-comparison
-	bash tools/compare_triangle_pipeline.sh $(TRIANGLE_MAX_LOOP) "$(TRIANGLE_COMPARISON_DIR)"
+	bash tools/compare_triangle_pipeline.sh $(TRIANGLE_MAX_LOOP) "$(TRIANGLE_COMPARISON_DIR)" "$(TRIANGLE_BINARY)"
 
-build/triangle_splits_L%: tools/split_triangle_seeds.cpp $(PIPELINE_HEADERS)
+build/triangle_splits_L%: tools/split_triangle_seeds.cpp $(TRIANGLE_SPLIT_HEADERS)
 	@mkdir -p build
 	$(CXX) $(PIPELINE_FLAGS) -DGC_TRIANGLE_SPLIT_LOOP=$* $< -o $@
 

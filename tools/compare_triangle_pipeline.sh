@@ -2,15 +2,16 @@
 set -euo pipefail
 export LC_ALL=C
 
-if (( $# != 2 )) || [[ ! $1 =~ ^([3-9]|10)$ ]]; then
-    echo "Usage: bash $0 MAX_LOOP NEW_OUTPUT_DIRECTORY (3–10)" >&2
+if (( $# < 2 || $# > 3 )) || [[ ! $1 =~ ^([3-9]|10)$ ]]; then
+    echo "Usage: bash $0 MAX_LOOP NEW_OUTPUT_DIRECTORY [SEED_BINARY] (3–10)" >&2
     exit 2
 fi
 maximum=$1
 out=$2
+seed_binary=${3:-build/triangle_seeds_key_L$maximum}
 geng=$(command -v geng || command -v nauty-geng)
 labelg=$(command -v labelg || command -v nauty-labelg)
-for binary in "build/triangle_seeds_L$maximum"; do
+for binary in "$seed_binary"; do
     [[ -x $binary ]] || { echo "Build first: $binary" >&2; exit 2; }
 done
 for ((loop=3; loop<=maximum; ++loop)); do
@@ -35,7 +36,7 @@ timed() {
 }
 
 echo '=== TRIANGLE SEEDS ==='
-timed seeds all all "$out/logs/seeds.log" "build/triangle_seeds_L$maximum" "$out/seeds"
+timed seeds all all "$out/logs/seeds.log" "$seed_binary" "$out/seeds"
 echo '=== VERTEX SPLITTING ==='
 for ((loop=3; loop<=maximum; ++loop)); do
     timed splits "$loop" all "$out/logs/splits_L$loop.log" "build/triangle_splits_L$loop" "$out/seeds" "$out/splits_L$loop"

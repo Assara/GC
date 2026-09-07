@@ -11,7 +11,9 @@
 #include <stdexcept>
 #include <string>
 
-#include "GraphGeneration/TransientGraph2Standardizer.hpp"
+#include "graph.hpp"
+#include "GraphStandardizer.hpp"
+#include "GraphGeneration/CutVertexSplitRule.hpp"
 
 #ifndef GC_TRIANGLE_SPLIT_LOOP
 #define GC_TRIANGLE_SPLIT_LOOP 6
@@ -28,46 +30,34 @@ constexpr int first_vertices = [] {
 static_assert(loop_number >= 3 && max_vertices <= 62);
 
 template <int V>
-using Transient = GraphGeneration::transient_graph2<V, V - 1 + loop_number>;
+using SplitStageGraph = Graph<V, V - 1 + loop_number, 0, 0, 0, 0, fieldType>;
 
 template <int V>
 struct Stage {
     struct Less {
-        bool operator()(const Transient<V>& a, const Transient<V>& b) const {
-            return a.graph().half_edges < b.graph().half_edges;
+        bool operator()(const SplitStageGraph<V>& a, const SplitStageGraph<V>& b) const {
+            return a.half_edges < b.half_edges;
         }
     };
-    std::set<Transient<V>, Less> graphs;
+    std::set<SplitStageGraph<V>, Less> graphs;
     std::size_t candidates = 0;
 
-    void add(Transient<V> graph) {
+    void add(SplitStageGraph<V> graph) {
         ++candidates;
-        GraphGeneration::transient_graph2_standardizer<V, V - 1 + loop_number> standardizer;
+        GraphStandardizer<V, V - 1 + loop_number, 0, 0, 0, 0, fieldType> standardizer;
         graphs.insert(standardizer.standardize_no_sign(graph));
     }
 };
 
 template <int V>
-struct Collector {
-    Stage<V>& stage;
-    template <typename G>
-    void add(G graph) {
-        if constexpr (G::N_VERTICES_ == V && G::N_EDGES_ == V - 1 + loop_number)
-            stage.add(Transient<V>(std::move(graph)));
-        else
-            throw std::logic_error("split changed loop order");
-    }
-};
-
-template <int V>
-Transient<V> read_seed(const std::string& line) {
+SplitStageGraph<V> read_seed(const std::string& line) {
     constexpr int edges = V - 1 + loop_number;
     constexpr int bits = V * (V - 1) / 2;
     if (line.size() != 1 + (bits + 5) / 6 || line[0] != V + 63)
         throw std::runtime_error("invalid seed graph6 dimensions");
     for (unsigned char c : line)
         if (c < 63 || c > 126) throw std::runtime_error("invalid graph6 character");
-    typename Transient<V>::graph_type graph;
+    SplitStageGraph<V> graph;
     std::array<std::array<bool, V>, V> adjacent{};
     int bit = 0, e = 0;
     for (int b = 1; b < V; ++b)
@@ -88,13 +78,12 @@ Transient<V> read_seed(const std::string& line) {
             for (int c = 0; c < V; ++c) covered |= adjacent[a][c] && adjacent[b][c];
             if (!covered) throw std::runtime_error("seed edge is not covered by a triangle");
         }
-    return Transient<V>(std::move(graph));
+    return graph;
 }
 
 template <int V>
-void write_graph6(std::ostream& out, const Transient<V>& transient) {
+void write_graph6(std::ostream& out, const SplitStageGraph<V>& graph) {
     std::array<std::array<bool, V>, V> adjacent{};
-    const auto& graph = transient.graph();
     for (int e = 0; e < graph.N_EDGES_; ++e) {
         const auto [a, b] = graph.getEdge(e);
         adjacent[a][b] = adjacent[b][a] = true;
@@ -144,36 +133,59 @@ class Pipeline {
         std::ofstream graphs(output_ / ("graphs_L" + std::to_string(loop_number)
             + "_V" + std::to_string(V) + ".g6"));
         graphs.exceptions(std::ios::badbit | std::ios::failbit);
-        for (const auto& graph : stage.graphs) write_graph6<V>(graphs, graph);
-        graphs.close();
-
+        std::size_t output_count = 0;
         Stage<V + 1> next;
-        if constexpr (V < max_vertices) {
-            Collector<V + 1> collector{next};
-            std::size_t processed = 0;
-            for (const auto& graph : stage.graphs) {
-                const auto valences = graph.graph().valence_array();
-                assert(std::is_sorted(valences.begin(), valences.end()));
-                const Int maximum = valences.back();
-                for (int vertex = V - 1; vertex >= 0 && valences[vertex] > 3; --vertex)
-                    // Equal loop bounds prohibit every shared incidence.
-                    graph.split(vertex, 0, 3, maximum, loop_number, loop_number, collector);
-                ++processed;
-                const auto now = std::chrono::steady_clock::now();
-                if (now - last_progress >= std::chrono::seconds(5)) {
-                    std::cout << "Expanding V=" << V << " parents=" << processed
-                              << '/' << stage.graphs.size() << std::endl;
-                    last_progress = now;
+        std::size_t processed = 0;
+        for (const auto& graph : stage.graphs) {
+            const GraphGeneration::CutVertexSplitRule<V> cut(graph);
+            if (cut.vertex < 0) {
+                write_graph6<V>(graphs, graph);
+                ++output_count;
+            }
+            if constexpr (V < max_vertices) {
+                const auto valences = graph.valence_array();
+                for (int vertex = V - 1; vertex >= 0; --vertex) {
+                    // Resolve one cut vertex completely before any other split.
+                    // Recompute on the child to resolve any remaining cuts.
+                    if (cut.vertex >= 0 && vertex != cut.vertex) continue;
+                    if (valences[vertex] <= 3) continue;
+                    const auto adjacent = graph.adjacent(vertex);
+                    const Int last = adjacent.size() - 1;
+                    // Keep incidence zero on the old vertex to identify
+                    // complementary splits. Each side needs two incidences
+                    // plus the connecting edge to reach valence three.
+                    for (Int moved = 2; moved < last; ++moved) {
+                        auto subset = combutils::firstSubset(1, moved);
+                        do {
+                            if (cut.vertex >= 0) {
+                                std::uint64_t neighbours = 0;
+                                for (auto index : subset)
+                                    neighbours |= std::uint64_t{1}
+                                        << graph.half_edges[adjacent[index] ^ 1];
+                                if (!cut.resolves(neighbours)) continue;
+                            }
+                            next.add(graph.splitGraph(vertex, adjacent, subset));
+                        } while (combutils::nextSubset(subset, last));
+                    }
                 }
             }
+            ++processed;
+            const auto now = std::chrono::steady_clock::now();
+            if (now - last_progress >= std::chrono::seconds(5)) {
+                std::cout << "Expanding V=" << V << " parents=" << processed
+                          << '/' << stage.graphs.size() << std::endl;
+                last_progress = now;
+            }
         }
+        graphs.close();
         const double seconds = std::chrono::duration<double>(
             std::chrono::steady_clock::now() - started).count();
         counts_ << loop_number << '\t' << V << '\t' << V - 1 + loop_number
-                << '\t' << loaded << '\t' << stage.candidates << '\t' << stage.graphs.size()
+                << '\t' << loaded << '\t' << stage.candidates << '\t' << output_count
                 << '\t' << seconds << std::endl;
         std::cout << "Finished V=" << V << " candidates=" << stage.candidates
-                  << " graphs=" << stage.graphs.size() << " seconds=" << seconds << std::endl;
+                  << " graphs=" << output_count << " pending_cut_graphs=" << stage.graphs.size() - output_count
+                  << " seconds=" << seconds << std::endl;
         stage.graphs.clear();
         if constexpr (V < max_vertices) process<V + 1>(std::move(next));
     }
