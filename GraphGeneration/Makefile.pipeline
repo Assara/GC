@@ -28,6 +28,16 @@ TRIANGLE_HEADERS := GraphGeneration/TriangleSeedStandardizer.hpp GraphGeneration
 .PHONY: triangle-seeds run-triangle-seeds
 triangle-seeds: $(TRIANGLE_BINARY)
 
+UNRESTRICTED_TRIANGLE_BINARY := build/triangle_seeds_unrestricted_L$(TRIANGLE_MAX_LOOP)
+UNRESTRICTED_TRIANGLE_HEADERS := GraphGeneration/UnrestrictedTriangleSeedGenerator.hpp GraphGeneration/TriangleGraphEntry.hpp GraphGeneration/TriangleCompletionBudget.hpp GraphGeneration/TriangleSeedKeyStandardizer.hpp $(PIPELINE_HEADERS)
+
+.PHONY: unrestricted-triangle-seeds
+unrestricted-triangle-seeds: $(UNRESTRICTED_TRIANGLE_BINARY)
+
+$(UNRESTRICTED_TRIANGLE_BINARY): tools/generate_unrestricted_triangle_seeds.cpp $(UNRESTRICTED_TRIANGLE_HEADERS)
+	@mkdir -p build
+	$(CXX) $(PIPELINE_FLAGS) -DGC_TRIANGLE_MAX_LOOP=$(TRIANGLE_MAX_LOOP) $< -o $@
+
 .PHONY: test-triangle-standardizer
 test-triangle-standardizer: build/triangle_seed_standardizer_test
 	./build/triangle_seed_standardizer_test
@@ -63,6 +73,10 @@ TRIANGLE_SPLIT_LOOP ?= 6
 TRIANGLE_SEED_DIR ?= $(TRIANGLE_OUTPUT)
 TRIANGLE_SPLIT_OUTPUT ?= output/triangle_splits_L$(TRIANGLE_SPLIT_LOOP)
 TRIANGLE_SPLIT_BINARY := build/triangle_splits_L$(TRIANGLE_SPLIT_LOOP)
+TRIANGLE_PARALLEL_SPLIT_BINARY := build/triangle_splits_omp_L$(TRIANGLE_SPLIT_LOOP)
+
+.PHONY: triangle-splits-omp
+triangle-splits-omp: $(TRIANGLE_PARALLEL_SPLIT_BINARY)
 
 .PHONY: triangle-splits run-triangle-splits
 triangle-splits: $(TRIANGLE_SPLIT_BINARY)
@@ -70,7 +84,11 @@ triangle-splits: $(TRIANGLE_SPLIT_BINARY)
 run-triangle-splits: triangle-splits
 	./$(TRIANGLE_SPLIT_BINARY) "$(TRIANGLE_SEED_DIR)" "$(TRIANGLE_SPLIT_OUTPUT)"
 
-TRIANGLE_SPLIT_HEADERS := GraphGeneration/CutVertexSplitRule.hpp graph.hpp GraphStandardizer.hpp GraphIsomorphism.hpp CombinatorialUtils.hpp permutation.hpp types.hpp
+TRIANGLE_SPLIT_HEADERS := GraphGeneration/TriangleSplitCommon.hpp GraphGeneration/ValenceGraphStandardizer.hpp GraphGeneration/SplitReservation.hpp GraphGeneration/SplitStageEstimate.hpp GraphGeneration/SplitReductionRule.hpp LinearProbeSet.hpp graph_hash.hpp GraphGeneration/CutVertexSplitRule.hpp graph.hpp GraphStandardizer.hpp GraphIsomorphism.hpp CombinatorialUtils.hpp permutation.hpp types.hpp
+
+$(TRIANGLE_PARALLEL_SPLIT_BINARY): tools/split_triangle_seeds.cpp $(TRIANGLE_SPLIT_HEADERS)
+	@mkdir -p build
+	$(CXX) $(PIPELINE_FLAGS) -fopenmp -DGC_TRIANGLE_PARALLEL_SPLITS -DGC_TRIANGLE_SPLIT_LOOP=$(TRIANGLE_SPLIT_LOOP) $< -o $@
 
 $(TRIANGLE_SPLIT_BINARY): tools/split_triangle_seeds.cpp $(TRIANGLE_SPLIT_HEADERS)
 	@mkdir -p build
@@ -165,3 +183,32 @@ build/verify_gc_pipeline: tools/verify_gc_pipeline.cpp $(GC_CONVERTER_HEADERS)
 build/verify_gc_pipeline_L%: tools/verify_gc_pipeline.cpp $(GC_CONVERTER_HEADERS)
 	@mkdir -p build
 	$(CXX) $(PIPELINE_FLAGS) -DGC_VERIFY_MAX_LOOP=$* $< -o $@
+
+.PHONY: test-split-reduction
+test-split-reduction: build/split_reduction_rule_test
+	./build/split_reduction_rule_test
+
+build/split_reduction_rule_test: tools/split_reduction_rule_test.cpp $(TRIANGLE_SPLIT_HEADERS)
+	@mkdir -p build
+	$(CXX) $(PIPELINE_FLAGS) $< -o $@
+
+.PHONY: test-split-reservation
+test-split-reservation: build/split_reservation_test
+	./build/split_reservation_test
+
+build/split_reservation_test: tools/split_reservation_test.cpp GraphGeneration/SplitReservation.hpp LinearProbeSet.hpp
+	@mkdir -p build
+	$(CXX) $(PIPELINE_FLAGS) $< -o $@
+
+# Disk-backed, one target valence group at a time; existing pipeline stays available.
+.PHONY: triangle-splits-valence
+triangle-splits-valence: build/triangle_splits_valence_L$(TRIANGLE_SPLIT_LOOP)
+
+build/triangle_splits_valence_L%: tools/split_triangle_seeds_by_valence.cpp GraphGeneration/ValenceSplitPlan.hpp $(TRIANGLE_SPLIT_HEADERS)
+	@mkdir -p build
+	$(CXX) $(PIPELINE_FLAGS) -fopenmp -DGC_TRIANGLE_PARALLEL_SPLITS -DGC_TRIANGLE_SPLIT_LOOP=$* $< -o $@
+
+# Usage: build/valence_split_pipeline_test_L9 REFERENCE_DIRECTORY RESULT_DIRECTORY
+build/valence_split_pipeline_test_L%: tools/valence_split_pipeline_test.cpp GraphGeneration/ValenceSplitPlan.hpp $(TRIANGLE_SPLIT_HEADERS)
+	@mkdir -p build
+	$(CXX) $(PIPELINE_FLAGS) -UNDEBUG -DGC_TRIANGLE_SPLIT_LOOP=$* $< -o $@

@@ -67,8 +67,8 @@ class linear_probe_set {
 			}
 
 			const size_type new_capacity = capacity_for_size(size_ + 1);
-			if (new_capacity != old_capacity) {
-				reallocate(new_capacity, old_capacity);
+			if (new_capacity > old_capacity) {
+				if (!reallocate(new_capacity, old_capacity)) std::abort();
 				capacity_ = new_capacity;
 				const size_type mask = new_capacity - 1;
 				insertion_index = value.hash() & mask;
@@ -82,11 +82,17 @@ class linear_probe_set {
 		}
 
 		void reserve(size_type expected_elements) noexcept {
+			if (!try_reserve(expected_elements)) std::abort();
+		}
+
+		// Allocation failure leaves the existing table intact for a smaller retry.
+		bool try_reserve(size_type expected_elements) noexcept {
 			const size_type old_capacity = capacity_;
 			const size_type new_capacity = capacity_for_size(expected_elements);
-			if (new_capacity <= old_capacity) return;
-			reallocate(new_capacity, old_capacity);
+			if (new_capacity <= old_capacity) return true;
+			if (!reallocate(new_capacity, old_capacity)) return false;
 			capacity_ = new_capacity;
+			return true;
 		}
 
 		bool contains(const Value& value) const noexcept {
@@ -134,11 +140,11 @@ class linear_probe_set {
 			return std::bit_ceil(requested);
 		}
 
-		void reallocate(size_type new_capacity, size_type old_capacity) noexcept {
+		bool reallocate(size_type new_capacity, size_type old_capacity) noexcept {
+			std::unique_ptr<Value[]> allocated(new (std::nothrow) Value[new_capacity]);
+			if (!allocated) return false;
 			std::unique_ptr<Value[]> old_values = std::move(values_);
-			if (new_capacity == 0) return;
-			values_.reset(new (std::nothrow) Value[new_capacity]);
-			if (values_ == nullptr) std::abort();
+			values_ = std::move(allocated);
 			if (!values_[0].empty()) {
 				std::abort();
 			}
@@ -151,6 +157,7 @@ class linear_probe_set {
 				}
 				values_[new_index] = std::move(old_values[index]);
 			}
+			return true;
 		}
 
 		std::unique_ptr<Value[]> values_;

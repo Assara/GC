@@ -1,111 +1,13 @@
-#include <algorithm>
-#include <array>
-#include <cassert>
-#include <chrono>
-#include <filesystem>
-#include <fstream>
-#include <iostream>
-#include <map>
-#include <set>
-#include <sstream>
-#include <stdexcept>
-#include <string>
-
-#include "graph.hpp"
-#include "GraphStandardizer.hpp"
-#include "GraphGeneration/CutVertexSplitRule.hpp"
-
-#ifndef GC_TRIANGLE_SPLIT_LOOP
-#define GC_TRIANGLE_SPLIT_LOOP 6
-#endif
+#include "GraphGeneration/TriangleSplitCommon.hpp"
 
 namespace {
-constexpr int loop_number = GC_TRIANGLE_SPLIT_LOOP;
-constexpr int max_vertices = 2 * (loop_number - 1); // Minimum degree three.
-constexpr int first_vertices = [] {
-    int v = 4;
-    while (v * (v - 1) / 2 < v - 1 + loop_number) ++v;
-    return v;
-}();
-static_assert(loop_number >= 3 && max_vertices <= 62);
-
-template <int V>
-using SplitStageGraph = Graph<V, V - 1 + loop_number, 0, 0, 0, 0, fieldType>;
-
-template <int V>
-struct Stage {
-    struct Less {
-        bool operator()(const SplitStageGraph<V>& a, const SplitStageGraph<V>& b) const {
-            return a.half_edges < b.half_edges;
-        }
-    };
-    std::set<SplitStageGraph<V>, Less> graphs;
-    std::size_t candidates = 0;
-
-    void add(SplitStageGraph<V> graph) {
-        ++candidates;
-        GraphStandardizer<V, V - 1 + loop_number, 0, 0, 0, 0, fieldType> standardizer;
-        graphs.insert(standardizer.standardize_no_sign(graph));
-    }
-};
-
-template <int V>
-SplitStageGraph<V> read_seed(const std::string& line) {
-    constexpr int edges = V - 1 + loop_number;
-    constexpr int bits = V * (V - 1) / 2;
-    if (line.size() != 1 + (bits + 5) / 6 || line[0] != V + 63)
-        throw std::runtime_error("invalid seed graph6 dimensions");
-    for (unsigned char c : line)
-        if (c < 63 || c > 126) throw std::runtime_error("invalid graph6 character");
-    SplitStageGraph<V> graph;
-    std::array<std::array<bool, V>, V> adjacent{};
-    int bit = 0, e = 0;
-    for (int b = 1; b < V; ++b)
-        for (int a = 0; a < b; ++a, ++bit)
-            if (((line[1 + bit / 6] - 63) >> (5 - bit % 6)) & 1) {
-                if (e == edges) throw std::runtime_error("seed has too many edges");
-                graph.setEdge(e++, a, b);
-                adjacent[a][b] = adjacent[b][a] = true;
-            }
-    if (e != edges) throw std::runtime_error("seed has wrong loop order");
-    const auto valences = graph.valence_array();
-    if (std::ranges::any_of(valences, [](Int d) { return d < 3; }))
-        throw std::runtime_error("use the minimum-degree-three seed files");
-    for (int a = 0; a < V; ++a)
-        for (int b = a + 1; b < V; ++b) {
-            if (!adjacent[a][b]) continue;
-            bool covered = false;
-            for (int c = 0; c < V; ++c) covered |= adjacent[a][c] && adjacent[b][c];
-            if (!covered) throw std::runtime_error("seed edge is not covered by a triangle");
-        }
-    return graph;
-}
-
-template <int V>
-void write_graph6(std::ostream& out, const SplitStageGraph<V>& graph) {
-    std::array<std::array<bool, V>, V> adjacent{};
-    for (int e = 0; e < graph.N_EDGES_; ++e) {
-        const auto [a, b] = graph.getEdge(e);
-        adjacent[a][b] = adjacent[b][a] = true;
-    }
-    out.put(static_cast<char>(V + 63));
-    int value = 0, bits = 0;
-    for (int b = 1; b < V; ++b)
-        for (int a = 0; a < b; ++a) {
-            value = (value << 1) | adjacent[a][b];
-            if (++bits == 6) {
-                out.put(static_cast<char>(value + 63));
-                value = bits = 0;
-            }
-        }
-    if (bits) out.put(static_cast<char>((value << (6 - bits)) + 63));
-    out.put('\n');
-}
+using namespace GraphGeneration::triangle_split_detail;
 
 class Pipeline {
     std::filesystem::path input_, output_;
     std::map<int, std::size_t> seed_counts_;
     std::ofstream counts_;
+    GraphGeneration::SplitStageEstimator estimator_;
 
     std::filesystem::path seed_path(int vertices) const {
         return input_ / ("seeds_L" + std::to_string(loop_number)
@@ -128,27 +30,35 @@ class Pipeline {
             if (!input.eof() || loaded != seed_counts_.at(V))
                 throw std::runtime_error("seed file count does not match counts.tsv");
         }
+        auto parents = stage.take_sorted();
         std::cout << "Starting L=" << loop_number << " V=" << V
-                  << " seeds=" << loaded << " graphs=" << stage.graphs.size() << std::endl;
+                  << " seeds=" << loaded << " graphs=" << parents.size() << std::endl;
         std::ofstream graphs(output_ / ("graphs_L" + std::to_string(loop_number)
             + "_V" + std::to_string(V) + ".g6"));
         graphs.exceptions(std::ios::badbit | std::ios::failbit);
         std::size_t output_count = 0;
         Stage<V + 1> next;
-        std::size_t processed = 0;
-        for (const auto& graph : stage.graphs) {
+        if constexpr (V < max_vertices) {
+            const auto estimate = estimator_.next(loop_number, V, parents.size());
+            const auto budget = GraphGeneration::split_reservation_budget();
+            const auto reserved = next.reserve(estimate, budget);
+            std::cout << "Reserving V=" << V + 1 << " estimated_graphs=" << estimate
+                      << " reserved_graphs=" << reserved << " budget_bytes=" << budget << std::endl;
+            if (reserved < estimate)
+                std::cout << "Reservation stepped down to fit memory headroom" << std::endl;
+        }
+        const auto expand = [&](const SplitStageGraph<V>& graph, Stage<V + 1>& destination) {
             const GraphGeneration::CutVertexSplitRule<V> cut(graph);
-            if (cut.vertex < 0) {
-                write_graph6<V>(graphs, graph);
-                ++output_count;
-            }
             if constexpr (V < max_vertices) {
                 const auto valences = graph.valence_array();
+                std::optional<GraphGeneration::SplitReductionRule<SplitStageGraph<V>>> reduction;
+                if (cut.vertex < 0) reduction.emplace(graph);
                 for (int vertex = V - 1; vertex >= 0; --vertex) {
                     // Resolve one cut vertex completely before any other split.
                     // Recompute on the child to resolve any remaining cuts.
                     if (cut.vertex >= 0 && vertex != cut.vertex) continue;
                     if (valences[vertex] <= 3) continue;
+                    if (reduction && reduction->skip_vertex(vertex)) continue;
                     const auto adjacent = graph.adjacent(vertex);
                     const Int last = adjacent.size() - 1;
                     // Keep incidence zero on the old vertex to identify
@@ -157,41 +67,92 @@ class Pipeline {
                     for (Int moved = 2; moved < last; ++moved) {
                         auto subset = combutils::firstSubset(1, moved);
                         do {
-                            if (cut.vertex >= 0) {
-                                std::uint64_t neighbours = 0;
-                                for (auto index : subset)
-                                    neighbours |= std::uint64_t{1}
-                                        << graph.half_edges[adjacent[index] ^ 1];
-                                if (!cut.resolves(neighbours)) continue;
-                            }
-                            next.add(graph.splitGraph(vertex, adjacent, subset));
+                            std::uint64_t neighbours = 0;
+                            for (auto index : subset)
+                                neighbours |= std::uint64_t{1}
+                                    << graph.half_edges[adjacent[index] ^ 1];
+                            if (cut.vertex >= 0 && !cut.resolves(neighbours)) continue;
+                            if (reduction && reduction->redundant(vertex, neighbours)) continue;
+                            destination.add(graph.splitGraph(vertex, adjacent, subset));
                         } while (combutils::nextSubset(subset, last));
                     }
                 }
             }
-            ++processed;
-            const auto now = std::chrono::steady_clock::now();
-            if (now - last_progress >= std::chrono::seconds(5)) {
-                std::cout << "Expanding V=" << V << " parents=" << processed
-                          << '/' << stage.graphs.size() << std::endl;
-                last_progress = now;
+            return cut.vertex < 0;
+        };
+#ifdef GC_TRIANGLE_PARALLEL_SPLITS
+        if constexpr (V < max_vertices) {
+            // Stable parents and separate output flags preserve serial file order.
+            std::vector<unsigned char> output_flags(parents.size());
+            std::atomic<bool> failed{false};
+            std::atomic<std::size_t> processed{0};
+            std::exception_ptr error;
+            #pragma omp parallel
+            {
+                const int worker = omp_get_thread_num();
+                #pragma omp for schedule(dynamic, 8)
+                for (std::size_t i = 0; i < parents.size(); ++i) {
+                    if (failed.load(std::memory_order_relaxed)) continue;
+                    try {
+                        output_flags[i] = expand(parents[i], next);
+                        const auto done = processed.fetch_add(1, std::memory_order_relaxed) + 1;
+                        if (worker == 0) {
+                            const auto now = std::chrono::steady_clock::now();
+                            if (now - last_progress >= std::chrono::seconds(5)) {
+                                std::cout << "Expanding V=" << V << " parents=" << done
+                                          << '/' << parents.size() << std::endl;
+                                last_progress = now;
+                            }
+                        }
+                    } catch (...) {
+                        failed.store(true, std::memory_order_relaxed);
+                        #pragma omp critical(triangle_split_error)
+                        {
+                            if (!error) error = std::current_exception();
+                        }
+                    }
+                }
+            }
+            if (error) std::rethrow_exception(error);
+            for (std::size_t i = 0; i < parents.size(); ++i) {
+                if (!output_flags[i]) continue;
+                write_graph6<V>(graphs, parents[i]);
+                ++output_count;
+            }
+        } else
+#endif
+        {
+            std::size_t processed = 0;
+            for (const auto& graph : parents) {
+                if (expand(graph, next)) {
+                    write_graph6<V>(graphs, graph);
+                    ++output_count;
+                }
+                ++processed;
+                const auto now = std::chrono::steady_clock::now();
+                if (now - last_progress >= std::chrono::seconds(5)) {
+                    std::cout << "Expanding V=" << V << " parents=" << processed
+                              << '/' << parents.size() << std::endl;
+                    last_progress = now;
+                }
             }
         }
         graphs.close();
         const double seconds = std::chrono::duration<double>(
             std::chrono::steady_clock::now() - started).count();
         counts_ << loop_number << '\t' << V << '\t' << V - 1 + loop_number
-                << '\t' << loaded << '\t' << stage.candidates << '\t' << output_count
+                << '\t' << loaded << '\t' << stage.candidates() << '\t' << output_count
                 << '\t' << seconds << std::endl;
-        std::cout << "Finished V=" << V << " candidates=" << stage.candidates
-                  << " graphs=" << output_count << " pending_cut_graphs=" << stage.graphs.size() - output_count
+        std::cout << "Finished V=" << V << " candidates=" << stage.candidates()
+                  << " graphs=" << output_count << " pending_cut_graphs=" << parents.size() - output_count
                   << " seconds=" << seconds << std::endl;
-        stage.graphs.clear();
+        std::vector<SplitStageGraph<V>>{}.swap(parents);
         if constexpr (V < max_vertices) process<V + 1>(std::move(next));
     }
 
 public:
     void run(const std::filesystem::path& input, const std::filesystem::path& output) {
+        estimator_ = {};
         input_ = input;
         output_ = output;
         std::ifstream manifest(input_ / "counts.tsv");
@@ -240,6 +201,9 @@ int main(int argc, char** argv) {
     try {
         std::cout << "Triangle seed splitting: loop=" << loop_number
                   << " max_vertices=" << max_vertices << "; all vertices of valence > 3, no duplication\n";
+#ifdef GC_TRIANGLE_PARALLEL_SPLITS
+        std::cout << "OpenMP workers=" << omp_get_max_threads() << std::endl;
+#endif
         Pipeline{}.run(argv[1], argv[2]);
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

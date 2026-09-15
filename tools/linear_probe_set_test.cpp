@@ -77,10 +77,23 @@ void test_growth_and_reserve() {
 			"reserve preserves elements");
 	}
 
+	const auto reserved_capacity = set.capacity();
+	check(set.insert(collision_value{1001}), "insert after reserve succeeds");
+	check(set.capacity() == reserved_capacity, "insert retains reserved capacity");
+	for (int value = 1; value <= 1001; ++value)
+		check(set.contains(collision_value{value}), "reserved insertion preserves elements");
+
 	linear_probe_set<collision_value> empty_set;
 	empty_set.reserve(100);
 	check(empty_set.size() == 0 && empty_set.capacity() >= 100,
 		"an empty set can reserve storage");
+	const auto empty_reserved_capacity = empty_set.capacity();
+	for (int value = 1; value <= 100; ++value)
+		check(empty_set.insert(collision_value{value}), "fill reserved empty set");
+	check(empty_set.capacity() == empty_reserved_capacity, "reserved empty set does not shrink");
+	for (int value = 101; value <= 200; ++value)
+		check(empty_set.insert(collision_value{value}), "grow beyond reservation");
+	check(empty_set.capacity() > empty_reserved_capacity, "underestimate still grows");
 }
 
 void test_graph_sentinels_and_hash() {
