@@ -8,7 +8,7 @@ if (( $# < 2 || $# > 3 )) || [[ ! $1 =~ ^([3-9]|10)$ ]]; then
 fi
 maximum=$1
 out=$2
-seed_binary=${3:-build/triangle_seeds_key_L$maximum}
+seed_binary=${3:-build/triangle_seeds_unrestricted_L$maximum}
 geng=$(command -v geng || command -v nauty-geng)
 labelg=$(command -v labelg || command -v nauty-labelg)
 for binary in "$seed_binary"; do

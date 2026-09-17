@@ -45,6 +45,43 @@ constexpr int first_vertices = [] {
 }();
 static_assert(loop_number >= 3 && max_vertices <= 62);
 
+inline std::filesystem::path triangle_seed_path(const std::filesystem::path& input, int vertices) {
+    return input / ("seeds_L" + std::to_string(loop_number)
+        + "_V" + std::to_string(vertices) + ".g6");
+}
+
+inline std::map<int, std::size_t> read_triangle_seed_counts(const std::filesystem::path& input) {
+    std::map<int, std::size_t> counts;
+    std::ifstream manifest(input / "counts.tsv");
+    std::string line;
+    if (!std::getline(manifest, line)
+        || (line != "loop\tvertices\tedges\tcandidates\ttriangle_graphs\tseed_graphs\tseconds"
+            && line != "loop\tvertices\tedges\tcandidates\ttriangle_graphs\tmin_degree_3\tseconds"))
+        throw std::runtime_error("expected triangle seed generator counts.tsv");
+    while (std::getline(manifest, line)) {
+        int loop, vertices, edges;
+        std::size_t candidates, total, seeds;
+        double seconds;
+        std::istringstream row(line);
+        if (!(row >> loop >> vertices >> edges >> candidates >> total >> seeds >> seconds))
+            throw std::runtime_error("invalid triangle seed count row");
+        if (loop == loop_number && vertices >= first_vertices && vertices <= max_vertices) {
+            if (edges != vertices - 1 + loop || seeds > total
+                || !counts.emplace(vertices, seeds).second)
+                throw std::runtime_error("inconsistent triangle seed counts");
+        }
+    }
+    if (!manifest.eof()) throw std::runtime_error("failed reading seed counts");
+    // The unrestricted generator omits stages with no surviving triangle graphs.
+    // Validate every listed file rather than assuming a dense range of stages.
+    if (counts.empty())
+        throw std::runtime_error("missing triangle seed loop L=" + std::to_string(loop_number));
+    for (const auto& [v, count] : counts)
+        if (!std::filesystem::is_regular_file(triangle_seed_path(input, v)))
+            throw std::runtime_error("missing triangle seed stage V=" + std::to_string(v));
+    return counts;
+}
+
 template <int V>
 using SplitStageGraph = Graph<V, V - 1 + loop_number, 0, 0, 0, 0, fieldType>;
 

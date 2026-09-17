@@ -4,7 +4,9 @@
 #include <span>
 #include <stdexcept>
 #include <vector>
-#include "GraphGeneration/TransientGraph2Standardizer.hpp"
+#include "graph.hpp"
+#include "GraphStandardizer.hpp"
+#include "GraphGeneration/ValenceGraphStandardizer.hpp"
 
 namespace GraphGeneration {
 
@@ -16,12 +18,12 @@ class TriangleSeedKeyStandardizer {
     static std::vector<Int> dispatch(int vertices, std::span<const Int> edges) {
         if (vertices == V) {
             if (edges.size() == 2 * E) {
-                using T = transient_graph2<V, E>;
-                typename T::graph_type graph;
+                using G = Graph<V, E, 0, 0, 0, 0, fieldType>;
+                G graph;
                 std::copy(edges.begin(), edges.end(), graph.half_edges.begin());
-                transient_graph2_standardizer<V, E> standardizer;
-                const auto canonical = standardizer.standardize_no_sign(T(graph));
-                const auto& data = canonical.graph().half_edges;
+                GraphStandardizer<V, E, 0, 0, 0, 0, fieldType> standardizer;
+                const auto canonical = standardize_sorted_valences(graph, standardizer);
+                const auto& data = canonical.half_edges;
                 return {data.begin(), data.end()};
             }
             if constexpr (E < std::min(V * (V - 1) / 2, V - 1 + MaxLoop))

@@ -5,7 +5,6 @@
 #include <unordered_set>
 
 #include "LinearProbeSet.hpp"
-#include "GraphGeneration/SupportTransientGraph.hpp"
 #include "graph.hpp"
 
 namespace {
@@ -123,26 +122,12 @@ void test_graph_sentinels_and_hash() {
 		"one-vertex rose can be stored");
 }
 
-void test_transient_graph_sentinel() {
-	using Transient = GraphGeneration::support_transient_graph<3, 5, fieldType>;
-	Transient empty_transient;
-	check(empty_transient.empty(), "empty transient support is an empty slot");
-	const Transient triangle = Transient::triangle();
-	check(!triangle.empty(), "connected transient support is not empty");
-	check(triangle.hash() == triangle.hash_value(),
-		"transient member hash matches its established hash");
-	linear_probe_set<Transient> transients;
-	check(transients.insert(triangle) && transients.contains(triangle),
-		"transient graph can be stored");
-}
-
 } // namespace
 
 int main() {
 	test_collisions_duplicates_and_iteration();
 	test_growth_and_reserve();
 	test_graph_sentinels_and_hash();
-	test_transient_graph_sentinel();
 	if (failures != 0) {
 		std::cerr << failures << " linear probing hash set tests failed\n";
 		return 1;

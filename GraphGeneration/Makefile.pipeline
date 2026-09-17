@@ -1,73 +1,31 @@
 # Run from the repository root: make -f GraphGeneration/Makefile.pipeline test
 CXX ?= g++
-PIPELINE_MAX_LOOP ?= 3
-PIPELINE_MAX_VERTICES ?= 6
 PIPELINE_FLAGS ?= -std=c++23 -O1 -I. -IVectorSpace
-PIPELINE_BINARY := build/transient_pipeline_L$(PIPELINE_MAX_LOOP)_V$(PIPELINE_MAX_VERTICES)
-COMPARISON_VERTICES = $(shell echo $$((2 * ($(PIPELINE_MAX_LOOP) - 1))))
-COMPARISON_DIR ?= output/transient2_counts_L$(PIPELINE_MAX_LOOP)
-PIPELINE_HEADERS := GraphGeneration/BivalentSplitRule.hpp GraphGeneration/GraphGenerationPipeline.hpp GraphGeneration/TransientGraph2.hpp GraphGeneration/TransientGraph2Standardizer.hpp GraphGeneration/MappedTransientGraph2File.hpp GraphGeneration/MappedGraphFile.hpp LinearProbeSet.hpp graph.hpp GraphStandardizer.hpp
-
-.PHONY: all test
-all: $(PIPELINE_BINARY)
+.DEFAULT_GOAL := all
 
 TRIANGLE_MAX_LOOP ?= 6
 TRIANGLE_OUTPUT ?= output/triangle_seeds_L$(TRIANGLE_MAX_LOOP)
-TRIANGLE_STANDARDIZER ?= key
-ifeq ($(TRIANGLE_STANDARDIZER),key)
-TRIANGLE_BINARY := build/triangle_seeds_key_L$(TRIANGLE_MAX_LOOP)
-TRIANGLE_DEFINES := -DGC_TRIANGLE_KEY_STANDARDIZER
-TRIANGLE_KEY_HEADERS := GraphGeneration/TriangleSeedKeyStandardizer.hpp $(PIPELINE_HEADERS)
-else ifeq ($(TRIANGLE_STANDARDIZER),custom)
-TRIANGLE_BINARY := build/triangle_seeds_L$(TRIANGLE_MAX_LOOP)
-else
-$(error TRIANGLE_STANDARDIZER must be custom or key)
-endif
-TRIANGLE_HEADERS := GraphGeneration/TriangleSeedStandardizer.hpp GraphGeneration/TriangleSeedEntry.hpp GraphGeneration/TriangleComponentStack.hpp GraphGeneration/TriangleCompletionBudget.hpp LinearProbeSet.hpp graph_hash.hpp types.hpp
+TRIANGLE_BINARY := build/triangle_seeds_unrestricted_L$(TRIANGLE_MAX_LOOP)
+GRAPH_HEADERS := graph.hpp GraphStandardizer.hpp GraphIsomorphism.hpp CombinatorialUtils.hpp permutation.hpp types.hpp graph_hash.hpp LinearProbeSet.hpp
+TRIANGLE_HEADERS := GraphGeneration/UnrestrictedTriangleSeedGenerator.hpp GraphGeneration/TriangleGraphEntry.hpp GraphGeneration/TriangleCompletionBudget.hpp GraphGeneration/TriangleSeedKeyStandardizer.hpp GraphGeneration/ValenceGraphStandardizer.hpp $(GRAPH_HEADERS)
 
-.PHONY: triangle-seeds run-triangle-seeds
-triangle-seeds: $(TRIANGLE_BINARY)
-
-UNRESTRICTED_TRIANGLE_BINARY := build/triangle_seeds_unrestricted_L$(TRIANGLE_MAX_LOOP)
-UNRESTRICTED_TRIANGLE_HEADERS := GraphGeneration/UnrestrictedTriangleSeedGenerator.hpp GraphGeneration/TriangleGraphEntry.hpp GraphGeneration/TriangleCompletionBudget.hpp GraphGeneration/TriangleSeedKeyStandardizer.hpp $(PIPELINE_HEADERS)
-
-.PHONY: unrestricted-triangle-seeds
-unrestricted-triangle-seeds: $(UNRESTRICTED_TRIANGLE_BINARY)
-
-$(UNRESTRICTED_TRIANGLE_BINARY): tools/generate_unrestricted_triangle_seeds.cpp $(UNRESTRICTED_TRIANGLE_HEADERS)
-	@mkdir -p build
-	$(CXX) $(PIPELINE_FLAGS) -DGC_TRIANGLE_MAX_LOOP=$(TRIANGLE_MAX_LOOP) $< -o $@
-
-.PHONY: test-triangle-standardizer
-test-triangle-standardizer: build/triangle_seed_standardizer_test
-	./build/triangle_seed_standardizer_test
-
-build/triangle_seed_standardizer_test: tools/triangle_seed_standardizer_test.cpp $(TRIANGLE_HEADERS)
-	@mkdir -p build
-	$(CXX) $(PIPELINE_FLAGS) $< -o $@
-
-.PHONY: test-triangle-components
-test-cut-vertex-splits: build/cut_vertex_split_rule_test
-	./build/cut_vertex_split_rule_test
-
-build/cut_vertex_split_rule_test: tools/cut_vertex_split_rule_test.cpp GraphGeneration/CutVertexSplitRule.hpp graph.hpp CombinatorialUtils.hpp types.hpp
-	@mkdir -p build
-	$(CXX) $(PIPELINE_FLAGS) $< -o $@
-
-.PHONY: test-cut-vertex-splits
-test-triangle-components: build/triangle_component_stack_test
-	./build/triangle_component_stack_test
-
-build/triangle_component_stack_test: tools/triangle_component_stack_test.cpp GraphGeneration/TriangleComponentStack.hpp GraphGeneration/TriangleCompletionBudget.hpp GraphGeneration/TriangleSeedEntry.hpp LinearProbeSet.hpp graph_hash.hpp types.hpp
-	@mkdir -p build
-	$(CXX) $(PIPELINE_FLAGS) $< -o $@
-
+.PHONY: all triangle-seeds unrestricted-triangle-seeds run-triangle-seeds test
+all: triangle-seeds triangle-splits-valence
+triangle-seeds unrestricted-triangle-seeds: $(TRIANGLE_BINARY)
 run-triangle-seeds: triangle-seeds
 	./$(TRIANGLE_BINARY) "$(TRIANGLE_OUTPUT)"
 
-$(TRIANGLE_BINARY): tools/generate_triangle_seeds.cpp $(TRIANGLE_HEADERS) $(TRIANGLE_KEY_HEADERS)
+$(TRIANGLE_BINARY): tools/generate_unrestricted_triangle_seeds.cpp $(TRIANGLE_HEADERS)
 	@mkdir -p build
-	$(CXX) $(PIPELINE_FLAGS) $(TRIANGLE_DEFINES) -DGC_TRIANGLE_MAX_LOOP=$(TRIANGLE_MAX_LOOP) $< -o $@
+	$(CXX) $(PIPELINE_FLAGS) -DGC_TRIANGLE_MAX_LOOP=$(TRIANGLE_MAX_LOOP) $< -o $@
+
+.PHONY: test-cut-vertex-splits
+test-cut-vertex-splits: build/cut_vertex_split_rule_test
+	./build/cut_vertex_split_rule_test
+
+build/cut_vertex_split_rule_test: tools/cut_vertex_split_rule_test.cpp GraphGeneration/CutVertexSplitRule.hpp $(GRAPH_HEADERS)
+	@mkdir -p build
+	$(CXX) $(PIPELINE_FLAGS) $< -o $@
 
 TRIANGLE_SPLIT_LOOP ?= 6
 TRIANGLE_SEED_DIR ?= $(TRIANGLE_OUTPUT)
@@ -107,83 +65,6 @@ build/triangle_splits_L%: tools/split_triangle_seeds.cpp $(TRIANGLE_SPLIT_HEADER
 	@mkdir -p build
 	$(CXX) $(PIPELINE_FLAGS) -DGC_TRIANGLE_SPLIT_LOOP=$* $< -o $@
 
-# Build only; generation and benchmarking are explicitly separate.
-.PHONY: comparison run-comparison
-comparison:
-	$(MAKE) -f GraphGeneration/Makefile.pipeline all PIPELINE_MAX_VERTICES=$(COMPARISON_VERTICES)
-
-run-comparison: comparison
-	bash tools/compare_transient2_counts.sh $(PIPELINE_MAX_LOOP) "$(COMPARISON_DIR)" "build/transient_pipeline_L$(PIPELINE_MAX_LOOP)_V$(COMPARISON_VERTICES)"
-
-# Reuse the existing hairless generator, with the same optimization flags as Transient2.
-HAIRLESS_LOOPS = $(shell seq 3 $(PIPELINE_MAX_LOOP))
-HAIRLESS_BINARIES = $(addprefix build/hairless_pipeline_L,$(HAIRLESS_LOOPS))
-HAIRLESS_HEADERS := $(wildcard GraphGeneration/*.hpp) graph.hpp GraphStandardizer.hpp LinearProbeSet.hpp
-
-.PHONY: comparison-three-way run-comparison-three-way
-comparison-three-way: comparison $(HAIRLESS_BINARIES)
-
-.PHONY: comparison-hairless run-comparison-hairless
-comparison-hairless: $(HAIRLESS_BINARIES)
-
-run-comparison-hairless: comparison-hairless
-	bash tools/compare_transient2_counts.sh $(PIPELINE_MAX_LOOP) "$(COMPARISON_DIR)" - build/hairless_pipeline_L
-
-run-comparison-three-way: comparison-three-way
-	bash tools/compare_transient2_counts.sh $(PIPELINE_MAX_LOOP) "$(COMPARISON_DIR)" "build/transient_pipeline_L$(PIPELINE_MAX_LOOP)_V$(COMPARISON_VERTICES)" build/hairless_pipeline_L
-
-build/hairless_pipeline_L%: tools/generate_graph_stages.cpp $(HAIRLESS_HEADERS)
-	@mkdir -p build
-	$(CXX) $(PIPELINE_FLAGS) -fopenmp -DGC_GENERATION_LOOP=$* $< -o $@
-
-$(PIPELINE_BINARY): tools/generate_transient_graphs.cpp $(PIPELINE_HEADERS)
-	@mkdir -p build
-	$(CXX) $(PIPELINE_FLAGS) -DGC_PIPELINE_MAX_LOOP=$(PIPELINE_MAX_LOOP) -DGC_PIPELINE_MAX_VERTICES=$(PIPELINE_MAX_VERTICES) $< -o $@
-
-build/graph_generation_pipeline_test: tools/graph_generation_pipeline_test.cpp $(PIPELINE_HEADERS)
-	@mkdir -p build
-	$(CXX) $(PIPELINE_FLAGS) $< -o $@
-
-build/transient_graph2_pipeline_split_test: tools/transient_graph2_test.cpp $(PIPELINE_HEADERS)
-	@mkdir -p build
-	$(CXX) $(PIPELINE_FLAGS) $< -o $@
-
-test: build/graph_generation_pipeline_test build/transient_graph2_pipeline_split_test
-	./build/graph_generation_pipeline_test
-	./build/transient_graph2_pipeline_split_test
-
-GC_VERTICES ?= 4
-GC_EDGES ?= 6
-GC_CONVERTER := build/transient_to_gc_V$(GC_VERTICES)_E$(GC_EDGES)
-GC_CONVERTER_HEADERS := GraphGeneration/TransientToGCPipeline.hpp GraphGeneration/MappedGCGraphFile.hpp GraphGeneration/FinalCanonicalization.hpp $(PIPELINE_HEADERS)
-
-.PHONY: gc-converter test-gc-converter
-gc-converter: $(GC_CONVERTER)
-
-$(GC_CONVERTER): tools/convert_transient_to_gc.cpp $(GC_CONVERTER_HEADERS)
-	@mkdir -p build
-	$(CXX) $(PIPELINE_FLAGS) -DGC_CONVERT_VERTICES=$(GC_VERTICES) -DGC_CONVERT_EDGES=$(GC_EDGES) $< -o $@
-
-build/transient_to_gc_pipeline_test: tools/transient_to_gc_pipeline_test.cpp $(GC_CONVERTER_HEADERS)
-	@mkdir -p build
-	$(CXX) $(PIPELINE_FLAGS) $< -o $@
-
-test-gc-converter: build/transient_to_gc_pipeline_test
-	./build/transient_to_gc_pipeline_test
-
-test: test-gc-converter
-
-.PHONY: pipeline-verifier
-pipeline-verifier: build/verify_gc_pipeline
-
-build/verify_gc_pipeline: tools/verify_gc_pipeline.cpp $(GC_CONVERTER_HEADERS)
-	@mkdir -p build
-	$(CXX) $(PIPELINE_FLAGS) $< -o $@
-
-build/verify_gc_pipeline_L%: tools/verify_gc_pipeline.cpp $(GC_CONVERTER_HEADERS)
-	@mkdir -p build
-	$(CXX) $(PIPELINE_FLAGS) -DGC_VERIFY_MAX_LOOP=$* $< -o $@
-
 .PHONY: test-split-reduction
 test-split-reduction: build/split_reduction_rule_test
 	./build/split_reduction_rule_test
@@ -212,3 +93,13 @@ build/triangle_splits_valence_L%: tools/split_triangle_seeds_by_valence.cpp Grap
 build/valence_split_pipeline_test_L%: tools/valence_split_pipeline_test.cpp GraphGeneration/ValenceSplitPlan.hpp $(TRIANGLE_SPLIT_HEADERS)
 	@mkdir -p build
 	$(CXX) $(PIPELINE_FLAGS) -UNDEBUG -DGC_TRIANGLE_SPLIT_LOOP=$* $< -o $@
+
+.PHONY: test-linear-probe-set
+test-linear-probe-set: build/linear_probe_set_test
+	./build/linear_probe_set_test
+
+build/linear_probe_set_test: tools/linear_probe_set_test.cpp $(GRAPH_HEADERS)
+	@mkdir -p build
+	$(CXX) $(PIPELINE_FLAGS) $< -o $@
+
+test: test-cut-vertex-splits test-split-reduction test-split-reservation test-linear-probe-set

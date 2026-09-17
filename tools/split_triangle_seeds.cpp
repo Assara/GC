@@ -10,8 +10,7 @@ class Pipeline {
     GraphGeneration::SplitStageEstimator estimator_;
 
     std::filesystem::path seed_path(int vertices) const {
-        return input_ / ("seeds_L" + std::to_string(loop_number)
-            + "_V" + std::to_string(vertices) + ".g6");
+        return triangle_seed_path(input_, vertices);
     }
 
     template <int V>
@@ -155,29 +154,7 @@ public:
         estimator_ = {};
         input_ = input;
         output_ = output;
-        std::ifstream manifest(input_ / "counts.tsv");
-        std::string line;
-        if (!std::getline(manifest, line)
-            || (line != "loop\tvertices\tedges\tcandidates\ttriangle_graphs\tseed_graphs\tseconds"
-                && line != "loop\tvertices\tedges\tcandidates\ttriangle_graphs\tmin_degree_3\tseconds"))
-            throw std::runtime_error("expected triangle seed generator counts.tsv");
-        while (std::getline(manifest, line)) {
-            int loop, vertices, edges;
-            std::size_t candidates, total, seeds;
-            double seconds;
-            std::istringstream row(line);
-            if (!(row >> loop >> vertices >> edges >> candidates >> total >> seeds >> seconds))
-                throw std::runtime_error("invalid triangle seed count row");
-            if (loop == loop_number && vertices >= first_vertices && vertices <= max_vertices) {
-                if (edges != vertices - 1 + loop || seeds > total
-                    || !seed_counts_.emplace(vertices, seeds).second)
-                    throw std::runtime_error("inconsistent triangle seed counts");
-            }
-        }
-        if (!manifest.eof()) throw std::runtime_error("failed reading seed counts");
-        for (int v = first_vertices; v <= std::min(max_vertices, loop_number + 2); ++v)
-            if (!seed_counts_.contains(v) || !std::filesystem::is_regular_file(seed_path(v)))
-                throw std::runtime_error("missing triangle seed stage V=" + std::to_string(v));
+        seed_counts_ = read_triangle_seed_counts(input_);
         if (!output_.parent_path().empty()) std::filesystem::create_directories(output_.parent_path());
         if (!std::filesystem::create_directory(output_))
             throw std::runtime_error("use a fresh output directory: " + output_.string());
