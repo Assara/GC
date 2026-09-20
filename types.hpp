@@ -10,6 +10,9 @@
 // Change this alias to change the integer type project-wide
 using Int = std::uint8_t;
 using signedInt = int;
+using SmallSignedInt = std::int8_t;
+// Integer workspace for the transposed natural composition; switch to int64_t if needed.
+using GraphAccumulator = std::int32_t;
 using bigInt = std::vector<Int>::size_type;
 //using fieldType = Z2179564669;
 //using fieldType = Z2305843009213693951;

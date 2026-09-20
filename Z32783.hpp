@@ -1,4 +1,5 @@
 #pragma once
+#include <concepts>
 #include <cstdint>
 #include <stdexcept>
 #include <ostream>
@@ -87,6 +88,16 @@ class Z32783 {
 	Z32783& operator*=(const Z32783& o) { return *this = *this * o; }
 
 	// Division (mod MOD): multiply by inverse; throws on division by zero
+	// Exact signed-byte overloads; larger integers retain field conversion.
+	template <std::same_as<std::int8_t> Small>
+	Z32783 operator*(Small scalar) const { return *this * Z32783{scalar}; }
+
+	template <std::same_as<std::int8_t> Small>
+	friend Z32783 operator*(Small scalar, const Z32783& value) { return value * scalar; }
+
+	template <std::same_as<std::int8_t> Small>
+	Z32783& operator*=(Small scalar) { return *this = *this * scalar; }
+
 	Z32783 operator/(const Z32783& o) const {
 		if (o.v_ == 0) throw std::domain_error("division by zero");
 		return *this * o.inv();

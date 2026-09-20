@@ -6,8 +6,9 @@
 #include <vector>
 
 #include "BasisElement.hpp"
+#include "Field.hpp"
 
-template<typename fieldType>
+template<VectorSpace::Field fieldType>
 class compressed_sparse_matrix {
 	public:
 		using indexType   = std::uint32_t; // 32-bit row indices, dimensions
@@ -75,6 +76,19 @@ class compressed_sparse_matrix {
 			return { rows_and_coeffs_.data() + b,
 				rows_and_coeffs_.data() + e };
 		}
+
+        compressed_sparse_matrix transpose() const {
+            compressed_sparse_matrix result(domain_dim());
+            result.col_ptr_.assign(std::size_t(image_dim())+1,0);
+            for(const auto& term:rows_and_coeffs_)++result.col_ptr_[std::size_t(term.getValue())+1];
+            for(std::size_t i=1;i<result.col_ptr_.size();++i)result.col_ptr_[i]+=result.col_ptr_[i-1];
+            result.rows_and_coeffs_.resize(rows_and_coeffs_.size());
+            auto next=result.col_ptr_;
+            for(std::size_t c=0;c<domain_dim();++c)
+                for(const auto& term:get_column(c))
+                    result.rows_and_coeffs_[next[term.getValue()]++]=Basis(c,term.getCoefficient());
+            return result;
+        }
 
 		DenseDomainVec reserve_dense_domain_vec() const {
 			return std::make_unique<k[]>(static_cast<std::size_t>(domain_dim()));

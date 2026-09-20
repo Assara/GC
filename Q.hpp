@@ -1,4 +1,6 @@
 #pragma once
+#include <concepts>
+#include <cstdint>
 
 #include <boost/multiprecision/cpp_int.hpp>
 #include <boost/rational.hpp>
@@ -90,6 +92,16 @@ public:
 		value_ *= o.value_;
 		return *this;
 	}
+
+	// Exact signed-byte overloads; larger integers retain field conversion.
+	template <std::same_as<std::int8_t> Small>
+	Q operator*(Small scalar) const { return *this * Q{scalar}; }
+
+	template <std::same_as<std::int8_t> Small>
+	friend Q operator*(Small scalar, const Q& value) { return value * scalar; }
+
+	template <std::same_as<std::int8_t> Small>
+	Q& operator*=(Small scalar) { return *this = *this * scalar; }
 
 	Q operator/(const Q& o) const {
 		if (o.value_ == 0) {

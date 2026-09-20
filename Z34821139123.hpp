@@ -1,4 +1,5 @@
 #pragma once
+#include <concepts>
 #include <cstdint>
 #include <istream>
 #include <ostream>
@@ -116,6 +117,16 @@ public:
 	}
 
 	Z34821139123& operator*=(const Z34821139123& o) { return *this = *this * o; }
+
+	// Exact signed-byte overloads; larger integers retain field conversion.
+	template <std::same_as<std::int8_t> Small>
+	Z34821139123 operator*(Small scalar) const { return *this * Z34821139123{scalar}; }
+
+	template <std::same_as<std::int8_t> Small>
+	friend Z34821139123 operator*(Small scalar, const Z34821139123& value) { return value * scalar; }
+
+	template <std::same_as<std::int8_t> Small>
+	Z34821139123& operator*=(Small scalar) { return *this = *this * scalar; }
 
 	Z34821139123 operator/(const Z34821139123& o) const {
 		if (o.v_ == 0) {

@@ -104,7 +104,7 @@ lil_matrix<k> generate_random_matrix(size_t image_dim, size_t domain_dim, size_t
 	}
 
 	std::uniform_int_distribution<std::uint64_t>
-		coeff_dist(0, k::modulus() - 1);
+		coeff_dist(0, k::characteristic() - 1);
 
 	std::uniform_int_distribution<std::size_t>
 		image_dist(0, image_dim - 1),
@@ -224,6 +224,12 @@ bool performance_test_block_wiedemann_solver(size_t image_dim, size_t domain_dim
 
 	cout << "found " << X.size() << "solutions" << std::endl;
 
+	if (X.empty()) return false;
+	for (const auto& solution : X) {
+		auto actual = M.evaluate_from_dense(solution);
+		for (std::size_t i = 0; i < M.image_dim(); ++i)
+			if (actual[i] != y[i]) return false;
+	}
 	return true;
 }
 

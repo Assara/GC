@@ -1,0 +1,12 @@
+# Standalone experiment; does not rebuild or change the graph solver.
+CXX ?= g++
+DOT_FLAGS ?= -std=c++23 -O3 -march=native -fopenmp -I.
+DOT_BINARY ?= build/bench_modular_dot_O3
+$(DOT_BINARY): tools/bench_modular_dot.cpp VectorSpace/modular_dot32783.hpp VectorSpace/packed_projection.hpp VectorSpace/Field.hpp types.hpp Z32783.hpp
+	@mkdir -p build
+	$(CXX) $(DOT_FLAGS) $< -o $@
+.PHONY: test bench
+test: $(DOT_BINARY)
+	OMP_WAIT_POLICY=PASSIVE $(DOT_BINARY) --test-only
+bench: $(DOT_BINARY)
+	OMP_WAIT_POLICY=PASSIVE $(DOT_BINARY)
