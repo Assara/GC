@@ -44,3 +44,7 @@ build/recurrence_finders_test: tools/recurrence_finders_test.cpp $(HEADERS)
 build/find_recurrence: tools/find_recurrence.cpp $(HEADERS)
 	@mkdir -p build
 	$(CXX) $(HOMOLOGY_FLAGS) $< -o $@
+
+build/bench_krylov_L$(HOMOLOGY_LOOP)_V$(HOMOLOGY_VERTICES): tools/bench_krylov.cpp $(HEADERS)
+	@mkdir -p build
+	$(CXX) $(HOMOLOGY_FLAGS) -DGC_HOMOLOGY_LOOP=$(HOMOLOGY_LOOP) -DGC_HOMOLOGY_VERTICES=$(HOMOLOGY_VERTICES) $< -o $@

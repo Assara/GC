@@ -8,6 +8,8 @@
 #include <random>
 #include <span>
 #include <sstream>
+#include <cmath>
+#include <string_view>
 #include "reconstruction_state.hpp"
 #include "recurrence_sequence.hpp"
 #include <stdexcept>
@@ -74,6 +76,8 @@ public:
         bool resume_checkpoint=false;
         std::filesystem::path recurrence_sequence_path; // Optional standalone comparison input.
         double reconstruction_checkpoint_seconds=60; // 0 saves every complete step.
+        double checkpoint_seconds=60; // Krylov, recurrence and validation boundaries.
+        std::function<void(std::string_view)> on_checkpoint; // After durable publication.
     };
     struct rank_result {
         std::size_t rank=0, nullity=0;
@@ -162,7 +166,9 @@ private:
     using Generator=block_wiedemann_detail::packed_generator<K>;
     struct kernel_start { preconditioner p; Block v; Generator gen; Block initial,projection; };
     std::optional<Generator> sequence_generator(preconditioner& p,const Block& initial,
-        const Block& projection,std::size_t b,bool transposed_moments,bool allow_resume=true) const {
+        const Block& projection,std::size_t b,bool transposed_moments,bool allow_resume=true,const std::string& checkpoint_suffix="") const {
+        const std::filesystem::path checkpoint_path=options_.checkpoint_path.empty() ? std::filesystem::path{}
+            : std::filesystem::path(options_.checkpoint_path.string()+checkpoint_suffix);
         ++sequence_stats.sequences;
         Block current=initial,next(p.n*b);
         Block packed_projection,packed_current;
@@ -180,11 +186,13 @@ private:
         block_wiedemann_detail::packed_moments<K> moments(b,capacity);
         block_wiedemann_detail::minimal_generator_state<K> state(moments,b,options_.threads);
         Generator gen(b,capacity/2);
+        bool accepted=false;
         auto training=options_.incremental_recurrence ? std::min(interval,initial_training) : initial_training;
         std::size_t processed=0;
-        const auto checkpoint=[&] {
-            if(options_.checkpoint_path.empty())return;
-            block_wiedemann_detail::checkpoint_output out(options_.checkpoint_path);
+        auto last_checkpoint=std::chrono::steady_clock::now();
+        const auto checkpoint=[&](std::string_view phase) {
+            if(checkpoint_path.empty())return;
+            block_wiedemann_detail::checkpoint_output out(checkpoint_path);
             out.section("solver-state",[&]{
             out.word(p.n);out.word(p.other);out.word(b);out.word(options_.seed);
             out.word(options_.holdout);out.word(options_.incremental_recurrence);out.word(transposed_moments);
@@ -195,15 +203,24 @@ private:
             out.template block<K>("left-diagonal",p.left,p.left.size(),1);
             out.template block<K>("right-diagonal",p.right,p.right.size(),1);
             out.template block<K>("current-krylov",current,p.n,b);
-            moments.save(out);state.save(out);out.finish();
+            moments.save(out);state.save(out);
+            out.section("accepted-recurrence",[&]{out.word(accepted);if(accepted)gen.save(out);});out.finish();
+            last_checkpoint=std::chrono::steady_clock::now();
+            if(options_.log)*options_.log << "checkpoint saved phase=" << phase << " moments=" << moments.size()
+                << " recurrence_terms=" << state.processed_terms() << " path=" << checkpoint_path << std::endl;
+            if(options_.on_checkpoint)options_.on_checkpoint(phase);
         };
-        if(allow_resume && options_.resume_checkpoint && sequence_stats.sequences==1) {
-            if(options_.checkpoint_path.empty())throw std::invalid_argument("resume requires checkpoint_path");
-            block_wiedemann_detail::checkpoint_input in(options_.checkpoint_path);
+        const auto periodic=[&](std::string_view phase) {
+            if(!checkpoint_path.empty() && std::chrono::duration<double>(
+                std::chrono::steady_clock::now()-last_checkpoint).count()>=options_.checkpoint_seconds)checkpoint(phase);
+        };
+        if(allow_resume && options_.resume_checkpoint && !checkpoint_path.empty() && std::filesystem::exists(checkpoint_path)) {
+            if(checkpoint_path.empty())throw std::invalid_argument("resume requires checkpoint_path");
+            block_wiedemann_detail::checkpoint_input in(checkpoint_path);
             in.section("solver-state",[&]{
             in.expect(p.n);in.expect(p.other);in.expect(b);in.expect(options_.seed);
             in.expect(options_.holdout);in.expect(options_.incremental_recurrence);in.expect(transposed_moments);
-            in.expect(p.direct);training=in.word();in.expect(sequence_stats.sequences);
+            in.expect(p.direct);training=in.word();sequence_stats.sequences=in.word();
             sequence_stats.moments=in.word();sequence_stats.recurrence_updates=in.word();sequence_stats.validation_attempts=in.word();});
             if(training>limit)throw std::runtime_error("checkpoint training target exceeds solver limit");
             next.resize(std::max(initial.size(),p.right.size()));
@@ -216,11 +233,16 @@ private:
             compare("initial",initial,p.n,b);compare("projection",projection,p.n,b);
             compare("left-diagonal",p.left,p.left.size(),1);compare("right-diagonal",p.right,p.right.size(),1);
             in.template block<K>("current-krylov",current,p.n,b);
-            moments.load(in);state.load(in);in.finish();
+            moments.load(in);state.load(in);
+            in.section("accepted-recurrence",[&]{
+                const auto saved=in.word();if(saved>1)throw std::runtime_error("invalid recurrence acceptance flag");
+                accepted=saved;if(accepted)gen.load(in);
+            });in.finish();
             processed=state.processed_terms();next.resize(p.n*b);
             if(options_.log)*options_.log << "checkpoint resumed moments=" << moments.size()
                 << " processed=" << processed << " capacity=" << capacity << std::endl;
         }
+        if(accepted)return std::optional<Generator>(std::move(gen));
         if(options_.log)*options_.log << "packed_recurrence_bytes="
             << moments.allocated_bytes()+state.allocated_bytes()+gen.allocated_bytes()
             << " sequence_capacity=" << capacity << std::endl;
@@ -228,15 +250,16 @@ private:
         report(0,initial_training+options_.holdout);
         if(options_.log)*options_.log << "recurrence_mode="
             << (options_.incremental_recurrence ? "incremental" : "batch") << std::endl;
+        checkpoint("sequence-start");
         for(;;) {
             while(moments.size()<training+options_.holdout) {
                 if(moments.size()==moments.capacity()) {
-                    checkpoint();
+                    checkpoint("capacity");
                     throw std::length_error("sequence capacity " + std::to_string(capacity)
                         + " exhausted; need at least " + std::to_string(training+options_.holdout)
-                        + (options_.checkpoint_path.empty()
+                        + (checkpoint_path.empty()
                             ? "; set checkpoint_path to save progress before restarting"
-                            : "; checkpoint saved to " + options_.checkpoint_path.string()
+                            : "; checkpoint saved to " + checkpoint_path.string()
                                 + "; restart with larger sequence_capacity and resume_checkpoint=true"));
                 }
                 {
@@ -261,8 +284,10 @@ private:
                     sequence_stats.recurrence_updates+=available-processed;
                     processed=available;
                 }
+                periodic("krylov");
                 report(moments.size(),std::max(initial_training,training)+options_.holdout);
             }
+            checkpoint("krylov-complete");
             if(!options_.recurrence_sequence_path.empty())
                 block_wiedemann_detail::save_recurrence_sequence(options_.recurrence_sequence_path,moments,training);
             bool found=false;
@@ -271,17 +296,20 @@ private:
                 if(!options_.incremental_recurrence) {
                     progress recurrence{options_.log,"block recurrence"};
                     recurrence(processed,training);
-                    state.process_up_to(training,[&](auto done,auto total){recurrence(done,total);});
-                    sequence_stats.recurrence_updates+=training-processed;
-                    processed=training;
+                    state.process_up_to(training,[&](auto done,auto total){
+                        sequence_stats.recurrence_updates+=done-processed;processed=done;
+                        periodic("recurrence");recurrence(done,total);
+                    });
+                    checkpoint("recurrence-complete");
                 }
                 if(!options_.incremental_recurrence || state.candidate_ready()) {
                     ++sequence_stats.validation_attempts;
                     progress validation{options_.log,"recurrence validation"};
-                    found=state.generator(gen,[&](auto done,auto total){validation(done,total);},options_.incremental_recurrence);
+                    found=state.generator(gen,[&](auto done,auto total){periodic("validation");validation(done,total);},options_.incremental_recurrence);
                 }
             }
             if(found) {
+                accepted=true;checkpoint("validation-complete");
                 if(options_.log)*options_.log << "recurrence accepted training=" << training
                     << " moments=" << moments.size() << " holdout=" << options_.holdout << std::endl;
                 return std::optional<Generator>(std::move(gen));
@@ -364,7 +392,9 @@ private:
 public:
     block_wiedemann_solver(std::size_t rows,std::size_t cols,Apply apply,Apply transpose,options config={})
         :rows_(rows),cols_(cols),apply_(std::move(apply)),transpose_(std::move(transpose)),options_(config) {
-        if(!config.block_size || !config.trials || !config.holdout || !config.recurrence_check_interval || config.threads<1)
+        if(!config.block_size || !config.trials || !config.holdout || !config.recurrence_check_interval || config.threads<1
+            || !std::isfinite(config.checkpoint_seconds) || config.checkpoint_seconds<0
+            || !std::isfinite(config.reconstruction_checkpoint_seconds) || config.reconstruction_checkpoint_seconds<0)
             throw std::invalid_argument("block size, trials, holdout and threads must be positive");
         static_assert(K::characteristic()!=0,"Wiedemann requires a finite field");
     }
@@ -504,7 +534,7 @@ private:
             // Starting at B*V removes the semisimple zero part. The generic
             // preconditioned operator has rank equal to its nonzero McMillan degree.
             p.apply(v,initial,b);
-            auto gen=sequence_generator(p,initial,u,b,cached!=nullptr);
+            auto gen=sequence_generator(p,initial,u,b,cached!=nullptr,true,trial ? ".trial-"+std::to_string(trial+1) : "");
             if(!gen)throw std::runtime_error("block recurrence failed held-out validation; retry with another seed");
             std::size_t rank=0;for(std::size_t row=0;row<gen->size();++row)rank+=gen->degree(row);
             if(rank>p.n)throw std::runtime_error("invalid block generator degree");
@@ -583,7 +613,6 @@ public:
             && std::filesystem::exists(options_.checkpoint_path.string()+".rank"))
             result.rank_estimate=load_rank(cached);
         else result.rank_estimate=compute_rank(&cached);
-        const bool resumed_reconstruction=bool(restored_state) || (options_.resume_checkpoint && bool(cached));
         const auto target=result.rank_estimate.nullity;
         if(!rows_) {
             for(std::size_t i=0;i<cols_;++i) {
@@ -615,7 +644,7 @@ public:
                 for(auto& x:v)x=K::sample(rng);
                 for(auto& x:u)x=K::sample(rng);
                 p.apply(v,initial,b);
-                gen=sequence_generator(p,initial,u,b,true,!resumed_reconstruction);
+                gen=sequence_generator(p,initial,u,b,true,true,".nullspace-"+std::to_string(attempt));
             }
             if(!gen)continue;
             timer_accum::guard measured(timing.reconstruction);
@@ -659,6 +688,8 @@ public:
                 out.template block<K>("initial",initial,cols_,b);
                 out.template block<K>("reconstruction-weights",selected,b,count);
                 gen->save(out);state.save(out);out.finish();
+                if(options_.log)*options_.log << "checkpoint saved phase=reconstruction remaining=" << state.remaining << std::endl;
+                if(options_.on_checkpoint)options_.on_checkpoint("reconstruction");
             };
             auto candidates=reconstruct(p,initial,*gen,selected,b,count,
                 restored_state ? &*restored_state : nullptr,save_reconstruction);

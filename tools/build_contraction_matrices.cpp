@@ -57,6 +57,13 @@ void run(const char* directory, bool ranks, std::size_t block_size, const char* 
         typename Solver::options solver_options{block_size,1,8,seed,8,&std::cout};
         solver_options.checkpoint_path=std::string(output)+".recurrence";
         if(const auto* sequence=std::getenv("GC_RECURRENCE_SEQUENCE"))solver_options.recurrence_sequence_path=sequence;
+        if(const auto* seconds=std::getenv("GC_CHECKPOINT_SECONDS")) {
+            std::size_t end=0;const auto interval=std::stod(seconds,&end);
+            if(end!=std::string(seconds).size() || !std::isfinite(interval) || interval<0)
+                throw std::invalid_argument("GC_CHECKPOINT_SECONDS must be finite and nonnegative");
+            solver_options.checkpoint_seconds=interval;
+            solver_options.reconstruction_checkpoint_seconds=interval;
+        }
         if(const auto* capacity=std::getenv("GC_SEQUENCE_CAPACITY")) {
             const std::string value(capacity);
             if(value.empty() || value.find_first_not_of("0123456789")!=std::string::npos)

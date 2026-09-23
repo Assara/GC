@@ -38,7 +38,8 @@ class minimal_generator_state {
     std::size_t b,width,processed=0;
     int threads;
     OwnedArray<K> basis,discrepancy,constant,leading;
-    OwnedArray<std::size_t> lengths,degrees,order,selected,selected_degrees;
+    OwnedArray<std::size_t> lengths,degrees,order,selected,selected_degrees,validation_prefix;
+    bool validation_active=false;
     struct pivot {std::size_t row,column;K inverse;};
     OwnedArray<pivot> pivots;
     std::size_t stride() const {return basis.size()/width;}
@@ -53,19 +54,20 @@ public:
         :moments(sequence),b(block),width(2*b),threads(workers),
          basis(recurrence_product(recurrence_product(width,width),sequence.capacity()+1)),
          discrepancy(width*b),constant(b*b),leading(b*b),lengths(width),degrees(width),order(width),
-         selected(b),selected_degrees(b),pivots(b) {
+         selected(b),selected_degrees(b),validation_prefix(width),pivots(b) {
         if(!block || block!=sequence.block_size() || workers<1)throw std::invalid_argument("invalid recurrence dimensions");
         for(std::size_t r=0;r<width;++r){lengths[r]=1;row_data(r)[r]=1;degrees[r]=r>=b;}
     }
     std::size_t processed_terms() const {return processed;}
     std::size_t allocated_bytes() const {
         return (basis.size()+discrepancy.size()+constant.size()+leading.size())*sizeof(K)
-            +(lengths.size()+degrees.size()+order.size()+selected.size()+selected_degrees.size())*sizeof(std::size_t)
+            +(lengths.size()+degrees.size()+order.size()+selected.size()+selected_degrees.size()+validation_prefix.size())*sizeof(std::size_t)
             +pivots.size()*sizeof(pivot);
     }
     void save(serialization::archive_output& out) const {
-        out.section("recurrence-state",[&] {
+        out.section("recurrence-state-v2",[&] {
             out.word(b);out.word(processed);
+            out.word(validation_active);out.integers<std::size_t>("validation-prefix",validation_prefix);
             for(std::size_t r=0;r<width;++r) {
                 out.word(length(r));out.word(degrees[r]);
                 out.block<K>("polynomial-row",std::span<const K>(row_data(r),length(r)*width),length(r),width);
@@ -73,9 +75,13 @@ public:
         });
     }
     void load(serialization::archive_input& in) {
-        in.section("recurrence-state",[&] {
+        in.section("recurrence-state-v2",[&] {
             in.expect(b);const auto terms=in.word();
             if(terms>moments.size())throw std::runtime_error("checkpoint recurrence exceeds available sequence");
+            const auto active=in.word();if(active>1)throw std::runtime_error("invalid validation state");
+            validation_active=active;
+            in.integers<std::size_t>("validation-prefix",validation_prefix);
+            for(auto t:validation_prefix)if(t>moments.size())throw std::runtime_error("invalid validation progress");
             for(std::size_t r=0;r<width;++r) {
                 const auto len=in.word(),degree=in.word();
                 if(!len || len>terms+1 || len>stride()/width || degree>terms+1)
@@ -89,7 +95,8 @@ public:
     using Progress=std::function<void(std::size_t,std::size_t)>;
     void process_up_to(std::size_t training,const Progress& progress={}) {
         if(training>moments.size())throw std::out_of_range("recurrence training exceeds available moments");
-        for(;processed<training;++processed) {
+        for(;processed<training;) {
+            validation_active=false;
             const auto t=processed;
             std::fill(discrepancy.begin(),discrepancy.end(),K{});
             // Rows read the same immutable basis and write disjoint discrepancies.
@@ -140,7 +147,8 @@ public:
                 ++lengths[r];
                 ++degrees[r];
             }
-            if(progress)progress(processed+1,training);
+            ++processed;
+            if(progress)progress(processed,training);
         }
     }
     // Cheap structural gate before the full history/holdout check. Merely having
@@ -161,6 +169,8 @@ public:
     }
     bool generator(packed_generator<K>& result,const Progress& progress={}, bool holdout_first=false) {
         const auto training=processed;
+        if(!validation_active)std::fill(validation_prefix.begin(),validation_prefix.end(),0);
+        validation_active=true;
         if(result.size()!=b || result.max_degree()<processed/2)throw std::length_error("recurrence output capacity exhausted");
         std::size_t count=0;
         std::iota(order.begin(),order.end(),0);
@@ -193,7 +203,7 @@ public:
             bool valid=true;
             if(progress)progress(0,moments.size()-p_degree);
             // Validate batches independently, reporting only from the caller.
-            for(std::size_t first=p_degree;first<moments.size() && valid;first+=256) {
+            for(std::size_t first=std::max(std::size_t(p_degree),validation_prefix[r]);first<moments.size() && valid;first+=256) {
                 const auto end=std::min(first+256,moments.size());
                 const bool parallel=threads>1 && (end-first)*(p_degree+1)*b*b>=32768;
                 (void)parallel;
@@ -206,6 +216,7 @@ public:
                         if(sum!=K{}) { valid=false; break; }
                     }
                 }
+                if(valid)validation_prefix[r]=end;
                 if(progress)progress(end-p_degree,moments.size()-p_degree);
             }
             if(!valid) continue;
@@ -214,6 +225,7 @@ public:
             selected[count]=r;selected_degrees[count]=p_degree;
             if(++count==b)break;
         }
+        validation_active=false;
         if(count!=b || dense_rank<K>(constant,b)!=b || dense_rank<K>(leading,b)!=b)return false;
         for(std::size_t row=0;row<b;++row) {
             result.set_degree(row,selected_degrees[row]);

@@ -188,5 +188,70 @@ int main() {
         try {auto incompatible=make().rank();}catch(const std::runtime_error&){rejected=true;}
         assert(rejected);
     }
-    std::cout << "Packed storage, larger-capacity restore, type/field/checksum rejection and Krylov/reconstruction resume passed\n";
+    // Interrupt after durable saves throughout the production sequence path.
+    for(const std::string phase:{"krylov","recurrence","validation","validation-complete"}) {
+        Solver::options config{2,1,8,17,1};config.sequence_capacity=140;
+        std::size_t full_calls=0,split_calls=0,saves=0;
+        auto full=Solver::from_square_operator(64,apply(full_calls),config).nullspace();
+        config.checkpoint_path=directory/("periodic-"+phase);config.checkpoint_seconds=0;
+        config.on_checkpoint=[&](std::string_view saved_phase) {
+            if(saved_phase==phase && ++saves==(phase=="validation-complete"?1:3))throw std::runtime_error("checkpoint interruption");
+        };
+        bool interrupted=false;
+        try {auto partial=Solver::from_square_operator(64,apply(split_calls),config).nullspace();}
+        catch(const std::runtime_error& e){interrupted=std::string(e.what())=="checkpoint interruption";if(!interrupted)throw;}
+        assert(interrupted);config.on_checkpoint={};config.resume_checkpoint=true;
+        auto resumed=Solver::from_square_operator(64,apply(split_calls),config).nullspace();
+        assert(resumed.complete && resumed.basis==full.basis);
+        assert(split_calls==full_calls+1); // Only the starting-block consistency check.
+    }
+    // A later nullspace block has its own sequence checkpoint and can resume
+    // even when an earlier completed reconstruction checkpoint also exists.
+    {
+        Solver::options config{2,1,8,17,1};config.sequence_capacity=140;
+        const auto operation=[](auto in,auto out,std::size_t b){
+            for(std::size_t i=0;i<64;++i)for(std::size_t j=0;j<b;++j)
+                out[i*b+j]=i<59 ? K(i+1)*in[i*b+j] : K{};
+        };
+        auto full=Solver::from_square_operator(64,operation,config).nullspace();
+        config.checkpoint_path=directory/"later-sequence";config.checkpoint_seconds=0;
+        std::ostringstream log;config.log=&log;std::size_t saves=0;
+        config.on_checkpoint=[&](std::string_view phase){
+            if(phase=="krylov" && log.str().find("nullspace attempt 2/")!=std::string::npos && ++saves==3)
+                throw std::runtime_error("later sequence interruption");
+        };
+        bool interrupted=false;
+        try {auto partial=Solver::from_square_operator(64,operation,config).nullspace();}
+        catch(const std::runtime_error& e){interrupted=std::string(e.what())=="later sequence interruption";if(!interrupted)throw;}
+        assert(interrupted);config.on_checkpoint={};config.resume_checkpoint=true;
+        log.str("");log.clear();
+        auto resumed=Solver::from_square_operator(64,operation,config).nullspace();
+        assert(resumed.complete && resumed.basis==full.basis);
+        assert(log.str().find("checkpoint resumed moments=3")!=std::string::npos);
+    }
+    // Restore in the middle of validation, preserving already checked batches.
+    {
+        packed_moments<K> moments(2,520);fill(moments,520);
+        minimal_generator_state<K> state(moments,2);state.process_up_to(512);
+        packed_generator<K> generator(2,256);
+        const auto path=directory/"validation-progress.bin";
+        bool interrupted=false;
+        try {
+            state.generator(generator,[&](auto done,auto total){
+                if(done && done<total) {
+                    checkpoint_output out(path);state.save(out);out.finish();
+                    throw std::runtime_error("validation interruption");
+                }
+            });
+        }catch(const std::runtime_error&){interrupted=true;}
+        assert(interrupted);
+        minimal_generator_state<K> restored(moments,2);
+        {checkpoint_input in(path);restored.load(in);in.finish();}
+        bool first=true;
+        assert(restored.generator(generator,[&](auto done,auto){
+            if(done && first){assert(done>256);first=false;}
+        }));
+        assert(!first);
+    }
+    std::cout << "Packed storage, larger-capacity restore, type/field/checksum rejection and all-stage periodic resume passed\n";
 }

@@ -292,15 +292,15 @@ an arbitrary operator callback. Recreate the same operator when resuming. The
 loader compares regenerated initial vectors, projections and diagonals; this
 is a consistency check, not a complete matrix identity proof. Only the current
 full Krylov block is saved, together with all accumulated projected moments;
-historical full Krylov vectors are not retained. Resume currently addresses
-the first sequence of a run, using the same seed/options. Elapsed segment times
+historical full Krylov vectors are not retained. Rank trials and later nullspace attempts have separate sequence checkpoint
+paths and resume with the same seed/options. Elapsed segment times
 restart after loading.
 
 For the graph executable, the checkpoint is `OUTPUT.recurrence`. Set
 `GC_SEQUENCE_CAPACITY` for a custom capacity and `GC_RESUME_CHECKPOINT=1` when
-restarting with the same output prefix. Sequence checkpoints are written on
-capacity exhaustion, not periodically or on process termination. Reconstruction
-has separate periodic checkpoints, described below.
+restarting with the same output prefix. Sequence checkpoints are written periodically, at stage boundaries and on
+capacity exhaustion. They are not written from a process-termination handler.
+Reconstruction has its own periodic checkpoints, described below.
 
 Correctness checks (no benchmark):
 
@@ -380,3 +380,51 @@ representatives. The existing `--rank` command computes the two differential
 ranks and does not provide this handoff. Rebuild before using the new option;
 already running binaries are unchanged. Empty domain/codomain cases are handled
 directly and do not need a saved recurrence.
+
+
+## Periodic checkpoints throughout a nullspace run
+
+With a checkpoint path configured, Krylov generation, reference recurrence
+construction, recurrence validation and Horner reconstruction all checkpoint
+periodically (default 60 seconds). The graph CLI configures a path automatically
+for `--nullspace` and `--prepare-nullspace`. `GC_CHECKPOINT_SECONDS=60` controls
+the interval for all these stages; zero checkpoints at every safe boundary and
+is intended for tests. Invalid, negative or nonfinite intervals are rejected.
+
+The saved recurrence state includes completed training terms and, during
+validation, the successfully checked prefix for each candidate row. Updating
+the processed-term count precedes the checkpoint callback, avoiding replay of
+an already applied recurrence update. Validation retains every original check;
+a resume skips only batches already checked for the same saved basis/sequence.
+A new independent validation invocation starts fresh, including after changing
+or extending the sequence. The accepted generator is saved before returning
+from the sequence stage, preventing a gap before publishing the rank handoff.
+
+Checkpoints are also forced at sequence start, completion of Krylov generation,
+completion of recurrence construction and acceptance of the recurrence. The
+existing rank handoff and reconstruction archives remain in use. Saved-state
+logs identify the phase and progress. The interval is measured after the last
+successful save; a long indivisible step or the save itself can extend the wall
+clock interval. At most work after the latest complete snapshot is protected
+only in RAM. A forced kill does not create a new checkpoint.
+
+For a base path `OUTPUT.recurrence`, the first rank sequence uses the base file;
+additional rank trials use `.trial-N`; additional nullspace candidate sequences
+use `.nullspace-N`. Replaying the surrounding deterministic control flow loads
+these states when reached. Earlier reconstruction checkpoints may require
+repeating their final residual/independence checks, but completed subsequent
+Krylov/recurrence work is restored from its own file. Matrix/operator construction
+still runs on startup; it is not part of these solver-stage checkpoints.
+
+Resume by reusing the **same output prefix**, inputs, parity, block size and seed:
+
+```bash
+GC_RESUME_CHECKPOINT=1 GC_CHECKPOINT_SECONDS=60 OMP_WAIT_POLICY=PASSIVE build/contraction_matrices_L10_V14 GRAPH_DIRECTORY even --nullspace OUTPUT 8 17
+```
+
+Keep the whole checkpoint family together. A newly compiled binary is required.
+The reference recurrence working-state format is now `recurrence-state-v2`;
+older sequence/working-recurrence checkpoints are incompatible. Completed rank
+handoffs and reconstruction archive formats are unchanged. Existing binaries
+cannot gain these checkpoints while running. No divide-and-conquer finder is
+used in the production path.
